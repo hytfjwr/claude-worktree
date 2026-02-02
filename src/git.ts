@@ -167,6 +167,11 @@ export async function fetchAndPrune(): Promise<void> {
   await $`git fetch --prune`.quiet();
 }
 
+export async function branchExists(branchName: string): Promise<boolean> {
+  const result = await $`git show-ref --verify --quiet refs/heads/${branchName}`.nothrow().quiet();
+  return result.exitCode === 0;
+}
+
 export async function getWorktreeStatuses(worktrees: WorktreeInfo[]): Promise<WorktreeStatus[]> {
   const statuses: WorktreeStatus[] = [];
 

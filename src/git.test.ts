@@ -10,6 +10,7 @@ import {
   listWorktrees,
   findWorktreeByBranch,
   deleteLocalBranch,
+  branchExists,
 } from "./git";
 
 // ============================================================================
@@ -172,5 +173,20 @@ describe("deleteLocalBranch", () => {
     await expect(deleteLocalBranch("nonexistent-branch-xyz-12345", true)).rejects.toThrow(
       "Failed to delete branch"
     );
+  });
+});
+
+describe("branchExists", () => {
+  test("mainブランチが存在する場合trueを返す", async () => {
+    const mainBranch = await getMainBranch();
+    const exists = await branchExists(mainBranch);
+
+    expect(exists).toBe(true);
+  });
+
+  test("存在しないブランチはfalseを返す", async () => {
+    const exists = await branchExists("nonexistent-branch-xyz-12345");
+
+    expect(exists).toBe(false);
   });
 });

@@ -5,6 +5,7 @@ import {
   findWorktreeByBranch,
   removeWorktree,
   deleteLocalBranch,
+  branchExists,
 } from "./git";
 import { createPane, sendCommand, sendText } from "./wezterm";
 import { buildClaudeCommand } from "./claude";
@@ -192,6 +193,7 @@ export type CreateDependencies = {
   findWorktreeByBranch: typeof findWorktreeByBranch;
   removeWorktree: typeof removeWorktree;
   deleteLocalBranch: typeof deleteLocalBranch;
+  branchExists: typeof branchExists;
   createPane: typeof createPane;
   sendCommand: typeof sendCommand;
   sendText: typeof sendText;
@@ -208,6 +210,7 @@ const defaultCreateDependencies: CreateDependencies = {
   findWorktreeByBranch,
   removeWorktree,
   deleteLocalBranch,
+  branchExists,
   createPane,
   sendCommand,
   sendText,
@@ -279,6 +282,35 @@ export async function runCreate(
     }
 
     deps.log("");
+  }
+
+  // ブランチのみ存在（ワークツリーなし）のチェック
+  if (!existingWorktree) {
+    const branchAlreadyExists = await deps.branchExists(branchName);
+
+    if (branchAlreadyExists) {
+      deps.log(`\n⚠️  ブランチが既に存在します: ${branchName}`);
+
+      const confirmed = await deps.confirm(
+        "ブランチを削除して新規作成しますか？"
+      );
+
+      if (!confirmed) {
+        deps.log("キャンセルしました。");
+        return;
+      }
+
+      deps.log("🗑️  既存のブランチを削除中...");
+      try {
+        await deps.deleteLocalBranch(branchName, true);
+        deps.log(`  ✓ Branch deleted: ${branchName}`);
+      } catch (e) {
+        const errorMessage = e instanceof Error ? e.message : String(e);
+        deps.log(`  ❌ ブランチの削除に失敗しました: ${errorMessage}`);
+        return;
+      }
+      deps.log("");
+    }
   }
 
   // WezTermペインを作成

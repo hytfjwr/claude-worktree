@@ -233,6 +233,7 @@ function createMockDeps(overrides: Partial<CreateDependencies> = {}): CreateDepe
     findWorktreeByBranch: async () => null,
     removeWorktree: async () => {},
     deleteLocalBranch: async () => {},
+    branchExists: async () => false,
     createPane: async () => "mock-pane-id",
     sendCommand: async () => {},
     sendText: async () => {},
@@ -439,5 +440,124 @@ describe("runCreate", () => {
     );
 
     expect(commandSent).toContain("プランファイルの内容");
+  });
+
+  test("ブランチのみ存在（ワークツリーなし） - 確認後に削除して新規作成", async () => {
+    let branchDeleted = false;
+    let confirmCalled = false;
+    let confirmMessage = "";
+    let paneCreated = false;
+    const logs: string[] = [];
+
+    const deps = createMockDeps({
+      findWorktreeByBranch: async () => null,
+      branchExists: async (branch) => branch === "feature/orphan",
+      deleteLocalBranch: async () => {
+        branchDeleted = true;
+      },
+      confirm: async (msg) => {
+        confirmCalled = true;
+        confirmMessage = msg;
+        return true;
+      },
+      createPane: async () => {
+        paneCreated = true;
+        return "pane-123";
+      },
+      log: (msg: string) => logs.push(msg),
+    });
+
+    await runCreate(
+      { branchName: "feature/orphan", taskName: "Orphan Task", prompt: "test prompt" },
+      deps
+    );
+
+    expect(confirmCalled).toBe(true);
+    expect(confirmMessage).toContain("ブランチを削除して新規作成");
+    expect(branchDeleted).toBe(true);
+    expect(paneCreated).toBe(true);
+    expect(logs.some((l) => l.includes("ブランチが既に存在します"))).toBe(true);
+  });
+
+  test("ブランチのみ存在（ワークツリーなし） - キャンセルで終了", async () => {
+    let paneCreated = false;
+    let branchDeleted = false;
+    const logs: string[] = [];
+
+    const deps = createMockDeps({
+      findWorktreeByBranch: async () => null,
+      branchExists: async (branch) => branch === "feature/orphan",
+      deleteLocalBranch: async () => {
+        branchDeleted = true;
+      },
+      confirm: async () => false,
+      createPane: async () => {
+        paneCreated = true;
+        return "pane-123";
+      },
+      log: (msg: string) => logs.push(msg),
+    });
+
+    await runCreate(
+      { branchName: "feature/orphan", taskName: "Orphan Task", prompt: "test prompt" },
+      deps
+    );
+
+    expect(paneCreated).toBe(false);
+    expect(branchDeleted).toBe(false);
+    expect(logs).toContain("キャンセルしました。");
+  });
+
+  test("ブランチもワークツリーもなし - 正常に新規作成", async () => {
+    let paneCreated = false;
+    let commandSent = "";
+
+    const deps = createMockDeps({
+      findWorktreeByBranch: async () => null,
+      branchExists: async () => false,
+      createPane: async () => {
+        paneCreated = true;
+        return "pane-123";
+      },
+      sendCommand: async (_paneId, cmd) => {
+        commandSent = cmd;
+      },
+    });
+
+    await runCreate(
+      { branchName: "feature/new", taskName: "New Task", prompt: "test prompt" },
+      deps
+    );
+
+    expect(paneCreated).toBe(true);
+    expect(commandSent).toContain("git worktree add");
+    expect(commandSent).toContain("feature/new");
+  });
+
+  test("ブランチ削除失敗 - エラー表示して終了", async () => {
+    let paneCreated = false;
+    const logs: string[] = [];
+
+    const deps = createMockDeps({
+      findWorktreeByBranch: async () => null,
+      branchExists: async (branch) => branch === "feature/orphan",
+      deleteLocalBranch: async () => {
+        throw new Error("Branch deletion failed: some error");
+      },
+      confirm: async () => true,
+      createPane: async () => {
+        paneCreated = true;
+        return "pane-123";
+      },
+      log: (msg: string) => logs.push(msg),
+    });
+
+    await runCreate(
+      { branchName: "feature/orphan", taskName: "Orphan Task", prompt: "test prompt" },
+      deps
+    );
+
+    expect(paneCreated).toBe(false);
+    expect(logs.some((l) => l.includes("ブランチの削除に失敗しました"))).toBe(true);
   });
 });
