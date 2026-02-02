@@ -30,5 +30,5 @@ export type { CleanArgs as CleanCommandArgs, CleanResult } from "./clean";
 export { confirm, selectMultiple } from "./prompt";
 
 // CLI
-export { parseArgs, run } from "./cli";
+export { parseArgs, run, showHelp } from "./cli";
 export type { CliArgs, CreateArgs, CleanArgs, Command } from "./cli";

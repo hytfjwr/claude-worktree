@@ -13,8 +13,43 @@ export interface CreateArgs {
 }
 
 export type Command =
+  | { type: "help" }
   | { type: "create"; args: CreateArgs }
   | { type: "clean"; args: CleanArgs };
+
+export function showHelp(): void {
+  console.log(`claude-worktree - WezTerm + git worktree + Claude Code で並列開発するCLI
+
+Usage:
+  claude-worktree <branch-name> <task-name> [prompt]
+  claude-worktree <branch-name> <task-name> --plan <file-path>
+  claude-worktree clean [options]
+
+Commands:
+  <branch-name> <task-name>  Create a new worktree with Claude Code
+  clean                      Remove unnecessary worktrees
+
+Arguments:
+  <branch-name>  作成するgit worktreeのブランチ名
+  <task-name>    タスク名（WezTermタブのタイトルになる）
+  [prompt]       Claude Codeに渡すプロンプト（省略時はtask-nameを使用）
+
+Options:
+  --plan <file>  プランファイルからプロンプトを読み込む（インラインpromptと併用不可）
+  -h, --help     このヘルプを表示
+
+Clean options:
+  -f, --force    確認プロンプトをスキップ
+  -a, --all      全worktreeを表示して手動選択
+  -n, --dry-run  削除せず対象を表示のみ
+
+Examples:
+  claude-worktree feature/auth 'Auth実装' '認証機能を実装して'
+  claude-worktree fix/bug-123 'バグ修正'
+  claude-worktree feature/api 'API実装' --plan ./plan.md
+  claude-worktree clean
+  claude-worktree clean --dry-run`);
+}
 
 function parseCreateArgs(args: string[]): CreateArgs {
   if (args.length < 2) {
@@ -87,6 +122,10 @@ function parseCleanArgs(args: string[]): CleanArgs {
       case "-n":
         cleanArgs.dryRun = true;
         break;
+      case "-h":
+      case "--help":
+        // clean --help は全体ヘルプを表示
+        break;
       default:
         throw new Error(`Unknown option for clean command: ${arg}`);
     }
@@ -96,20 +135,9 @@ function parseCleanArgs(args: string[]): CleanArgs {
 }
 
 export function parseArgs(args: string[]): Command {
-  if (args.length === 0) {
-    throw new Error(
-      "Usage: claude-worktree <branch-name> <task-name> [prompt]\n" +
-        "       claude-worktree clean [--force] [--all] [--dry-run]\n" +
-        "\n" +
-        "Commands:\n" +
-        "  <branch-name> <task-name>  Create a new worktree with Claude Code\n" +
-        "  clean                      Remove unnecessary worktrees\n" +
-        "\n" +
-        "Clean options:\n" +
-        "  -f, --force    Skip confirmation prompt\n" +
-        "  -a, --all      Show all worktrees for manual selection\n" +
-        "  -n, --dry-run  Show what would be deleted without deleting"
-    );
+  // ヘルプフラグのチェック
+  if (args.length === 0 || args.includes("-h") || args.includes("--help")) {
+    return { type: "help" };
   }
 
   if (args[0] === "clean") {
@@ -185,6 +213,9 @@ async function runCreate(args: CreateArgs): Promise<void> {
 
 export async function run(command: Command): Promise<void> {
   switch (command.type) {
+    case "help":
+      showHelp();
+      break;
     case "create":
       await runCreate(command.args);
       break;
