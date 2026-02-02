@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { parseArgs, parseCreateArgs, parseCleanArgs } from "./cli";
+import { parseArgs, parseCreateArgs, parseCleanArgs, runCreate, type CreateDependencies } from "./cli";
+import type { GitContext, WorktreeInfo } from "./git";
 
 describe("parseArgs", () => {
   describe("help", () => {
@@ -210,5 +211,233 @@ describe("parseCleanArgs", () => {
 
   test("エラー: 不明オプション", () => {
     expect(() => parseCleanArgs(["--unknown"])).toThrow("Unknown option for clean command: --unknown");
+  });
+});
+
+// ============================================================================
+// runCreate のテスト（DIを使用したモックテスト）
+// ============================================================================
+
+function createMockDeps(overrides: Partial<CreateDependencies> = {}): CreateDependencies {
+  const mockGitContext: GitContext = {
+    repoRoot: "/path/to/repo",
+    repoName: "repo",
+    currentBranch: "main",
+  };
+
+  const logs: string[] = [];
+
+  return {
+    getGitContext: async () => mockGitContext,
+    getWorktreePath: (root, name, branch) => `${root}/../${name}-${branch.replace(/\//g, "-")}`,
+    findWorktreeByBranch: async () => null,
+    removeWorktree: async () => {},
+    deleteLocalBranch: async () => {},
+    createPane: async () => "mock-pane-id",
+    sendCommand: async () => {},
+    sendText: async () => {},
+    buildWorktreeCommand: (branch, path, base) => `git worktree add -b ${branch} "${path}" ${base}`,
+    buildClaudeCommand: () => "claude",
+    confirm: async () => true,
+    log: (msg: string) => logs.push(msg),
+    readPlanFile: async () => "plan content",
+    ...overrides,
+  };
+}
+
+describe("runCreate", () => {
+  test("既存ワークツリーなし - 正常にペイン作成", async () => {
+    let paneCreated = false;
+    let commandSent = "";
+
+    const deps = createMockDeps({
+      createPane: async () => {
+        paneCreated = true;
+        return "pane-123";
+      },
+      sendCommand: async (_paneId, cmd) => {
+        commandSent = cmd;
+      },
+    });
+
+    await runCreate(
+      { branchName: "feature/test", taskName: "Test Task", prompt: "test prompt" },
+      deps
+    );
+
+    expect(paneCreated).toBe(true);
+    expect(commandSent).toContain("git worktree add");
+    expect(commandSent).toContain("feature/test");
+  });
+
+  test("既存ワークツリーあり（クリーン） - 確認後に削除して新規作成", async () => {
+    const existingWorktree: WorktreeInfo = {
+      path: "/path/to/existing",
+      branch: "feature/test",
+      isLocked: false,
+      isDirty: false,
+      isMain: false,
+    };
+
+    let worktreeRemoved = false;
+    let branchDeleted = false;
+    let confirmCalled = false;
+    let confirmMessage = "";
+    let paneCreated = false;
+
+    const deps = createMockDeps({
+      findWorktreeByBranch: async (branch) =>
+        branch === "feature/test" ? existingWorktree : null,
+      removeWorktree: async () => {
+        worktreeRemoved = true;
+      },
+      deleteLocalBranch: async () => {
+        branchDeleted = true;
+      },
+      confirm: async (msg) => {
+        confirmCalled = true;
+        confirmMessage = msg;
+        return true;
+      },
+      createPane: async () => {
+        paneCreated = true;
+        return "pane-123";
+      },
+    });
+
+    await runCreate(
+      { branchName: "feature/test", taskName: "Test Task", prompt: "test prompt" },
+      deps
+    );
+
+    expect(confirmCalled).toBe(true);
+    expect(confirmMessage).toContain("既存のworktreeを削除");
+    expect(worktreeRemoved).toBe(true);
+    expect(branchDeleted).toBe(true);
+    expect(paneCreated).toBe(true);
+  });
+
+  test("既存ワークツリーあり（クリーン） - キャンセルで終了", async () => {
+    const existingWorktree: WorktreeInfo = {
+      path: "/path/to/existing",
+      branch: "feature/test",
+      isLocked: false,
+      isDirty: false,
+      isMain: false,
+    };
+
+    let paneCreated = false;
+    const logs: string[] = [];
+
+    const deps = createMockDeps({
+      findWorktreeByBranch: async (branch) =>
+        branch === "feature/test" ? existingWorktree : null,
+      confirm: async () => false,
+      createPane: async () => {
+        paneCreated = true;
+        return "pane-123";
+      },
+      log: (msg: string) => logs.push(msg),
+    });
+
+    await runCreate(
+      { branchName: "feature/test", taskName: "Test Task", prompt: "test prompt" },
+      deps
+    );
+
+    expect(paneCreated).toBe(false);
+    expect(logs).toContain("キャンセルしました。");
+  });
+
+  test("既存ワークツリーあり（ダーティ） - 追加警告を表示して確認", async () => {
+    const existingWorktree: WorktreeInfo = {
+      path: "/path/to/existing",
+      branch: "feature/dirty",
+      isLocked: false,
+      isDirty: true,
+      isMain: false,
+    };
+
+    let confirmMessage = "";
+    let forceRemove = false;
+    const logs: string[] = [];
+
+    const deps = createMockDeps({
+      findWorktreeByBranch: async (branch) =>
+        branch === "feature/dirty" ? existingWorktree : null,
+      removeWorktree: async (_path, force) => {
+        forceRemove = force || false;
+      },
+      confirm: async (msg) => {
+        confirmMessage = msg;
+        return true;
+      },
+      log: (msg: string) => logs.push(msg),
+    });
+
+    await runCreate(
+      { branchName: "feature/dirty", taskName: "Dirty Task", prompt: "test prompt" },
+      deps
+    );
+
+    expect(logs.some((l) => l.includes("未コミットの変更があります"))).toBe(true);
+    expect(confirmMessage).toContain("変更を破棄");
+    expect(forceRemove).toBe(true);
+  });
+
+  test("既存ワークツリーあり（ダーティ） - キャンセルで終了", async () => {
+    const existingWorktree: WorktreeInfo = {
+      path: "/path/to/existing",
+      branch: "feature/dirty",
+      isLocked: false,
+      isDirty: true,
+      isMain: false,
+    };
+
+    let paneCreated = false;
+    let worktreeRemoved = false;
+    const logs: string[] = [];
+
+    const deps = createMockDeps({
+      findWorktreeByBranch: async (branch) =>
+        branch === "feature/dirty" ? existingWorktree : null,
+      removeWorktree: async () => {
+        worktreeRemoved = true;
+      },
+      confirm: async () => false,
+      createPane: async () => {
+        paneCreated = true;
+        return "pane-123";
+      },
+      log: (msg: string) => logs.push(msg),
+    });
+
+    await runCreate(
+      { branchName: "feature/dirty", taskName: "Dirty Task", prompt: "test prompt" },
+      deps
+    );
+
+    expect(paneCreated).toBe(false);
+    expect(worktreeRemoved).toBe(false);
+    expect(logs).toContain("キャンセルしました。");
+  });
+
+  test("プランファイルからプロンプトを読み込み", async () => {
+    let commandSent = "";
+
+    const deps = createMockDeps({
+      readPlanFile: async () => "プランファイルの内容",
+      buildClaudeCommand: ({ prompt }) => `claude --prompt "${prompt}"`,
+      sendCommand: async (_paneId, cmd) => {
+        commandSent = cmd;
+      },
+    });
+
+    await runCreate(
+      { branchName: "feature/plan", taskName: "Plan Task", prompt: "ignored", planFile: "./plan.md" },
+      deps
+    );
+
+    expect(commandSent).toContain("プランファイルの内容");
   });
 });

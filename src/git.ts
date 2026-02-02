@@ -149,6 +149,20 @@ export async function removeWorktree(worktreePath: string, force = false): Promi
   }
 }
 
+export async function findWorktreeByBranch(branchName: string): Promise<WorktreeInfo | null> {
+  const worktrees = await listWorktrees();
+  return worktrees.find((w) => w.branch === branchName) || null;
+}
+
+export async function deleteLocalBranch(branchName: string, force = false): Promise<void> {
+  const flag = force ? "-D" : "-d";
+  const result = await $`git branch ${flag} ${branchName}`.nothrow().quiet();
+  if (result.exitCode !== 0) {
+    const stderr = result.stderr.toString().trim();
+    throw new Error(`Failed to delete branch ${branchName}: ${stderr}`);
+  }
+}
+
 export async function fetchAndPrune(): Promise<void> {
   await $`git fetch --prune`.quiet();
 }

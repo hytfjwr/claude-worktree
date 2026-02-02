@@ -11,6 +11,8 @@ export {
   removeWorktree,
   fetchAndPrune,
   getWorktreeStatuses,
+  findWorktreeByBranch,
+  deleteLocalBranch,
 } from "./git";
 export type { GitContext, WorktreeInfo, WorktreeStatus } from "./git";
 
@@ -30,5 +32,5 @@ export type { CleanArgs as CleanCommandArgs, CleanResult } from "./clean";
 export { confirm, selectMultiple } from "./prompt";
 
 // CLI
-export { parseArgs, run, showHelp } from "./cli";
-export type { CliArgs, CreateArgs, CleanArgs, Command } from "./cli";
+export { parseArgs, run, showHelp, runCreate } from "./cli";
+export type { CliArgs, CreateArgs, CleanArgs, Command, CreateDependencies } from "./cli";

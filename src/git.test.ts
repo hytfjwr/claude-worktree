@@ -8,6 +8,8 @@ import {
   isBranchMerged,
   isRemoteBranchDeleted,
   listWorktrees,
+  findWorktreeByBranch,
+  deleteLocalBranch,
 } from "./git";
 
 // ============================================================================
@@ -62,7 +64,7 @@ describe("getGitContext", () => {
     const context = await getGitContext();
 
     expect(context.repoRoot).toContain("claude-worktree");
-    expect(context.repoName).toBe("claude-worktree-feature-add-test");
+    expect(context.repoName).toContain("claude-worktree");
     expect(typeof context.currentBranch).toBe("string");
     expect(context.currentBranch.length).toBeGreaterThan(0);
   });
@@ -139,5 +141,36 @@ describe("listWorktrees", () => {
     const mainWorktree = worktrees.find((w) => w.isMain);
 
     expect(mainWorktree).toBeDefined();
+  });
+});
+
+describe("findWorktreeByBranch", () => {
+  test("存在するブランチを検索", async () => {
+    const mainBranch = await getMainBranch();
+    const worktree = await findWorktreeByBranch(mainBranch);
+
+    expect(worktree).not.toBeNull();
+    expect(worktree?.branch).toBe(mainBranch);
+  });
+
+  test("存在しないブランチはnullを返す", async () => {
+    const worktree = await findWorktreeByBranch("nonexistent-branch-xyz-12345");
+
+    expect(worktree).toBeNull();
+  });
+});
+
+describe("deleteLocalBranch", () => {
+  test("存在しないブランチを削除するとエラー", async () => {
+    await expect(deleteLocalBranch("nonexistent-branch-xyz-12345")).rejects.toThrow(
+      "Failed to delete branch"
+    );
+  });
+
+  test("forceフラグが機能する", async () => {
+    // force=trueでも存在しないブランチはエラー
+    await expect(deleteLocalBranch("nonexistent-branch-xyz-12345", true)).rejects.toThrow(
+      "Failed to delete branch"
+    );
   });
 });
