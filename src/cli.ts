@@ -54,7 +54,7 @@ Examples:
   claude-worktree clean --dry-run`);
 }
 
-function parseCreateArgs(args: string[]): CreateArgs {
+export function parseCreateArgs(args: string[]): CreateArgs {
   if (args.length < 2) {
     throw new Error(
       "Usage: claude-worktree <branch-name> <task-name> [prompt]\n" +
@@ -111,7 +111,7 @@ function parseCreateArgs(args: string[]): CreateArgs {
   };
 }
 
-function parseCleanArgs(args: string[]): CleanArgs {
+export function parseCleanArgs(args: string[]): CleanArgs {
   const cleanArgs: CleanArgs = {
     force: false,
     all: false,

@@ -21,6 +21,11 @@ make typecheck   # or bun run typecheck
 # Lint (Biome)
 bun run lint
 
+# Test
+bun test              # Run all tests
+bun test --watch      # Watch mode
+bun test --coverage   # With coverage
+
 # Check dependencies (bun, git, wezterm, claude)
 make check
 ```
@@ -49,6 +54,7 @@ claude-worktree clean --dry-run
 ### Options
 
 - `--plan <file>` - Read prompt from a file (cannot be used with inline prompt)
+- `--danger` - Skip workspace warning (uses --dangerously-skip-permissions)
 - `-h, --help` - Show help
 
 ### Clean Options
@@ -72,6 +78,13 @@ src/
   clean.ts             # Worktree cleanup orchestration
   prompt.ts            # Interactive user prompts
   index.ts             # Public API (barrel exports)
+
+  # Test files (co-located)
+  claude.test.ts       # Tests for claude.ts
+  git.test.ts          # Tests for git.ts
+  cli.test.ts          # Tests for cli.ts
+  wezterm.test.ts      # Tests for wezterm.ts
+  clean.test.ts        # Tests for clean.ts
 ```
 
 **Processing Flow:**
@@ -81,3 +94,11 @@ src/
 4. In the new pane: create worktree → launch Claude Code
 
 **External Tool Dependencies:** bun, git, wezterm CLI, claude CLI
+
+## Testing
+
+Uses Bun test. Test files are co-located with source files in the same directory.
+
+- **Pure functions**: Tested without mocks (buildClaudeCommand, getWorktreePath, etc.)
+- **Shell commands**: Tested using the actual git repository
+- **DI (Dependency Injection)**: clean.ts uses CleanDependencies type for mockability

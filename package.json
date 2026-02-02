@@ -15,7 +15,10 @@
   "scripts": {
     "dev": "bun run bin/claude-worktree.ts",
     "typecheck": "bun x tsc --noEmit",
-    "lint": "bun x biome check src bin"
+    "lint": "bun x biome check src bin",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "test:coverage": "bun test --coverage"
   },
   "devDependencies": {
     "@types/bun": "latest"
