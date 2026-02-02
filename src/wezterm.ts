@@ -10,7 +10,8 @@ export async function splitPaneRight(): Promise<string> {
 }
 
 export async function setTabTitle(paneId: string, title: string): Promise<void> {
-  await $`wezterm cli set-tab-title --pane-id ${paneId} ${title}`;
+  const proc = Bun.spawn(["wezterm", "cli", "set-tab-title", "--pane-id", paneId, title]);
+  await proc.exited;
 }
 
 export async function sendText(paneId: string, text: string): Promise<void> {
