@@ -10,7 +10,10 @@ import {
   listWorktrees,
   findWorktreeByBranch,
   deleteLocalBranch,
+  parseWorktreePorcelain,
+  getWorktreeStatuses,
   branchExists,
+  type WorktreeInfo,
 } from "./git";
 
 // ============================================================================
@@ -173,6 +176,174 @@ describe("deleteLocalBranch", () => {
     await expect(deleteLocalBranch("nonexistent-branch-xyz-12345", true)).rejects.toThrow(
       "Failed to delete branch"
     );
+  });
+});
+
+// ============================================================================
+// parseWorktreePorcelain のテスト（純粋関数）
+// ============================================================================
+
+describe("parseWorktreePorcelain", () => {
+  test("空出力 - 空配列を返す", () => {
+    const result = parseWorktreePorcelain("", "main");
+    expect(result).toEqual([]);
+  });
+
+  test("空白のみ - 空配列を返す", () => {
+    const result = parseWorktreePorcelain("  \n  ", "main");
+    expect(result).toEqual([]);
+  });
+
+  test("単一worktree - 正しくパース", () => {
+    const output = `worktree /path/to/repo
+HEAD abc123
+branch refs/heads/main`;
+
+    const result = parseWorktreePorcelain(output, "main");
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual({
+      path: "/path/to/repo",
+      branch: "main",
+      isLocked: false,
+      isMain: true,
+    });
+  });
+
+  test("複数worktree - 複数を正しくパース", () => {
+    const output = `worktree /path/to/repo
+HEAD abc123
+branch refs/heads/main
+
+worktree /path/to/repo-feature
+HEAD def456
+branch refs/heads/feature/test`;
+
+    const result = parseWorktreePorcelain(output, "main");
+
+    expect(result).toHaveLength(2);
+    expect(result[0].path).toBe("/path/to/repo");
+    expect(result[0].branch).toBe("main");
+    expect(result[0].isMain).toBe(true);
+    expect(result[1].path).toBe("/path/to/repo-feature");
+    expect(result[1].branch).toBe("feature/test");
+    expect(result[1].isMain).toBe(false);
+  });
+
+  test("locked属性 - isLocked: true", () => {
+    const output = `worktree /path/to/locked
+HEAD abc123
+branch refs/heads/feature/locked
+locked`;
+
+    const result = parseWorktreePorcelain(output, "main");
+
+    expect(result[0].isLocked).toBe(true);
+  });
+
+  test("bare属性 - isMain: true (bare repository)", () => {
+    const output = `worktree /path/to/bare
+bare`;
+
+    const result = parseWorktreePorcelain(output, "main");
+
+    expect(result[0].isMain).toBe(true);
+    expect(result[0].branch).toBeNull();
+  });
+
+  test("branch refs/heads/からの抽出 - プレフィックス除去", () => {
+    const output = `worktree /path/to/repo
+HEAD abc123
+branch refs/heads/feature/deep/nested/branch`;
+
+    const result = parseWorktreePorcelain(output, "main");
+
+    expect(result[0].branch).toBe("feature/deep/nested/branch");
+  });
+
+  test("mainブランチ判定 - 指定したブランチがmainの場合", () => {
+    const output = `worktree /path/to/repo
+HEAD abc123
+branch refs/heads/develop`;
+
+    // developをmainブランチとして指定
+    const result = parseWorktreePorcelain(output, "develop");
+
+    expect(result[0].isMain).toBe(true);
+  });
+
+  test("detached HEAD - branch: null", () => {
+    const output = `worktree /path/to/detached
+HEAD abc123def456
+detached`;
+
+    const result = parseWorktreePorcelain(output, "main");
+
+    expect(result[0].branch).toBeNull();
+    expect(result[0].isMain).toBe(false);
+  });
+});
+
+// ============================================================================
+// getWorktreeStatuses のテスト（DIを使用）
+// ============================================================================
+
+describe("getWorktreeStatuses", () => {
+  function createWorktree(overrides: Partial<WorktreeInfo> = {}): WorktreeInfo {
+    return {
+      path: "/path/to/worktree",
+      branch: "feature/test",
+      isLocked: false,
+      isDirty: false,
+      isMain: false,
+      ...overrides,
+    };
+  }
+
+  test("メインworktreeはcanAutoClean: false", async () => {
+    const worktree = createWorktree({ isMain: true, branch: "main" });
+    const statuses = await getWorktreeStatuses([worktree]);
+
+    expect(statuses[0].canAutoClean).toBe(false);
+    expect(statuses[0].reason).toBe("メインworktree");
+  });
+
+  test("ロック中はcanAutoClean: false", async () => {
+    const worktree = createWorktree({ isLocked: true });
+    const statuses = await getWorktreeStatuses([worktree]);
+
+    expect(statuses[0].canAutoClean).toBe(false);
+    expect(statuses[0].reason).toBe("ロック中");
+  });
+
+  test("ダーティはcanAutoClean: false", async () => {
+    const worktree = createWorktree({ isDirty: true });
+    const statuses = await getWorktreeStatuses([worktree]);
+
+    expect(statuses[0].canAutoClean).toBe(false);
+    expect(statuses[0].reason).toBe("未コミットの変更あり");
+  });
+
+  test("条件優先度: isMain > isLocked > isDirty", async () => {
+    // isMain が最優先
+    const mainAndLocked = createWorktree({ isMain: true, isLocked: true, isDirty: true });
+    const statusMain = await getWorktreeStatuses([mainAndLocked]);
+    expect(statusMain[0].reason).toBe("メインworktree");
+
+    // isLocked が次に優先
+    const lockedAndDirty = createWorktree({ isLocked: true, isDirty: true });
+    const statusLocked = await getWorktreeStatuses([lockedAndDirty]);
+    expect(statusLocked[0].reason).toBe("ロック中");
+  });
+
+  test("ブランチがnullの場合もエラーにならない", async () => {
+    const worktree = createWorktree({ branch: null });
+    const statuses = await getWorktreeStatuses([worktree]);
+
+    // branch: null でも処理が完了する
+    expect(statuses).toHaveLength(1);
+    expect(statuses[0].branchMerged).toBe(false);
+    expect(statuses[0].branchDeletedOnRemote).toBe(false);
   });
 });
 

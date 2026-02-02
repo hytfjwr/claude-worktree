@@ -111,6 +111,26 @@ describe("executeClean", () => {
       expect(deps.selectMultiple).toHaveBeenCalledTimes(1);
       expect(result.deleted).toEqual([worktree1.path]);
     });
+
+    test("selectMultipleが空配列 - ユーザーキャンセル時は削除しない", async () => {
+      const worktree1 = createMockWorktree({ path: "/path/1", branch: "feature/1" });
+      const worktree2 = createMockWorktree({ path: "/path/2", branch: "feature/2" });
+      const status1 = createMockStatus({ worktree: worktree1, canAutoClean: true });
+      const status2 = createMockStatus({ worktree: worktree2, canAutoClean: false });
+
+      const deps = createMockDeps({
+        listWorktrees: mock(() => Promise.resolve([worktree1, worktree2])),
+        getWorktreeStatuses: mock(() => Promise.resolve([status1, status2])),
+        selectMultiple: mock(() => Promise.resolve([])), // ユーザーが何も選択しない
+      });
+
+      const args: CleanArgs = { force: true, all: true, dryRun: false };
+      const result = await executeClean(args, deps);
+
+      // removeWorktreeが呼ばれていないことを確認
+      expect(deps.removeWorktree).not.toHaveBeenCalled();
+      expect(result.deleted).toEqual([]);
+    });
   });
 
   describe("成功時", () => {

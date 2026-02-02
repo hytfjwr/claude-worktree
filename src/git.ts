@@ -66,22 +66,26 @@ export async function getMainBranch(): Promise<string> {
   return "master";
 }
 
-export async function listWorktrees(): Promise<WorktreeInfo[]> {
-  const output = (await $`git worktree list --porcelain`.text()).trim();
-  if (!output) {
+export type ParsedWorktree = Omit<WorktreeInfo, "isDirty">;
+
+/**
+ * git worktree list --porcelain の出力をパースする純粋関数
+ */
+export function parseWorktreePorcelain(output: string, mainBranch: string): ParsedWorktree[] {
+  const trimmed = output.trim();
+  if (!trimmed) {
     return [];
   }
 
-  const worktrees: WorktreeInfo[] = [];
-  const entries = output.split("\n\n");
-  const mainBranch = await getMainBranch();
+  const worktrees: ParsedWorktree[] = [];
+  const entries = trimmed.split("\n\n");
 
   for (const entry of entries) {
     const lines = entry.split("\n");
     let path = "";
     let branch: string | null = null;
     let isLocked = false;
-    let isMain = false;
+    let isBare = false;
 
     for (const line of lines) {
       if (line.startsWith("worktree ")) {
@@ -92,20 +96,34 @@ export async function listWorktrees(): Promise<WorktreeInfo[]> {
       } else if (line === "locked") {
         isLocked = true;
       } else if (line === "bare") {
-        isMain = true;
+        isBare = true;
       }
     }
 
-    // Check if this is the main worktree (has main/master branch)
-    if (branch === mainBranch) {
-      isMain = true;
-    }
-
-    const isDirty = path ? await isWorktreeDirty(path) : false;
+    // Check if this is the main worktree (has main/master branch or is bare)
+    const isMain = isBare || branch === mainBranch;
 
     if (path) {
-      worktrees.push({ path, branch, isLocked, isDirty, isMain });
+      worktrees.push({ path, branch, isLocked, isMain });
     }
+  }
+
+  return worktrees;
+}
+
+export async function listWorktrees(): Promise<WorktreeInfo[]> {
+  const output = (await $`git worktree list --porcelain`.text()).trim();
+  if (!output) {
+    return [];
+  }
+
+  const mainBranch = await getMainBranch();
+  const parsed = parseWorktreePorcelain(output, mainBranch);
+
+  const worktrees: WorktreeInfo[] = [];
+  for (const p of parsed) {
+    const isDirty = await isWorktreeDirty(p.path);
+    worktrees.push({ ...p, isDirty });
   }
 
   return worktrees;

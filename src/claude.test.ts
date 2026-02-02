@@ -94,3 +94,71 @@ describe("buildClaudeCommand", () => {
     expect(result).not.toContain("--dangerously-skip-permissions");
   });
 });
+
+// ============================================================================
+// エッジケーステスト
+// ============================================================================
+
+describe("buildClaudeCommand - エッジケース", () => {
+  test("空プロンプト - エラーにならない", () => {
+    const result = buildClaudeCommand({ prompt: "", promptSuffix: "" });
+
+    expect(result).toBe('claude --permission-mode plan ""');
+  });
+
+  test("改行を含むプロンプト - 改行が保持される", () => {
+    const result = buildClaudeCommand({
+      prompt: "行1\n行2\n行3",
+      promptSuffix: "",
+    });
+
+    expect(result).toContain("行1\n行2\n行3");
+  });
+
+  test("バックスラッシュを含むプロンプト - バックスラッシュが保持される", () => {
+    const result = buildClaudeCommand({
+      prompt: "path\\to\\file",
+      promptSuffix: "",
+    });
+
+    expect(result).toContain("path\\to\\file");
+  });
+
+  test("シングルクォートを含むプロンプト - シングルクォートが保持される", () => {
+    const result = buildClaudeCommand({
+      prompt: "It's a test",
+      promptSuffix: "",
+    });
+
+    expect(result).toContain("It's a test");
+  });
+
+  test("$変数展開の文字 - $がそのまま保持される", () => {
+    const result = buildClaudeCommand({
+      prompt: "$HOME/path",
+      promptSuffix: "",
+    });
+
+    expect(result).toContain("$HOME/path");
+  });
+
+  test("バッククォート - バッククォートが保持される", () => {
+    const result = buildClaudeCommand({
+      prompt: "`code block`",
+      promptSuffix: "",
+    });
+
+    expect(result).toContain("`code block`");
+  });
+
+  test("極端に長いプロンプト - 正常動作（スモークテスト）", () => {
+    const longText = "a".repeat(10000);
+    const result = buildClaudeCommand({
+      prompt: longText,
+      promptSuffix: "",
+    });
+
+    expect(result).toContain(longText);
+    expect(result.length).toBeGreaterThan(10000);
+  });
+});

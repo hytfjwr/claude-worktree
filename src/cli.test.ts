@@ -156,6 +156,13 @@ describe("parseCreateArgs", () => {
     const result = parseCreateArgs(["feature/test", "タスク", "これは", "複数", "単語"]);
     expect(result.prompt).toBe("これは 複数 単語");
   });
+
+  test("不明オプションはプロンプトとして扱われる", () => {
+    // --unknown は parseCreateArgs では単なる文字列として扱われ、プロンプトの一部になる
+    // これは意図した動作として文書化
+    const result = parseCreateArgs(["feature/test", "タスク", "--unknown", "text"]);
+    expect(result.prompt).toBe("--unknown text");
+  });
 });
 
 describe("parseCleanArgs", () => {
@@ -440,6 +447,54 @@ describe("runCreate", () => {
     );
 
     expect(commandSent).toContain("プランファイルの内容");
+  });
+
+  test("readPlanFileエラー時の伝播", async () => {
+    const deps = createMockDeps({
+      readPlanFile: async () => {
+        throw new Error("File not found: ./missing.md");
+      },
+    });
+
+    await expect(
+      runCreate(
+        { branchName: "feature/plan", taskName: "Plan Task", prompt: "ignored", planFile: "./missing.md" },
+        deps
+      )
+    ).rejects.toThrow("File not found: ./missing.md");
+  });
+
+  test("getGitContextエラー時の伝播", async () => {
+    const deps = createMockDeps({
+      getGitContext: async () => {
+        throw new Error("Not in a git repository");
+      },
+    });
+
+    await expect(
+      runCreate(
+        { branchName: "feature/test", taskName: "Task", prompt: "prompt" },
+        deps
+      )
+    ).rejects.toThrow("Not in a git repository");
+  });
+
+  test("dangerフラグがbuildClaudeCommandに渡される", async () => {
+    let dangerFlagPassed = false;
+
+    const deps = createMockDeps({
+      buildClaudeCommand: ({ dangerouslySkipPermissions }) => {
+        dangerFlagPassed = dangerouslySkipPermissions === true;
+        return "claude --dangerously-skip-permissions";
+      },
+    });
+
+    await runCreate(
+      { branchName: "feature/danger", taskName: "Danger Task", prompt: "test", danger: true },
+      deps
+    );
+
+    expect(dangerFlagPassed).toBe(true);
   });
 
   test("ブランチのみ存在（ワークツリーなし） - 確認後に削除して新規作成", async () => {
