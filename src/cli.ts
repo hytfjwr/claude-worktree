@@ -6,25 +6,85 @@ export interface CliArgs {
   branchName: string;
   taskName: string;
   prompt: string;
+  planFile?: string;
 }
 
 export function parseArgs(args: string[]): CliArgs {
   if (args.length < 2) {
     throw new Error(
       "Usage: claude-worktree <branch-name> <task-name> [prompt]\n" +
-        "Example: claude-worktree feature/auth 'Auth実装' '認証機能を実装して'"
+        "       claude-worktree <branch-name> <task-name> --plan <file-path>\n" +
+        "Example: claude-worktree feature/auth 'Auth実装' '認証機能を実装して'\n" +
+        "         claude-worktree feature/auth 'Auth実装' --plan ./plan.md"
+    );
+  }
+
+  const branchName = args[0];
+  const taskName = args[1];
+  const remaining = args.slice(2);
+
+  // --plan オプションを抽出
+  const planIndex = remaining.indexOf("--plan");
+  let planFile: string | undefined;
+  let inlinePromptParts: string[] = [];
+
+  if (planIndex !== -1) {
+    if (planIndex + 1 >= remaining.length) {
+      throw new Error("--plan requires a file path argument");
+    }
+    planFile = remaining[planIndex + 1];
+    // --plan とそのパスを除いた残りをインラインプロンプトとする
+    inlinePromptParts = [
+      ...remaining.slice(0, planIndex),
+      ...remaining.slice(planIndex + 2),
+    ];
+  } else {
+    inlinePromptParts = remaining;
+  }
+
+  const inlinePrompt = inlinePromptParts.join(" ");
+
+  // 排他性チェック: --plan とインラインプロンプトの両方は指定不可
+  if (planFile && inlinePrompt) {
+    throw new Error(
+      "Cannot use both --plan and inline prompt. Please use one or the other."
     );
   }
 
   return {
-    branchName: args[0],
-    taskName: args[1],
-    prompt: args.slice(2).join(" ") || args[1],
+    branchName,
+    taskName,
+    prompt: inlinePrompt || taskName,
+    planFile,
   };
 }
 
+async function readPlanFile(filePath: string): Promise<string> {
+  const file = Bun.file(filePath);
+  const exists = await file.exists();
+
+  if (!exists) {
+    throw new Error(`Plan file not found: ${filePath}`);
+  }
+
+  const content = await file.text();
+  const trimmed = content.trim();
+
+  if (!trimmed) {
+    throw new Error(`Plan file is empty: ${filePath}`);
+  }
+
+  return trimmed;
+}
+
 export async function run(args: CliArgs): Promise<void> {
-  const { branchName, taskName, prompt } = args;
+  const { branchName, taskName, planFile } = args;
+  let { prompt } = args;
+
+  // プランファイルからプロンプトを読み込み
+  if (planFile) {
+    prompt = await readPlanFile(planFile);
+  }
 
   // Git情報を取得
   const git = await getGitContext();
@@ -34,6 +94,9 @@ export async function run(args: CliArgs): Promise<void> {
   console.log(`🌿 New branch: ${branchName}`);
   console.log(`📂 Worktree path: ${worktreePath}`);
   console.log(`📝 Task: ${taskName}`);
+  if (planFile) {
+    console.log(`📋 Plan file: ${planFile}`);
+  }
 
   // WezTermペインを作成
   const paneId = await createPane({ title: taskName, keepFocus: true });
