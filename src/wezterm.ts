@@ -1,9 +1,9 @@
 import { $ } from "bun";
 
-export interface PaneOptions {
+export type PaneOptions = {
   title?: string;
   keepFocus?: boolean; // trueの場合、split後に元のペインにフォーカスを戻す
-}
+};
 
 export async function splitPaneRight(): Promise<string> {
   const paneId = (await $`wezterm cli split-pane --right`.text()).trim();
