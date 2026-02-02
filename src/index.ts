@@ -11,5 +11,5 @@ export { buildClaudeCommand } from "./claude";
 export type { ClaudeOptions } from "./claude";
 
 // CLI
-export { parseArgs, run } from "./cli";
-export type { CliArgs } from "./cli";
+export { parseArgs, run, showHelp } from "./cli";
+export type { CliArgs, HelpRequest, ParseResult } from "./cli";

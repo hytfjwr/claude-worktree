@@ -9,7 +9,40 @@ export interface CliArgs {
   planFile?: string;
 }
 
-export function parseArgs(args: string[]): CliArgs {
+export interface HelpRequest {
+  type: "help";
+}
+
+export type ParseResult = CliArgs | HelpRequest;
+
+export function showHelp(): void {
+  console.log(`claude-worktree - WezTerm + git worktree + Claude Code で並列開発するCLI
+
+Usage:
+  claude-worktree <branch-name> <task-name> [prompt]
+  claude-worktree <branch-name> <task-name> --plan <file-path>
+
+Arguments:
+  <branch-name>  作成するgit worktreeのブランチ名
+  <task-name>    タスク名（WezTermタブのタイトルになる）
+  [prompt]       Claude Codeに渡すプロンプト（省略時はtask-nameを使用）
+
+Options:
+  --plan <file>  プランファイルからプロンプトを読み込む（インラインpromptと併用不可）
+  -h, --help     このヘルプを表示
+
+Examples:
+  claude-worktree feature/auth 'Auth実装' '認証機能を実装して'
+  claude-worktree fix/bug-123 'バグ修正'
+  claude-worktree feature/api 'API実装' --plan ./plan.md`);
+}
+
+export function parseArgs(args: string[]): ParseResult {
+  // ヘルプフラグのチェック
+  if (args.includes("-h") || args.includes("--help")) {
+    return { type: "help" };
+  }
+
   if (args.length < 2) {
     throw new Error(
       "Usage: claude-worktree <branch-name> <task-name> [prompt]\n" +
