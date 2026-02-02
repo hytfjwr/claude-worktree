@@ -16,6 +16,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Git remote HEAD
+        run: git remote set-head origin --auto
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
