@@ -36,7 +36,7 @@ export async function run(args: CliArgs): Promise<void> {
   console.log(`📝 Task: ${taskName}`);
 
   // WezTermペインを作成
-  const paneId = await createPane({ title: taskName });
+  const paneId = await createPane({ title: taskName, keepFocus: true });
   console.log(`🪟 Created pane: ${paneId}`);
 
   // 実行コマンドを構築
