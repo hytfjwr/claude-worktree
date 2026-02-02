@@ -10,6 +10,7 @@ export type CreateArgs = {
   taskName: string;
   prompt: string;
   planFile?: string;
+  danger?: boolean;
 };
 
 export type Command =
@@ -36,6 +37,7 @@ Arguments:
 
 Options:
   --plan <file>  プランファイルからプロンプトを読み込む（インラインpromptと併用不可）
+  --danger       ワークスペース警告をスキップ（--dangerously-skip-permissions を使用）
   -h, --help     このヘルプを表示
 
 Clean options:
@@ -47,6 +49,7 @@ Examples:
   claude-worktree feature/auth 'Auth実装' '認証機能を実装して'
   claude-worktree fix/bug-123 'バグ修正'
   claude-worktree feature/api 'API実装' --plan ./plan.md
+  claude-worktree feature/auth 'Auth実装' '認証機能を実装して' --danger
   claude-worktree clean
   claude-worktree clean --dry-run`);
 }
@@ -63,7 +66,13 @@ function parseCreateArgs(args: string[]): CreateArgs {
 
   const branchName = args[0];
   const taskName = args[1];
-  const remaining = args.slice(2);
+  let remaining = args.slice(2);
+
+  // --danger フラグを抽出
+  const danger = remaining.includes("--danger");
+  if (danger) {
+    remaining = remaining.filter((arg) => arg !== "--danger");
+  }
 
   // --plan オプションを抽出
   const planIndex = remaining.indexOf("--plan");
@@ -98,6 +107,7 @@ function parseCreateArgs(args: string[]): CreateArgs {
     taskName,
     prompt: inlinePrompt || taskName,
     planFile,
+    danger,
   };
 }
 
@@ -169,7 +179,7 @@ async function readPlanFile(filePath: string): Promise<string> {
 }
 
 async function runCreate(args: CreateArgs): Promise<void> {
-  const { branchName, taskName, planFile } = args;
+  const { branchName, taskName, planFile, danger } = args;
   let { prompt } = args;
 
   // プランファイルからプロンプトを読み込み
@@ -197,7 +207,7 @@ async function runCreate(args: CreateArgs): Promise<void> {
   const commands = [
     buildWorktreeCommand(branchName, worktreePath, git.currentBranch),
     `cd "${worktreePath}"`,
-    buildClaudeCommand({ prompt }),
+    buildClaudeCommand({ prompt, dangerouslySkipPermissions: danger }),
   ].join(" && ");
 
   // コマンドを送信
