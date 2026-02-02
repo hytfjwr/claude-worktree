@@ -1,0 +1,35 @@
+import { $ } from "bun";
+
+export interface PaneOptions {
+  title?: string;
+}
+
+export async function splitPaneRight(): Promise<string> {
+  const paneId = (await $`wezterm cli split-pane --right`.text()).trim();
+  return paneId;
+}
+
+export async function setTabTitle(paneId: string, title: string): Promise<void> {
+  await $`wezterm cli set-tab-title --pane-id ${paneId} ${title}`;
+}
+
+export async function sendText(paneId: string, text: string): Promise<void> {
+  const proc = Bun.spawn(["wezterm", "cli", "send-text", "--no-paste", "--pane-id", paneId], {
+    stdin: new TextEncoder().encode(text),
+  });
+  await proc.exited;
+}
+
+export async function sendCommand(paneId: string, command: string): Promise<void> {
+  await sendText(paneId, command + "\n");
+}
+
+export async function createPane(options: PaneOptions = {}): Promise<string> {
+  const paneId = await splitPaneRight();
+
+  if (options.title) {
+    await setTabTitle(paneId, options.title);
+  }
+
+  return paneId;
+}
