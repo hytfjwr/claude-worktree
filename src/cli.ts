@@ -1,19 +1,21 @@
 import { getGitContext, getWorktreePath, buildWorktreeCommand } from "./git";
 import { createPane, sendCommand, sendText } from "./wezterm";
 import { buildClaudeCommand } from "./claude";
+import { executeClean, type CleanArgs } from "./clean";
 
-export interface CliArgs {
+export type { CleanArgs } from "./clean";
+
+export interface CreateArgs {
   branchName: string;
   taskName: string;
   prompt: string;
   planFile?: string;
 }
 
-export interface HelpRequest {
-  type: "help";
-}
-
-export type ParseResult = CliArgs | HelpRequest;
+export type Command =
+  | { type: "help" }
+  | { type: "create"; args: CreateArgs }
+  | { type: "clean"; args: CleanArgs };
 
 export function showHelp(): void {
   console.log(`claude-worktree - WezTerm + git worktree + Claude Code で並列開発するCLI
@@ -21,6 +23,11 @@ export function showHelp(): void {
 Usage:
   claude-worktree <branch-name> <task-name> [prompt]
   claude-worktree <branch-name> <task-name> --plan <file-path>
+  claude-worktree clean [options]
+
+Commands:
+  <branch-name> <task-name>  Create a new worktree with Claude Code
+  clean                      Remove unnecessary worktrees
 
 Arguments:
   <branch-name>  作成するgit worktreeのブランチ名
@@ -31,18 +38,20 @@ Options:
   --plan <file>  プランファイルからプロンプトを読み込む（インラインpromptと併用不可）
   -h, --help     このヘルプを表示
 
+Clean options:
+  -f, --force    確認プロンプトをスキップ
+  -a, --all      全worktreeを表示して手動選択
+  -n, --dry-run  削除せず対象を表示のみ
+
 Examples:
   claude-worktree feature/auth 'Auth実装' '認証機能を実装して'
   claude-worktree fix/bug-123 'バグ修正'
-  claude-worktree feature/api 'API実装' --plan ./plan.md`);
+  claude-worktree feature/api 'API実装' --plan ./plan.md
+  claude-worktree clean
+  claude-worktree clean --dry-run`);
 }
 
-export function parseArgs(args: string[]): ParseResult {
-  // ヘルプフラグのチェック
-  if (args.includes("-h") || args.includes("--help")) {
-    return { type: "help" };
-  }
-
+function parseCreateArgs(args: string[]): CreateArgs {
   if (args.length < 2) {
     throw new Error(
       "Usage: claude-worktree <branch-name> <task-name> [prompt]\n" +
@@ -92,6 +101,55 @@ export function parseArgs(args: string[]): ParseResult {
   };
 }
 
+function parseCleanArgs(args: string[]): CleanArgs {
+  const cleanArgs: CleanArgs = {
+    force: false,
+    all: false,
+    dryRun: false,
+  };
+
+  for (const arg of args) {
+    switch (arg) {
+      case "--force":
+      case "-f":
+        cleanArgs.force = true;
+        break;
+      case "--all":
+      case "-a":
+        cleanArgs.all = true;
+        break;
+      case "--dry-run":
+      case "-n":
+        cleanArgs.dryRun = true;
+        break;
+      case "-h":
+      case "--help":
+        // clean --help は全体ヘルプを表示
+        break;
+      default:
+        throw new Error(`Unknown option for clean command: ${arg}`);
+    }
+  }
+
+  return cleanArgs;
+}
+
+export function parseArgs(args: string[]): Command {
+  // ヘルプフラグのチェック
+  if (args.length === 0 || args.includes("-h") || args.includes("--help")) {
+    return { type: "help" };
+  }
+
+  if (args[0] === "clean") {
+    return { type: "clean", args: parseCleanArgs(args.slice(1)) };
+  }
+
+  return { type: "create", args: parseCreateArgs(args) };
+}
+
+// Re-export for backward compatibility
+export type CliArgs = CreateArgs;
+
 async function readPlanFile(filePath: string): Promise<string> {
   const file = Bun.file(filePath);
   const exists = await file.exists();
@@ -110,7 +168,7 @@ async function readPlanFile(filePath: string): Promise<string> {
   return trimmed;
 }
 
-export async function run(args: CliArgs): Promise<void> {
+async function runCreate(args: CreateArgs): Promise<void> {
   const { branchName, taskName, planFile } = args;
   let { prompt } = args;
 
@@ -151,4 +209,18 @@ export async function run(args: CliArgs): Promise<void> {
   await sendText(paneId, "\n");
 
   console.log("✅ Worktree created and Claude started in new pane");
+}
+
+export async function run(command: Command): Promise<void> {
+  switch (command.type) {
+    case "help":
+      showHelp();
+      break;
+    case "create":
+      await runCreate(command.args);
+      break;
+    case "clean":
+      await executeClean(command.args);
+      break;
+  }
 }
