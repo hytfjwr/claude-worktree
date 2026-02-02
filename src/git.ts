@@ -1,27 +1,27 @@
 import { $ } from "bun";
 import { join, basename } from "path";
 
-export interface GitContext {
+export type GitContext = {
   repoRoot: string;
   repoName: string;
   currentBranch: string;
-}
+};
 
-export interface WorktreeInfo {
+export type WorktreeInfo = {
   path: string;
   branch: string | null;
   isLocked: boolean;
   isDirty: boolean;
   isMain: boolean;
-}
+};
 
-export interface WorktreeStatus {
+export type WorktreeStatus = {
   worktree: WorktreeInfo;
   branchMerged: boolean;
   branchDeletedOnRemote: boolean;
   canAutoClean: boolean;
   reason: string;
-}
+};
 
 export async function getGitContext(): Promise<GitContext> {
   const repoRoot = (await $`git rev-parse --show-toplevel`.text()).trim();

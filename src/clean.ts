@@ -7,17 +7,17 @@ import {
 } from "./git";
 import { confirm, selectMultiple } from "./prompt";
 
-export interface CleanArgs {
+export type CleanArgs = {
   force: boolean;
   all: boolean;
   dryRun: boolean;
-}
+};
 
-export interface CleanResult {
+export type CleanResult = {
   deleted: string[];
   skipped: string[];
   errors: Array<{ path: string; error: string }>;
-}
+};
 
 export async function executeClean(args: CleanArgs): Promise<CleanResult> {
   const result: CleanResult = {

@@ -5,12 +5,12 @@ import { executeClean, type CleanArgs } from "./clean";
 
 export type { CleanArgs } from "./clean";
 
-export interface CreateArgs {
+export type CreateArgs = {
   branchName: string;
   taskName: string;
   prompt: string;
   planFile?: string;
-}
+};
 
 export type Command =
   | { type: "help" }
