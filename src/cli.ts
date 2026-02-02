@@ -197,7 +197,6 @@ async function runCreate(args: CreateArgs): Promise<void> {
   const commands = [
     buildWorktreeCommand(branchName, worktreePath, git.currentBranch),
     `cd "${worktreePath}"`,
-    `[ -f package.json ] && bun install || true`,
     buildClaudeCommand({ prompt }),
   ].join(" && ");
 
