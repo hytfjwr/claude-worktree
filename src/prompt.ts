@@ -1,14 +1,30 @@
+import * as readline from "node:readline";
 import type { WorktreeStatus } from "./git";
 
+function createReadlineInterface(): readline.Interface {
+  return readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+}
+
+function question(rl: readline.Interface, prompt: string): Promise<string> {
+  return new Promise((resolve) => {
+    rl.question(prompt, (answer) => {
+      resolve(answer);
+    });
+  });
+}
+
 export async function confirm(message: string): Promise<boolean> {
-  process.stdout.write(`${message} (y/N): `);
-
-  for await (const line of console) {
-    const input = line.trim().toLowerCase();
+  const rl = createReadlineInterface();
+  try {
+    const answer = await question(rl, `${message} (y/N): `);
+    const input = answer.trim().toLowerCase();
     return input === "y" || input === "yes";
+  } finally {
+    rl.close();
   }
-
-  return false;
 }
 
 export async function selectMultiple(
@@ -25,10 +41,10 @@ export async function selectMultiple(
     console.log(`     Status: ${status.reason}`);
   });
 
-  process.stdout.write("\n選択: ");
-
-  for await (const line of console) {
-    const input = line.trim().toLowerCase();
+  const rl = createReadlineInterface();
+  try {
+    const answer = await question(rl, "\n選択: ");
+    const input = answer.trim().toLowerCase();
 
     if (!input) {
       return [];
@@ -44,7 +60,7 @@ export async function selectMultiple(
       .filter((i) => i >= 0 && i < statuses.length);
 
     return indices.map((i) => statuses[i]);
+  } finally {
+    rl.close();
   }
-
-  return [];
 }
