@@ -1,4 +1,4 @@
-.PHONY: install uninstall reinstall link unlink test help dev clean check setup typecheck
+.PHONY: install uninstall reinstall link unlink test help dev clean check setup typecheck pull
 
 # デフォルトターゲット
 help:
@@ -15,13 +15,19 @@ help:
 	@echo "  make check      - 依存関係の確認"
 	@echo ""
 
+# 最新の変更を取得
+pull:
+	@echo "📥 最新の変更を取得中..."
+	@git pull
+	@echo "✅ 最新の状態に更新しました"
+
 # 依存関係インストール
 setup:
 	@bun install
 	@echo "✅ 依存関係をインストールしました"
 
 # グローバルにインストール
-install: setup link
+install: pull setup link
 	@echo "✅ claude-worktree をインストールしました"
 	@echo "📍 $$(which claude-worktree)"
 
