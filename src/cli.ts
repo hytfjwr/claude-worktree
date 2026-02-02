@@ -1,15 +1,22 @@
 import { getGitContext, getWorktreePath, buildWorktreeCommand } from "./git";
 import { createPane, sendCommand, sendText } from "./wezterm";
 import { buildClaudeCommand } from "./claude";
+import { executeClean, type CleanArgs } from "./clean";
 
-export interface CliArgs {
+export type { CleanArgs } from "./clean";
+
+export interface CreateArgs {
   branchName: string;
   taskName: string;
   prompt: string;
   planFile?: string;
 }
 
-export function parseArgs(args: string[]): CliArgs {
+export type Command =
+  | { type: "create"; args: CreateArgs }
+  | { type: "clean"; args: CleanArgs };
+
+function parseCreateArgs(args: string[]): CreateArgs {
   if (args.length < 2) {
     throw new Error(
       "Usage: claude-worktree <branch-name> <task-name> [prompt]\n" +
@@ -59,6 +66,62 @@ export function parseArgs(args: string[]): CliArgs {
   };
 }
 
+function parseCleanArgs(args: string[]): CleanArgs {
+  const cleanArgs: CleanArgs = {
+    force: false,
+    all: false,
+    dryRun: false,
+  };
+
+  for (const arg of args) {
+    switch (arg) {
+      case "--force":
+      case "-f":
+        cleanArgs.force = true;
+        break;
+      case "--all":
+      case "-a":
+        cleanArgs.all = true;
+        break;
+      case "--dry-run":
+      case "-n":
+        cleanArgs.dryRun = true;
+        break;
+      default:
+        throw new Error(`Unknown option for clean command: ${arg}`);
+    }
+  }
+
+  return cleanArgs;
+}
+
+export function parseArgs(args: string[]): Command {
+  if (args.length === 0) {
+    throw new Error(
+      "Usage: claude-worktree <branch-name> <task-name> [prompt]\n" +
+        "       claude-worktree clean [--force] [--all] [--dry-run]\n" +
+        "\n" +
+        "Commands:\n" +
+        "  <branch-name> <task-name>  Create a new worktree with Claude Code\n" +
+        "  clean                      Remove unnecessary worktrees\n" +
+        "\n" +
+        "Clean options:\n" +
+        "  -f, --force    Skip confirmation prompt\n" +
+        "  -a, --all      Show all worktrees for manual selection\n" +
+        "  -n, --dry-run  Show what would be deleted without deleting"
+    );
+  }
+
+  if (args[0] === "clean") {
+    return { type: "clean", args: parseCleanArgs(args.slice(1)) };
+  }
+
+  return { type: "create", args: parseCreateArgs(args) };
+}
+
+// Re-export for backward compatibility
+export type CliArgs = CreateArgs;
+
 async function readPlanFile(filePath: string): Promise<string> {
   const file = Bun.file(filePath);
   const exists = await file.exists();
@@ -77,7 +140,7 @@ async function readPlanFile(filePath: string): Promise<string> {
   return trimmed;
 }
 
-export async function run(args: CliArgs): Promise<void> {
+async function runCreate(args: CreateArgs): Promise<void> {
   const { branchName, taskName, planFile } = args;
   let { prompt } = args;
 
@@ -118,4 +181,15 @@ export async function run(args: CliArgs): Promise<void> {
   await sendText(paneId, "\n");
 
   console.log("✅ Worktree created and Claude started in new pane");
+}
+
+export async function run(command: Command): Promise<void> {
+  switch (command.type) {
+    case "create":
+      await runCreate(command.args);
+      break;
+    case "clean":
+      await executeClean(command.args);
+      break;
+  }
 }
