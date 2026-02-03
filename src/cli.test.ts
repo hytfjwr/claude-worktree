@@ -386,6 +386,7 @@ function createMockDeps(overrides: Partial<CreateDependencies> = {}): CreateDepe
     confirm: async () => true,
     log: (msg: string) => logs.push(msg),
     readPlanFile: async () => "plan content",
+    sleep: async () => {},
     ...overrides,
   };
 }

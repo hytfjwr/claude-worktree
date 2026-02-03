@@ -230,6 +230,7 @@ export type CreateDependencies = {
   confirm: typeof confirm;
   log: typeof console.log;
   readPlanFile: (path: string) => Promise<string>;
+  sleep: (ms: number) => Promise<void>;
 };
 
 const defaultCreateDependencies: CreateDependencies = {
@@ -247,6 +248,7 @@ const defaultCreateDependencies: CreateDependencies = {
   confirm,
   log: console.log,
   readPlanFile,
+  sleep: Bun.sleep,
 };
 
 export async function runCreate(
@@ -376,7 +378,7 @@ export async function runCreate(
   await deps.sendCommand(paneId, commands);
 
   // Claude起動後、プロンプト確定のためにEnterを送信
-  await Bun.sleep(2000);
+  await deps.sleep(2000);
   await deps.sendText(paneId, "\n");
 
   deps.log("✅ Worktree created and Claude started in new pane");
