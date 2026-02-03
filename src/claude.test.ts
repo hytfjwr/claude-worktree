@@ -29,10 +29,12 @@ describe("buildClaudeCommand", () => {
     expect(result).toContain("--permission-mode full-auto");
   });
 
-  test("ダブルクォートのエスケープ", () => {
-    const result = buildClaudeCommand({ prompt: '"hello" world' });
+  test("ダブルクォートのエスケープ - $'...'形式ではエスケープ不要", () => {
+    const result = buildClaudeCommand({ prompt: '"hello" world', promptSuffix: "" });
 
-    expect(result).toContain('\\"hello\\" world');
+    // $'...' 形式ではダブルクォートはそのまま使える
+    expect(result).toContain('"hello" world');
+    expect(result).toMatch(/\$'.*"hello" world.*'/);
   });
 
   test("カスタムpromptSuffix", () => {
@@ -52,7 +54,7 @@ describe("buildClaudeCommand", () => {
       promptSuffix: "",
     });
 
-    expect(result).toBe('claude --permission-mode plan "テスト"');
+    expect(result).toBe("claude --permission-mode plan $'テスト'");
   });
 
   test("複合ケース - カスタムpermission mode + カスタムsuffix + エスケープ", () => {
@@ -63,7 +65,8 @@ describe("buildClaudeCommand", () => {
     });
 
     expect(result).toContain("--permission-mode auto-edit");
-    expect(result).toContain('\\"test\\"');
+    // $'...' 形式ではダブルクォートはエスケープ不要
+    expect(result).toContain('"test"');
     expect(result).toContain("完了後にテストを実行");
   });
 
@@ -128,7 +131,8 @@ describe("buildClaudeCommand", () => {
       },
     });
 
-    expect(result).toContain('worktree削除: git worktree remove \\"/custom/path/to/worktree\\"');
+    // $'...' 形式ではダブルクォートはエスケープ不要
+    expect(result).toContain('worktree削除: git worktree remove "/custom/path/to/worktree"');
   });
 
   test("mergeInstructionsなし - マージ指示が含まれない", () => {
@@ -163,34 +167,37 @@ describe("buildClaudeCommand - エッジケース", () => {
   test("空プロンプト - エラーにならない", () => {
     const result = buildClaudeCommand({ prompt: "", promptSuffix: "" });
 
-    expect(result).toBe('claude --permission-mode plan ""');
+    expect(result).toBe("claude --permission-mode plan $''");
   });
 
-  test("改行を含むプロンプト - 改行が保持される", () => {
+  test("改行を含むプロンプト - 改行が \\n にエスケープされる", () => {
     const result = buildClaudeCommand({
       prompt: "行1\n行2\n行3",
       promptSuffix: "",
     });
 
-    expect(result).toContain("行1\n行2\n行3");
+    // 改行は \n にエスケープされる（シェルの $'...' 形式で解釈される）
+    expect(result).toBe("claude --permission-mode plan $'行1\\n行2\\n行3'");
   });
 
-  test("バックスラッシュを含むプロンプト - バックスラッシュが保持される", () => {
+  test("バックスラッシュを含むプロンプト - バックスラッシュが \\\\ にエスケープされる", () => {
     const result = buildClaudeCommand({
       prompt: "path\\to\\file",
       promptSuffix: "",
     });
 
-    expect(result).toContain("path\\to\\file");
+    // バックスラッシュは \\\\ にエスケープされる
+    expect(result).toBe("claude --permission-mode plan $'path\\\\to\\\\file'");
   });
 
-  test("シングルクォートを含むプロンプト - シングルクォートが保持される", () => {
+  test("シングルクォートを含むプロンプト - シングルクォートがエスケープされる", () => {
     const result = buildClaudeCommand({
       prompt: "It's a test",
       promptSuffix: "",
     });
 
-    expect(result).toContain("It's a test");
+    // シングルクォートは \\' にエスケープされる
+    expect(result).toBe("claude --permission-mode plan $'It\\'s a test'");
   });
 
   test("$変数展開の文字 - $がそのまま保持される", () => {
@@ -199,6 +206,7 @@ describe("buildClaudeCommand - エッジケース", () => {
       promptSuffix: "",
     });
 
+    // $'...' 形式では $ は変数展開されない
     expect(result).toContain("$HOME/path");
   });
 
@@ -220,5 +228,34 @@ describe("buildClaudeCommand - エッジケース", () => {
 
     expect(result).toContain(longText);
     expect(result.length).toBeGreaterThan(10000);
+  });
+
+  test("タブ文字を含むプロンプト - タブが \\t にエスケープされる", () => {
+    const result = buildClaudeCommand({
+      prompt: "col1\tcol2\tcol3",
+      promptSuffix: "",
+    });
+
+    expect(result).toBe("claude --permission-mode plan $'col1\\tcol2\\tcol3'");
+  });
+
+  test("キャリッジリターンを含むプロンプト - CRが \\r にエスケープされる", () => {
+    const result = buildClaudeCommand({
+      prompt: "line1\r\nline2",
+      promptSuffix: "",
+    });
+
+    expect(result).toBe("claude --permission-mode plan $'line1\\r\\nline2'");
+  });
+
+  test("複合的な特殊文字 - 全てが正しくエスケープされる", () => {
+    const result = buildClaudeCommand({
+      prompt: "It's a \"test\"\npath\\to\\file",
+      promptSuffix: "",
+    });
+
+    // シングルクォート、改行、バックスラッシュがエスケープされる
+    // ダブルクォートはそのまま
+    expect(result).toBe("claude --permission-mode plan $'It\\'s a \"test\"\\npath\\\\to\\\\file'");
   });
 });

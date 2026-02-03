@@ -35,6 +35,19 @@ function buildMergeInstructions(mergeInstructions: MergeInstructions): string {
     .replace("{worktreePath}", mergeInstructions.worktreePath);
 }
 
+/**
+ * シェルの $'...' 形式用にプロンプトをエスケープする
+ * $'...' 形式では \n, \t などのエスケープシーケンスが解釈される
+ */
+function escapeForDollarQuote(str: string): string {
+  return str
+    .replace(/\\/g, '\\\\')    // バックスラッシュを先にエスケープ
+    .replace(/'/g, "\\'")      // シングルクォートをエスケープ
+    .replace(/\n/g, '\\n')     // 改行をリテラル \n に
+    .replace(/\r/g, '\\r')     // キャリッジリターンをエスケープ
+    .replace(/\t/g, '\\t');    // タブをエスケープ
+}
+
 export function buildClaudeCommand(options: ClaudeOptions): string {
   const {
     permissionMode = "plan",
@@ -50,8 +63,8 @@ export function buildClaudeCommand(options: ClaudeOptions): string {
     fullPrompt += buildMergeInstructions(mergeInstructions);
   }
 
-  const escapedPrompt = fullPrompt.replace(/"/g, '\\"');
+  const escapedPrompt = escapeForDollarQuote(fullPrompt);
 
   const dangerFlag = dangerouslySkipPermissions ? "--dangerously-skip-permissions " : "";
-  return `claude ${dangerFlag}--permission-mode ${permissionMode} "${escapedPrompt}"`;
+  return `claude ${dangerFlag}--permission-mode ${permissionMode} $'${escapedPrompt}'`;
 }
