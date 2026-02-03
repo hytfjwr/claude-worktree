@@ -57,6 +57,7 @@ describe("parseArgs", () => {
           planFile: undefined,
           danger: false,
           merge: false,
+          baseBranch: undefined,
         },
       });
     });
@@ -72,6 +73,7 @@ describe("parseArgs", () => {
           planFile: undefined,
           danger: false,
           merge: false,
+          baseBranch: undefined,
         },
       });
     });
@@ -88,6 +90,7 @@ describe("parseCreateArgs", () => {
       planFile: undefined,
       danger: false,
       merge: false,
+      baseBranch: undefined,
     });
   });
 
@@ -100,6 +103,7 @@ describe("parseCreateArgs", () => {
       planFile: undefined,
       danger: false,
       merge: false,
+      baseBranch: undefined,
     });
   });
 
@@ -112,6 +116,7 @@ describe("parseCreateArgs", () => {
       planFile: "./plan.md",
       danger: false,
       merge: false,
+      baseBranch: undefined,
     });
   });
 
@@ -124,6 +129,7 @@ describe("parseCreateArgs", () => {
       planFile: undefined,
       danger: true,
       merge: false,
+      baseBranch: undefined,
     });
   });
 
@@ -136,6 +142,7 @@ describe("parseCreateArgs", () => {
       planFile: "plan.md",
       danger: true,
       merge: false,
+      baseBranch: undefined,
     });
   });
 
@@ -148,6 +155,7 @@ describe("parseCreateArgs", () => {
       planFile: undefined,
       danger: false,
       merge: true,
+      baseBranch: undefined,
     });
   });
 
@@ -160,6 +168,7 @@ describe("parseCreateArgs", () => {
       planFile: undefined,
       danger: true,
       merge: true,
+      baseBranch: undefined,
     });
   });
 
@@ -172,6 +181,7 @@ describe("parseCreateArgs", () => {
       planFile: "plan.md",
       danger: false,
       merge: true,
+      baseBranch: undefined,
     });
   });
 
@@ -184,7 +194,79 @@ describe("parseCreateArgs", () => {
       planFile: "plan.md",
       danger: true,
       merge: true,
+      baseBranch: undefined,
     });
+  });
+
+  test("--base オプション", () => {
+    const result = parseCreateArgs(["feature/test", "タスク", "プロンプト", "--base", "develop"]);
+    expect(result).toEqual({
+      branchName: "feature/test",
+      taskName: "タスク",
+      prompt: "プロンプト",
+      planFile: undefined,
+      danger: false,
+      merge: false,
+      baseBranch: "develop",
+    });
+  });
+
+  test("--base + --danger オプション", () => {
+    const result = parseCreateArgs(["feature/test", "タスク", "プロンプト", "--base", "develop", "--danger"]);
+    expect(result).toEqual({
+      branchName: "feature/test",
+      taskName: "タスク",
+      prompt: "プロンプト",
+      planFile: undefined,
+      danger: true,
+      merge: false,
+      baseBranch: "develop",
+    });
+  });
+
+  test("--base + --merge オプション", () => {
+    const result = parseCreateArgs(["feature/test", "タスク", "プロンプト", "--base", "develop", "--merge"]);
+    expect(result).toEqual({
+      branchName: "feature/test",
+      taskName: "タスク",
+      prompt: "プロンプト",
+      planFile: undefined,
+      danger: false,
+      merge: true,
+      baseBranch: "develop",
+    });
+  });
+
+  test("--base + --plan オプション", () => {
+    const result = parseCreateArgs(["feature/test", "タスク", "--base", "develop", "--plan", "plan.md"]);
+    expect(result).toEqual({
+      branchName: "feature/test",
+      taskName: "タスク",
+      prompt: "タスク",
+      planFile: "plan.md",
+      danger: false,
+      merge: false,
+      baseBranch: "develop",
+    });
+  });
+
+  test("全オプション組み合わせ --base + --merge + --danger + --plan", () => {
+    const result = parseCreateArgs(["feature/test", "タスク", "--base", "develop", "--plan", "plan.md", "--merge", "--danger"]);
+    expect(result).toEqual({
+      branchName: "feature/test",
+      taskName: "タスク",
+      prompt: "タスク",
+      planFile: "plan.md",
+      danger: true,
+      merge: true,
+      baseBranch: "develop",
+    });
+  });
+
+  test("エラー: --base に引数がない", () => {
+    expect(() => parseCreateArgs(["feature/test", "タスク", "--base"])).toThrow(
+      "--base requires a branch name argument"
+    );
   });
 
   test("エラー: 引数が足りない（0個）", () => {
@@ -710,5 +792,74 @@ describe("runCreate", () => {
     );
 
     expect(mergeInstructionsPassed).toBeUndefined();
+  });
+
+  test("--base オプションでbuildWorktreeCommandに指定したベースブランチが渡される", async () => {
+    let baseBranchPassed = "";
+    const logs: string[] = [];
+
+    const deps = createMockDeps({
+      buildWorktreeCommand: (branch, path, base) => {
+        baseBranchPassed = base;
+        return `git worktree add -b ${branch} "${path}" ${base}`;
+      },
+      log: (msg: string) => logs.push(msg),
+    });
+
+    await runCreate(
+      { branchName: "feature/base", taskName: "Base Task", prompt: "test", baseBranch: "develop" },
+      deps
+    );
+
+    expect(baseBranchPassed).toBe("develop");
+    expect(logs.some((l) => l.includes("🌳 Base branch: develop"))).toBe(true);
+  });
+
+  test("--base 指定なしでbuildWorktreeCommandに現在のブランチが渡される", async () => {
+    let baseBranchPassed = "";
+
+    const deps = createMockDeps({
+      buildWorktreeCommand: (branch, path, base) => {
+        baseBranchPassed = base;
+        return `git worktree add -b ${branch} "${path}" ${base}`;
+      },
+    });
+
+    await runCreate(
+      { branchName: "feature/no-base", taskName: "No Base Task", prompt: "test" },
+      deps
+    );
+
+    expect(baseBranchPassed).toBe("main");
+  });
+
+  test("--base + --merge オプションの組み合わせ", async () => {
+    let baseBranchPassed = "";
+    let mergeInstructionsPassed: { baseBranch: string; worktreePath: string } | undefined;
+    const logs: string[] = [];
+
+    const deps = createMockDeps({
+      buildWorktreeCommand: (branch, path, base) => {
+        baseBranchPassed = base;
+        return `git worktree add -b ${branch} "${path}" ${base}`;
+      },
+      buildClaudeCommand: ({ mergeInstructions }) => {
+        mergeInstructionsPassed = mergeInstructions;
+        return "claude";
+      },
+      log: (msg: string) => logs.push(msg),
+    });
+
+    await runCreate(
+      { branchName: "feature/base-merge", taskName: "Base Merge Task", prompt: "test", baseBranch: "develop", merge: true },
+      deps
+    );
+
+    // baseBranchはworktree作成に使用される
+    expect(baseBranchPassed).toBe("develop");
+    // mergeInstructionsのbaseBranchは現在のブランチ（main）が使用される
+    expect(mergeInstructionsPassed?.baseBranch).toBe("main");
+    expect(logs.some((l) => l.includes("🌳 Base branch: develop"))).toBe(true);
+    expect(logs.some((l) => l.includes("🔀 Auto-merge to: main"))).toBe(true);
   });
 });

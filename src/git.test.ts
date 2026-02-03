@@ -140,21 +140,23 @@ describe("listWorktrees", () => {
     }
   });
 
-  test("メインworktreeが含まれる", async () => {
+  test("現在のブランチのworktreeが含まれる", async () => {
+    const context = await getGitContext();
     const worktrees = await listWorktrees();
-    const mainWorktree = worktrees.find((w) => w.isMain);
+    const currentWorktree = worktrees.find((w) => w.branch === context.currentBranch);
 
-    expect(mainWorktree).toBeDefined();
+    expect(currentWorktree).toBeDefined();
+    expect(currentWorktree?.path).toBe(context.repoRoot);
   });
 });
 
 describe("findWorktreeByBranch", () => {
   test("存在するブランチを検索", async () => {
-    const mainBranch = await getMainBranch();
-    const worktree = await findWorktreeByBranch(mainBranch);
+    const context = await getGitContext();
+    const worktree = await findWorktreeByBranch(context.currentBranch);
 
     expect(worktree).not.toBeNull();
-    expect(worktree?.branch).toBe(mainBranch);
+    expect(worktree?.branch).toBe(context.currentBranch);
   });
 
   test("存在しないブランチはnullを返す", async () => {
@@ -348,9 +350,9 @@ describe("getWorktreeStatuses", () => {
 });
 
 describe("branchExists", () => {
-  test("mainブランチが存在する場合trueを返す", async () => {
-    const mainBranch = await getMainBranch();
-    const exists = await branchExists(mainBranch);
+  test("現在のブランチが存在する場合trueを返す", async () => {
+    const context = await getGitContext();
+    const exists = await branchExists(context.currentBranch);
 
     expect(exists).toBe(true);
   });

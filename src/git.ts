@@ -149,7 +149,7 @@ export async function isBranchMerged(branch: string, baseBranch?: string): Promi
   const base = baseBranch || await getMainBranch();
 
   // Check if branch is merged into base
-  const result = await $`git branch --merged ${base}`.quiet();
+  const result = await $`git branch --merged ${base}`.nothrow().quiet();
   if (result.exitCode !== 0) {
     return false;
   }
@@ -160,7 +160,7 @@ export async function isBranchMerged(branch: string, baseBranch?: string): Promi
 
 export async function isRemoteBranchDeleted(branch: string): Promise<boolean> {
   // Check if remote branch exists
-  const result = await $`git ls-remote --heads origin ${branch}`.quiet();
+  const result = await $`git ls-remote --heads origin ${branch}`.nothrow().quiet();
   if (result.exitCode !== 0) {
     return true; // Assume deleted if we can't check
   }

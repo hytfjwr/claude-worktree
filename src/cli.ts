@@ -21,6 +21,7 @@ export type CreateArgs = {
   planFile?: string;
   danger?: boolean;
   merge?: boolean;
+  baseBranch?: string;
 };
 
 export type Command =
@@ -46,10 +47,11 @@ Arguments:
   [prompt]       Claude Codeに渡すプロンプト（省略時はtask-nameを使用）
 
 Options:
-  --plan <file>  プランファイルからプロンプトを読み込む（インラインpromptと併用不可）
-  --danger       ワークスペース警告をスキップ（--dangerously-skip-permissions を使用）
-  --merge        タスク完了後に元ブランチへ自動マージ・クリーンアップ
-  -h, --help     このヘルプを表示
+  --plan <file>    プランファイルからプロンプトを読み込む（インラインpromptと併用不可）
+  --base <branch>  ベースブランチを指定（デフォルト: 現在のブランチ）
+  --danger         ワークスペース警告をスキップ（--dangerously-skip-permissions を使用）
+  --merge          タスク完了後に元ブランチへ自動マージ・クリーンアップ
+  -h, --help       このヘルプを表示
 
 Clean options:
   -f, --force    確認プロンプトをスキップ
@@ -92,6 +94,21 @@ export function parseCreateArgs(args: string[]): CreateArgs {
     remaining = remaining.filter((arg) => arg !== "--merge");
   }
 
+  // --base オプションを抽出
+  const baseIndex = remaining.indexOf("--base");
+  let baseBranch: string | undefined;
+
+  if (baseIndex !== -1) {
+    if (baseIndex + 1 >= remaining.length) {
+      throw new Error("--base requires a branch name argument");
+    }
+    baseBranch = remaining[baseIndex + 1];
+    remaining = [
+      ...remaining.slice(0, baseIndex),
+      ...remaining.slice(baseIndex + 2),
+    ];
+  }
+
   // --plan オプションを抽出
   const planIndex = remaining.indexOf("--plan");
   let planFile: string | undefined;
@@ -127,6 +144,7 @@ export function parseCreateArgs(args: string[]): CreateArgs {
     planFile,
     danger,
     merge,
+    baseBranch,
   };
 }
 
@@ -235,7 +253,7 @@ export async function runCreate(
   args: CreateArgs,
   deps: CreateDependencies = defaultCreateDependencies
 ): Promise<void> {
-  const { branchName, taskName, planFile, danger, merge } = args;
+  const { branchName, taskName, planFile, danger, merge, baseBranch } = args;
   let { prompt } = args;
 
   // プランファイルからプロンプトを読み込み
@@ -247,7 +265,13 @@ export async function runCreate(
   const git = await deps.getGitContext();
   const worktreePath = deps.getWorktreePath(git.repoRoot, git.repoName, branchName);
 
+  // baseBranch が指定されていれば使用、なければ現在のブランチ
+  const effectiveBaseBranch = baseBranch ?? git.currentBranch;
+
   deps.log(`📍 Current branch: ${git.currentBranch}`);
+  if (baseBranch) {
+    deps.log(`🌳 Base branch: ${baseBranch}`);
+  }
   deps.log(`🌿 New branch: ${branchName}`);
   deps.log(`📂 Worktree path: ${worktreePath}`);
   deps.log(`📝 Task: ${taskName}`);
@@ -343,7 +367,7 @@ export async function runCreate(
   };
 
   const commands = [
-    deps.buildWorktreeCommand(branchName, worktreePath, git.currentBranch),
+    deps.buildWorktreeCommand(branchName, worktreePath, effectiveBaseBranch),
     `cd "${worktreePath}"`,
     deps.buildClaudeCommand(claudeOptions),
   ].join(" && ");

@@ -46,6 +46,7 @@ claude-worktree --help
 ### Options
 
 - `--plan <file>` - Read prompt from a file (cannot be used with inline prompt)
+- `--base <branch>` - Base branch for worktree (default: current branch)
 - `-h, --help` - Show help
 
 ### Clean Options
@@ -65,6 +66,9 @@ claude-worktree fix/bug-123 'Fix login bug'
 
 # Read prompt from a plan file
 claude-worktree feature/api 'API Implementation' --plan ./plan.md
+
+# Create worktree from specific base branch
+claude-worktree feature/auth 'Implement Auth' 'Implement auth' --base develop
 
 # Clean up unnecessary worktrees
 claude-worktree clean
