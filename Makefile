@@ -9,7 +9,7 @@ help:
 	@echo "  make reinstall  - 再インストール"
 	@echo "  make setup      - 依存関係のみインストール"
 	@echo "  make dev        - 開発モードで実行 (引数なし)"
-	@echo "  make test       - ヘルプメッセージを表示してテスト"
+	@echo "  make test       - Bunテストを実行"
 	@echo "  make typecheck  - TypeScript型チェック"
 	@echo "  make clean      - node_modules等を削除"
 	@echo "  make check      - 依存関係の確認"
@@ -48,15 +48,9 @@ unlink:
 # 再インストール
 reinstall: uninstall install
 
-# テスト（ヘルプ表示）
+# テスト
 test:
-	@echo "=== ヘルプメッセージのテスト ==="
-	@claude-worktree 2>&1 || true
-	@echo ""
-	@echo "=== インストール確認 ==="
-	@which claude-worktree
-	@echo ""
-	@echo "✅ テスト完了"
+	@bun test
 
 # 開発モードで実行
 dev:
