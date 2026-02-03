@@ -20,6 +20,7 @@ export type CreateArgs = {
   prompt: string;
   planFile?: string;
   danger?: boolean;
+  merge?: boolean;
 };
 
 export type Command =
@@ -47,6 +48,7 @@ Arguments:
 Options:
   --plan <file>  プランファイルからプロンプトを読み込む（インラインpromptと併用不可）
   --danger       ワークスペース警告をスキップ（--dangerously-skip-permissions を使用）
+  --merge        タスク完了後に元ブランチへ自動マージ・クリーンアップ
   -h, --help     このヘルプを表示
 
 Clean options:
@@ -59,6 +61,7 @@ Examples:
   claude-worktree fix/bug-123 'バグ修正'
   claude-worktree feature/api 'API実装' --plan ./plan.md
   claude-worktree feature/auth 'Auth実装' '認証機能を実装して' --danger
+  claude-worktree feature/auth 'Auth実装' '認証機能を実装して' --merge
   claude-worktree clean
   claude-worktree clean --dry-run`);
 }
@@ -81,6 +84,12 @@ export function parseCreateArgs(args: string[]): CreateArgs {
   const danger = remaining.includes("--danger");
   if (danger) {
     remaining = remaining.filter((arg) => arg !== "--danger");
+  }
+
+  // --merge フラグを抽出
+  const merge = remaining.includes("--merge");
+  if (merge) {
+    remaining = remaining.filter((arg) => arg !== "--merge");
   }
 
   // --plan オプションを抽出
@@ -117,6 +126,7 @@ export function parseCreateArgs(args: string[]): CreateArgs {
     prompt: inlinePrompt || taskName,
     planFile,
     danger,
+    merge,
   };
 }
 
@@ -225,7 +235,7 @@ export async function runCreate(
   args: CreateArgs,
   deps: CreateDependencies = defaultCreateDependencies
 ): Promise<void> {
-  const { branchName, taskName, planFile, danger } = args;
+  const { branchName, taskName, planFile, danger, merge } = args;
   let { prompt } = args;
 
   // プランファイルからプロンプトを読み込み
@@ -243,6 +253,9 @@ export async function runCreate(
   deps.log(`📝 Task: ${taskName}`);
   if (planFile) {
     deps.log(`📋 Plan file: ${planFile}`);
+  }
+  if (merge) {
+    deps.log(`🔀 Auto-merge to: ${git.currentBranch}`);
   }
 
   // 既存ワークツリーの重複チェック
@@ -318,10 +331,21 @@ export async function runCreate(
   deps.log(`🪟 Created pane: ${paneId}`);
 
   // 実行コマンドを構築
+  const claudeOptions = {
+    prompt,
+    dangerouslySkipPermissions: danger,
+    ...(merge && {
+      mergeInstructions: {
+        baseBranch: git.currentBranch,
+        worktreePath,
+      },
+    }),
+  };
+
   const commands = [
     deps.buildWorktreeCommand(branchName, worktreePath, git.currentBranch),
     `cd "${worktreePath}"`,
-    deps.buildClaudeCommand({ prompt, dangerouslySkipPermissions: danger }),
+    deps.buildClaudeCommand(claudeOptions),
   ].join(" && ");
 
   // コマンドを送信

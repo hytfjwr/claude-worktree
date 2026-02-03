@@ -93,6 +93,66 @@ describe("buildClaudeCommand", () => {
 
     expect(result).not.toContain("--dangerously-skip-permissions");
   });
+
+  test("mergeInstructionsあり - マージ指示が含まれる", () => {
+    const result = buildClaudeCommand({
+      prompt: "テスト",
+      mergeInstructions: {
+        baseBranch: "main",
+        worktreePath: "/path/to/worktree",
+      },
+    });
+
+    expect(result).toContain("【重要】タスク完了後の処理");
+    expect(result).toContain("ベースブランチへマージ");
+  });
+
+  test("mergeInstructions - ベースブランチ名が正しく埋め込まれる", () => {
+    const result = buildClaudeCommand({
+      prompt: "テスト",
+      mergeInstructions: {
+        baseBranch: "develop",
+        worktreePath: "/path/to/worktree",
+      },
+    });
+
+    expect(result).toContain("マージ対象: develop");
+  });
+
+  test("mergeInstructions - worktreeパスが正しく埋め込まれる", () => {
+    const result = buildClaudeCommand({
+      prompt: "テスト",
+      mergeInstructions: {
+        baseBranch: "main",
+        worktreePath: "/custom/path/to/worktree",
+      },
+    });
+
+    expect(result).toContain('worktree削除: git worktree remove \\"/custom/path/to/worktree\\"');
+  });
+
+  test("mergeInstructionsなし - マージ指示が含まれない", () => {
+    const result = buildClaudeCommand({
+      prompt: "テスト",
+    });
+
+    expect(result).not.toContain("【重要】タスク完了後の処理");
+    expect(result).not.toContain("ベースブランチへマージ");
+  });
+
+  test("mergeInstructions + dangerouslySkipPermissions 組み合わせ", () => {
+    const result = buildClaudeCommand({
+      prompt: "テスト",
+      dangerouslySkipPermissions: true,
+      mergeInstructions: {
+        baseBranch: "main",
+        worktreePath: "/path/to/worktree",
+      },
+    });
+
+    expect(result).toContain("--dangerously-skip-permissions");
+    expect(result).toContain("【重要】タスク完了後の処理");
+  });
 });
 
 // ============================================================================

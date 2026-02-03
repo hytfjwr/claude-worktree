@@ -56,6 +56,7 @@ describe("parseArgs", () => {
           prompt: "Auth実装",
           planFile: undefined,
           danger: false,
+          merge: false,
         },
       });
     });
@@ -70,6 +71,7 @@ describe("parseArgs", () => {
           prompt: "認証機能を実装して",
           planFile: undefined,
           danger: false,
+          merge: false,
         },
       });
     });
@@ -85,6 +87,7 @@ describe("parseCreateArgs", () => {
       prompt: "テストタスク",
       planFile: undefined,
       danger: false,
+      merge: false,
     });
   });
 
@@ -96,6 +99,7 @@ describe("parseCreateArgs", () => {
       prompt: "このバグを直して",
       planFile: undefined,
       danger: false,
+      merge: false,
     });
   });
 
@@ -107,6 +111,7 @@ describe("parseCreateArgs", () => {
       prompt: "API実装",
       planFile: "./plan.md",
       danger: false,
+      merge: false,
     });
   });
 
@@ -118,6 +123,7 @@ describe("parseCreateArgs", () => {
       prompt: "プロンプト",
       planFile: undefined,
       danger: true,
+      merge: false,
     });
   });
 
@@ -129,6 +135,55 @@ describe("parseCreateArgs", () => {
       prompt: "タスク",
       planFile: "plan.md",
       danger: true,
+      merge: false,
+    });
+  });
+
+  test("--merge オプション", () => {
+    const result = parseCreateArgs(["feature/test", "タスク", "プロンプト", "--merge"]);
+    expect(result).toEqual({
+      branchName: "feature/test",
+      taskName: "タスク",
+      prompt: "プロンプト",
+      planFile: undefined,
+      danger: false,
+      merge: true,
+    });
+  });
+
+  test("--merge + --danger オプション", () => {
+    const result = parseCreateArgs(["feature/test", "タスク", "プロンプト", "--merge", "--danger"]);
+    expect(result).toEqual({
+      branchName: "feature/test",
+      taskName: "タスク",
+      prompt: "プロンプト",
+      planFile: undefined,
+      danger: true,
+      merge: true,
+    });
+  });
+
+  test("--merge + --plan オプション", () => {
+    const result = parseCreateArgs(["feature/test", "タスク", "--plan", "plan.md", "--merge"]);
+    expect(result).toEqual({
+      branchName: "feature/test",
+      taskName: "タスク",
+      prompt: "タスク",
+      planFile: "plan.md",
+      danger: false,
+      merge: true,
+    });
+  });
+
+  test("全オプション組み合わせ --merge + --danger + --plan", () => {
+    const result = parseCreateArgs(["feature/test", "タスク", "--plan", "plan.md", "--merge", "--danger"]);
+    expect(result).toEqual({
+      branchName: "feature/test",
+      taskName: "タスク",
+      prompt: "タスク",
+      planFile: "plan.md",
+      danger: true,
+      merge: true,
     });
   });
 
@@ -614,5 +669,46 @@ describe("runCreate", () => {
 
     expect(paneCreated).toBe(false);
     expect(logs.some((l) => l.includes("ブランチの削除に失敗しました"))).toBe(true);
+  });
+
+  test("--merge オプションでmergeInstructionsがbuildClaudeCommandに渡される", async () => {
+    let mergeInstructionsPassed: { baseBranch: string; worktreePath: string } | undefined;
+    const logs: string[] = [];
+
+    const deps = createMockDeps({
+      buildClaudeCommand: ({ mergeInstructions }) => {
+        mergeInstructionsPassed = mergeInstructions;
+        return "claude";
+      },
+      log: (msg: string) => logs.push(msg),
+    });
+
+    await runCreate(
+      { branchName: "feature/merge", taskName: "Merge Task", prompt: "test", merge: true },
+      deps
+    );
+
+    expect(mergeInstructionsPassed).toBeDefined();
+    expect(mergeInstructionsPassed?.baseBranch).toBe("main");
+    expect(mergeInstructionsPassed?.worktreePath).toContain("feature-merge");
+    expect(logs.some((l) => l.includes("🔀 Auto-merge to: main"))).toBe(true);
+  });
+
+  test("--merge なしでmergeInstructionsが渡されない", async () => {
+    let mergeInstructionsPassed: { baseBranch: string; worktreePath: string } | undefined;
+
+    const deps = createMockDeps({
+      buildClaudeCommand: ({ mergeInstructions }) => {
+        mergeInstructionsPassed = mergeInstructions;
+        return "claude";
+      },
+    });
+
+    await runCreate(
+      { branchName: "feature/no-merge", taskName: "No Merge Task", prompt: "test", merge: false },
+      deps
+    );
+
+    expect(mergeInstructionsPassed).toBeUndefined();
   });
 });

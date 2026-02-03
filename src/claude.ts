@@ -1,11 +1,39 @@
+export type MergeInstructions = {
+  baseBranch: string;
+  worktreePath: string;
+};
+
 export type ClaudeOptions = {
   permissionMode?: "plan" | "auto-edit" | "full-auto";
   prompt: string;
   promptSuffix?: string;
   dangerouslySkipPermissions?: boolean;
+  mergeInstructions?: MergeInstructions;
 };
 
 const DEFAULT_PROMPT_SUFFIX = "\n\n不明瞭な点は必ずユーザーに確認し、明確にしながら進めてください";
+
+const MERGE_INSTRUCTION_TEMPLATE = `
+
+---
+## 【重要】タスク完了後の処理
+
+タスクが完了したら、以下の手順を実行してください：
+
+1. **すべての変更をコミット**
+2. **ベースブランチへマージ**
+   - マージ対象: {baseBranch}
+   - コンフリクト発生時は解決してください
+3. **クリーンアップ**
+   - worktree削除: git worktree remove "{worktreePath}"
+   - ブランチ削除: git branch -d <merged-branch>
+4. **完了報告**`;
+
+function buildMergeInstructions(mergeInstructions: MergeInstructions): string {
+  return MERGE_INSTRUCTION_TEMPLATE
+    .replace("{baseBranch}", mergeInstructions.baseBranch)
+    .replace("{worktreePath}", mergeInstructions.worktreePath);
+}
 
 export function buildClaudeCommand(options: ClaudeOptions): string {
   const {
@@ -13,9 +41,15 @@ export function buildClaudeCommand(options: ClaudeOptions): string {
     prompt,
     promptSuffix = DEFAULT_PROMPT_SUFFIX,
     dangerouslySkipPermissions = false,
+    mergeInstructions,
   } = options;
 
-  const fullPrompt = prompt + promptSuffix;
+  let fullPrompt = prompt + promptSuffix;
+
+  if (mergeInstructions) {
+    fullPrompt += buildMergeInstructions(mergeInstructions);
+  }
+
   const escapedPrompt = fullPrompt.replace(/"/g, '\\"');
 
   const dangerFlag = dangerouslySkipPermissions ? "--dangerously-skip-permissions " : "";
