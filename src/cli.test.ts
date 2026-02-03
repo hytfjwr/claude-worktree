@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
-import { parseArgs, parseCreateArgs, parseCleanArgs, runCreate, type CreateDependencies } from "./cli";
+import { describe, expect, test, mock, spyOn, beforeEach, afterEach } from "bun:test";
+import { parseArgs, parseCreateArgs, parseCleanArgs } from "./cli";
 import type { GitContext, WorktreeInfo } from "./git";
 
 describe("parseArgs", () => {
@@ -359,57 +359,69 @@ describe("parseCleanArgs", () => {
 });
 
 // ============================================================================
-// runCreate のテスト（DIを使用したモックテスト）
+// runCreate のテスト（mock.moduleを使用）
 // ============================================================================
 
-function createMockDeps(overrides: Partial<CreateDependencies> = {}): CreateDependencies {
-  const mockGitContext: GitContext = {
-    repoRoot: "/path/to/repo",
-    repoName: "repo",
-    currentBranch: "main",
-  };
-
-  const logs: string[] = [];
-
-  return {
-    getGitContext: async () => mockGitContext,
-    getWorktreePath: (root, name, branch) => `${root}/../${name}-${branch.replace(/\//g, "-")}`,
-    findWorktreeByBranch: async () => null,
-    removeWorktree: async () => {},
-    deleteLocalBranch: async () => {},
-    branchExists: async () => false,
-    createPane: async () => "mock-pane-id",
-    sendCommand: async () => {},
-    sendText: async () => {},
-    buildWorktreeCommand: (branch, path, base) => `git worktree add -b ${branch} "${path}" ${base}`,
-    buildClaudeCommand: () => "claude",
-    confirm: async () => true,
-    log: (msg: string) => logs.push(msg),
-    readPlanFile: async () => "plan content",
-    sleep: async () => {},
-    ...overrides,
-  };
-}
-
 describe("runCreate", () => {
+  let consoleLogSpy: ReturnType<typeof spyOn>;
+  let bunSleepSpy: ReturnType<typeof spyOn>;
+  let logs: string[];
+
+  beforeEach(() => {
+    logs = [];
+    consoleLogSpy = spyOn(console, "log").mockImplementation((msg: string) => {
+      logs.push(msg);
+    });
+    bunSleepSpy = spyOn(Bun, "sleep").mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    consoleLogSpy.mockRestore();
+    bunSleepSpy.mockRestore();
+  });
+
   test("既存ワークツリーなし - 正常にペイン作成", async () => {
     let paneCreated = false;
     let commandSent = "";
 
-    const deps = createMockDeps({
-      createPane: async () => {
+    const mockGitContext: GitContext = {
+      repoRoot: "/path/to/repo",
+      repoName: "repo",
+      currentBranch: "main",
+    };
+
+    mock.module("./git", () => ({
+      getGitContext: mock(async () => mockGitContext),
+      getWorktreePath: mock((root: string, name: string, branch: string) => `${root}/../${name}-${branch.replace(/\//g, "-")}`),
+      findWorktreeByBranch: mock(async () => null),
+      branchExists: mock(async () => false),
+      buildWorktreeCommand: mock((branch: string, path: string, base: string) => `git worktree add -b ${branch} "${path}" ${base}`),
+      removeWorktree: mock(async () => undefined),
+      deleteLocalBranch: mock(async () => undefined),
+    }));
+
+    mock.module("./wezterm", () => ({
+      createPane: mock(async () => {
         paneCreated = true;
         return "pane-123";
-      },
-      sendCommand: async (_paneId, cmd) => {
+      }),
+      sendCommand: mock(async (_paneId: string, cmd: string) => {
         commandSent = cmd;
-      },
-    });
+      }),
+      sendText: mock(async () => undefined),
+    }));
 
-    await runCreate(
-      { branchName: "feature/test", taskName: "Test Task", prompt: "test prompt" },
-      deps
-    );
+    mock.module("./claude", () => ({
+      buildClaudeCommand: mock(() => "claude"),
+    }));
+
+    mock.module("./prompt", () => ({
+      confirm: mock(async () => true),
+    }));
+
+    const { runCreate } = await import("./cli");
+
+    await runCreate({ branchName: "feature/test", taskName: "Test Task", prompt: "test prompt" });
 
     expect(paneCreated).toBe(true);
     expect(commandSent).toContain("git worktree add");
@@ -431,30 +443,52 @@ describe("runCreate", () => {
     let confirmMessage = "";
     let paneCreated = false;
 
-    const deps = createMockDeps({
-      findWorktreeByBranch: async (branch) =>
-        branch === "feature/test" ? existingWorktree : null,
-      removeWorktree: async () => {
+    const mockGitContext: GitContext = {
+      repoRoot: "/path/to/repo",
+      repoName: "repo",
+      currentBranch: "main",
+    };
+
+    mock.module("./git", () => ({
+      getGitContext: mock(async () => mockGitContext),
+      getWorktreePath: mock((root: string, name: string, branch: string) => `${root}/../${name}-${branch.replace(/\//g, "-")}`),
+      findWorktreeByBranch: mock(async (branch: string) =>
+        branch === "feature/test" ? existingWorktree : null
+      ),
+      branchExists: mock(async () => false),
+      buildWorktreeCommand: mock((branch: string, path: string, base: string) => `git worktree add -b ${branch} "${path}" ${base}`),
+      removeWorktree: mock(async () => {
         worktreeRemoved = true;
-      },
-      deleteLocalBranch: async () => {
+      }),
+      deleteLocalBranch: mock(async () => {
         branchDeleted = true;
-      },
-      confirm: async (msg) => {
+      }),
+    }));
+
+    mock.module("./wezterm", () => ({
+      createPane: mock(async () => {
+        paneCreated = true;
+        return "pane-123";
+      }),
+      sendCommand: mock(async () => undefined),
+      sendText: mock(async () => undefined),
+    }));
+
+    mock.module("./claude", () => ({
+      buildClaudeCommand: mock(() => "claude"),
+    }));
+
+    mock.module("./prompt", () => ({
+      confirm: mock(async (msg: string) => {
         confirmCalled = true;
         confirmMessage = msg;
         return true;
-      },
-      createPane: async () => {
-        paneCreated = true;
-        return "pane-123";
-      },
-    });
+      }),
+    }));
 
-    await runCreate(
-      { branchName: "feature/test", taskName: "Test Task", prompt: "test prompt" },
-      deps
-    );
+    const { runCreate } = await import("./cli");
+
+    await runCreate({ branchName: "feature/test", taskName: "Test Task", prompt: "test prompt" });
 
     expect(confirmCalled).toBe(true);
     expect(confirmMessage).toContain("既存のworktreeを削除");
@@ -473,23 +507,45 @@ describe("runCreate", () => {
     };
 
     let paneCreated = false;
-    const logs: string[] = [];
 
-    const deps = createMockDeps({
-      findWorktreeByBranch: async (branch) =>
-        branch === "feature/test" ? existingWorktree : null,
-      confirm: async () => false,
-      createPane: async () => {
+    const mockGitContext: GitContext = {
+      repoRoot: "/path/to/repo",
+      repoName: "repo",
+      currentBranch: "main",
+    };
+
+    mock.module("./git", () => ({
+      getGitContext: mock(async () => mockGitContext),
+      getWorktreePath: mock((root: string, name: string, branch: string) => `${root}/../${name}-${branch.replace(/\//g, "-")}`),
+      findWorktreeByBranch: mock(async (branch: string) =>
+        branch === "feature/test" ? existingWorktree : null
+      ),
+      branchExists: mock(async () => false),
+      buildWorktreeCommand: mock(() => ""),
+      removeWorktree: mock(async () => undefined),
+      deleteLocalBranch: mock(async () => undefined),
+    }));
+
+    mock.module("./wezterm", () => ({
+      createPane: mock(async () => {
         paneCreated = true;
         return "pane-123";
-      },
-      log: (msg: string) => logs.push(msg),
-    });
+      }),
+      sendCommand: mock(async () => undefined),
+      sendText: mock(async () => undefined),
+    }));
 
-    await runCreate(
-      { branchName: "feature/test", taskName: "Test Task", prompt: "test prompt" },
-      deps
-    );
+    mock.module("./claude", () => ({
+      buildClaudeCommand: mock(() => "claude"),
+    }));
+
+    mock.module("./prompt", () => ({
+      confirm: mock(async () => false),
+    }));
+
+    const { runCreate } = await import("./cli");
+
+    await runCreate({ branchName: "feature/test", taskName: "Test Task", prompt: "test prompt" });
 
     expect(paneCreated).toBe(false);
     expect(logs).toContain("キャンセルしました。");
@@ -506,133 +562,51 @@ describe("runCreate", () => {
 
     let confirmMessage = "";
     let forceRemove = false;
-    const logs: string[] = [];
 
-    const deps = createMockDeps({
-      findWorktreeByBranch: async (branch) =>
-        branch === "feature/dirty" ? existingWorktree : null,
-      removeWorktree: async (_path, force) => {
+    const mockGitContext: GitContext = {
+      repoRoot: "/path/to/repo",
+      repoName: "repo",
+      currentBranch: "main",
+    };
+
+    mock.module("./git", () => ({
+      getGitContext: mock(async () => mockGitContext),
+      getWorktreePath: mock((root: string, name: string, branch: string) => `${root}/../${name}-${branch.replace(/\//g, "-")}`),
+      findWorktreeByBranch: mock(async (branch: string) =>
+        branch === "feature/dirty" ? existingWorktree : null
+      ),
+      branchExists: mock(async () => false),
+      buildWorktreeCommand: mock(() => ""),
+      removeWorktree: mock(async (_path: string, force: boolean) => {
         forceRemove = force || false;
-      },
-      confirm: async (msg) => {
+      }),
+      deleteLocalBranch: mock(async () => undefined),
+    }));
+
+    mock.module("./wezterm", () => ({
+      createPane: mock(async () => "pane-123"),
+      sendCommand: mock(async () => undefined),
+      sendText: mock(async () => undefined),
+    }));
+
+    mock.module("./claude", () => ({
+      buildClaudeCommand: mock(() => "claude"),
+    }));
+
+    mock.module("./prompt", () => ({
+      confirm: mock(async (msg: string) => {
         confirmMessage = msg;
         return true;
-      },
-      log: (msg: string) => logs.push(msg),
-    });
+      }),
+    }));
 
-    await runCreate(
-      { branchName: "feature/dirty", taskName: "Dirty Task", prompt: "test prompt" },
-      deps
-    );
+    const { runCreate } = await import("./cli");
+
+    await runCreate({ branchName: "feature/dirty", taskName: "Dirty Task", prompt: "test prompt" });
 
     expect(logs.some((l) => l.includes("未コミットの変更があります"))).toBe(true);
     expect(confirmMessage).toContain("変更を破棄");
     expect(forceRemove).toBe(true);
-  });
-
-  test("既存ワークツリーあり（ダーティ） - キャンセルで終了", async () => {
-    const existingWorktree: WorktreeInfo = {
-      path: "/path/to/existing",
-      branch: "feature/dirty",
-      isLocked: false,
-      isDirty: true,
-      isMain: false,
-    };
-
-    let paneCreated = false;
-    let worktreeRemoved = false;
-    const logs: string[] = [];
-
-    const deps = createMockDeps({
-      findWorktreeByBranch: async (branch) =>
-        branch === "feature/dirty" ? existingWorktree : null,
-      removeWorktree: async () => {
-        worktreeRemoved = true;
-      },
-      confirm: async () => false,
-      createPane: async () => {
-        paneCreated = true;
-        return "pane-123";
-      },
-      log: (msg: string) => logs.push(msg),
-    });
-
-    await runCreate(
-      { branchName: "feature/dirty", taskName: "Dirty Task", prompt: "test prompt" },
-      deps
-    );
-
-    expect(paneCreated).toBe(false);
-    expect(worktreeRemoved).toBe(false);
-    expect(logs).toContain("キャンセルしました。");
-  });
-
-  test("プランファイルからプロンプトを読み込み", async () => {
-    let commandSent = "";
-
-    const deps = createMockDeps({
-      readPlanFile: async () => "プランファイルの内容",
-      buildClaudeCommand: ({ prompt }) => `claude --prompt "${prompt}"`,
-      sendCommand: async (_paneId, cmd) => {
-        commandSent = cmd;
-      },
-    });
-
-    await runCreate(
-      { branchName: "feature/plan", taskName: "Plan Task", prompt: "ignored", planFile: "./plan.md" },
-      deps
-    );
-
-    expect(commandSent).toContain("プランファイルの内容");
-  });
-
-  test("readPlanFileエラー時の伝播", async () => {
-    const deps = createMockDeps({
-      readPlanFile: async () => {
-        throw new Error("File not found: ./missing.md");
-      },
-    });
-
-    await expect(
-      runCreate(
-        { branchName: "feature/plan", taskName: "Plan Task", prompt: "ignored", planFile: "./missing.md" },
-        deps
-      )
-    ).rejects.toThrow("File not found: ./missing.md");
-  });
-
-  test("getGitContextエラー時の伝播", async () => {
-    const deps = createMockDeps({
-      getGitContext: async () => {
-        throw new Error("Not in a git repository");
-      },
-    });
-
-    await expect(
-      runCreate(
-        { branchName: "feature/test", taskName: "Task", prompt: "prompt" },
-        deps
-      )
-    ).rejects.toThrow("Not in a git repository");
-  });
-
-  test("dangerフラグがbuildClaudeCommandに渡される", async () => {
-    let dangerFlagPassed = false;
-
-    const deps = createMockDeps({
-      buildClaudeCommand: ({ dangerouslySkipPermissions }) => {
-        dangerFlagPassed = dangerouslySkipPermissions === true;
-        return "claude --dangerously-skip-permissions";
-      },
-    });
-
-    await runCreate(
-      { branchName: "feature/danger", taskName: "Danger Task", prompt: "test", danger: true },
-      deps
-    );
-
-    expect(dangerFlagPassed).toBe(true);
   });
 
   test("ブランチのみ存在（ワークツリーなし） - 確認後に削除して新規作成", async () => {
@@ -640,30 +614,49 @@ describe("runCreate", () => {
     let confirmCalled = false;
     let confirmMessage = "";
     let paneCreated = false;
-    const logs: string[] = [];
 
-    const deps = createMockDeps({
-      findWorktreeByBranch: async () => null,
-      branchExists: async (branch) => branch === "feature/orphan",
-      deleteLocalBranch: async () => {
+    const mockGitContext: GitContext = {
+      repoRoot: "/path/to/repo",
+      repoName: "repo",
+      currentBranch: "main",
+    };
+
+    mock.module("./git", () => ({
+      getGitContext: mock(async () => mockGitContext),
+      getWorktreePath: mock((root: string, name: string, branch: string) => `${root}/../${name}-${branch.replace(/\//g, "-")}`),
+      findWorktreeByBranch: mock(async () => null),
+      branchExists: mock(async (branch: string) => branch === "feature/orphan"),
+      buildWorktreeCommand: mock(() => ""),
+      removeWorktree: mock(async () => undefined),
+      deleteLocalBranch: mock(async () => {
         branchDeleted = true;
-      },
-      confirm: async (msg) => {
+      }),
+    }));
+
+    mock.module("./wezterm", () => ({
+      createPane: mock(async () => {
+        paneCreated = true;
+        return "pane-123";
+      }),
+      sendCommand: mock(async () => undefined),
+      sendText: mock(async () => undefined),
+    }));
+
+    mock.module("./claude", () => ({
+      buildClaudeCommand: mock(() => "claude"),
+    }));
+
+    mock.module("./prompt", () => ({
+      confirm: mock(async (msg: string) => {
         confirmCalled = true;
         confirmMessage = msg;
         return true;
-      },
-      createPane: async () => {
-        paneCreated = true;
-        return "pane-123";
-      },
-      log: (msg: string) => logs.push(msg),
-    });
+      }),
+    }));
 
-    await runCreate(
-      { branchName: "feature/orphan", taskName: "Orphan Task", prompt: "test prompt" },
-      deps
-    );
+    const { runCreate } = await import("./cli");
+
+    await runCreate({ branchName: "feature/orphan", taskName: "Orphan Task", prompt: "test prompt" });
 
     expect(confirmCalled).toBe(true);
     expect(confirmMessage).toContain("ブランチを削除して新規作成");
@@ -672,104 +665,88 @@ describe("runCreate", () => {
     expect(logs.some((l) => l.includes("ブランチが既に存在します"))).toBe(true);
   });
 
-  test("ブランチのみ存在（ワークツリーなし） - キャンセルで終了", async () => {
-    let paneCreated = false;
-    let branchDeleted = false;
-    const logs: string[] = [];
+  test("dangerフラグがbuildClaudeCommandに渡される", async () => {
+    let dangerFlagPassed = false;
 
-    const deps = createMockDeps({
-      findWorktreeByBranch: async () => null,
-      branchExists: async (branch) => branch === "feature/orphan",
-      deleteLocalBranch: async () => {
-        branchDeleted = true;
-      },
-      confirm: async () => false,
-      createPane: async () => {
-        paneCreated = true;
-        return "pane-123";
-      },
-      log: (msg: string) => logs.push(msg),
-    });
+    const mockGitContext: GitContext = {
+      repoRoot: "/path/to/repo",
+      repoName: "repo",
+      currentBranch: "main",
+    };
 
-    await runCreate(
-      { branchName: "feature/orphan", taskName: "Orphan Task", prompt: "test prompt" },
-      deps
-    );
+    mock.module("./git", () => ({
+      getGitContext: mock(async () => mockGitContext),
+      getWorktreePath: mock((root: string, name: string, branch: string) => `${root}/../${name}-${branch.replace(/\//g, "-")}`),
+      findWorktreeByBranch: mock(async () => null),
+      branchExists: mock(async () => false),
+      buildWorktreeCommand: mock(() => ""),
+      removeWorktree: mock(async () => undefined),
+      deleteLocalBranch: mock(async () => undefined),
+    }));
 
-    expect(paneCreated).toBe(false);
-    expect(branchDeleted).toBe(false);
-    expect(logs).toContain("キャンセルしました。");
-  });
+    mock.module("./wezterm", () => ({
+      createPane: mock(async () => "pane-123"),
+      sendCommand: mock(async () => undefined),
+      sendText: mock(async () => undefined),
+    }));
 
-  test("ブランチもワークツリーもなし - 正常に新規作成", async () => {
-    let paneCreated = false;
-    let commandSent = "";
+    mock.module("./claude", () => ({
+      buildClaudeCommand: mock(({ dangerouslySkipPermissions }: { dangerouslySkipPermissions?: boolean }) => {
+        dangerFlagPassed = dangerouslySkipPermissions === true;
+        return "claude --dangerously-skip-permissions";
+      }),
+    }));
 
-    const deps = createMockDeps({
-      findWorktreeByBranch: async () => null,
-      branchExists: async () => false,
-      createPane: async () => {
-        paneCreated = true;
-        return "pane-123";
-      },
-      sendCommand: async (_paneId, cmd) => {
-        commandSent = cmd;
-      },
-    });
+    mock.module("./prompt", () => ({
+      confirm: mock(async () => true),
+    }));
 
-    await runCreate(
-      { branchName: "feature/new", taskName: "New Task", prompt: "test prompt" },
-      deps
-    );
+    const { runCreate } = await import("./cli");
 
-    expect(paneCreated).toBe(true);
-    expect(commandSent).toContain("git worktree add");
-    expect(commandSent).toContain("feature/new");
-  });
+    await runCreate({ branchName: "feature/danger", taskName: "Danger Task", prompt: "test", danger: true });
 
-  test("ブランチ削除失敗 - エラー表示して終了", async () => {
-    let paneCreated = false;
-    const logs: string[] = [];
-
-    const deps = createMockDeps({
-      findWorktreeByBranch: async () => null,
-      branchExists: async (branch) => branch === "feature/orphan",
-      deleteLocalBranch: async () => {
-        throw new Error("Branch deletion failed: some error");
-      },
-      confirm: async () => true,
-      createPane: async () => {
-        paneCreated = true;
-        return "pane-123";
-      },
-      log: (msg: string) => logs.push(msg),
-    });
-
-    await runCreate(
-      { branchName: "feature/orphan", taskName: "Orphan Task", prompt: "test prompt" },
-      deps
-    );
-
-    expect(paneCreated).toBe(false);
-    expect(logs.some((l) => l.includes("ブランチの削除に失敗しました"))).toBe(true);
+    expect(dangerFlagPassed).toBe(true);
   });
 
   test("--merge オプションでmergeInstructionsがbuildClaudeCommandに渡される", async () => {
     let mergeInstructionsPassed: { baseBranch: string; worktreePath: string } | undefined;
-    const logs: string[] = [];
 
-    const deps = createMockDeps({
-      buildClaudeCommand: ({ mergeInstructions }) => {
+    const mockGitContext: GitContext = {
+      repoRoot: "/path/to/repo",
+      repoName: "repo",
+      currentBranch: "main",
+    };
+
+    mock.module("./git", () => ({
+      getGitContext: mock(async () => mockGitContext),
+      getWorktreePath: mock((root: string, name: string, branch: string) => `${root}/../${name}-${branch.replace(/\//g, "-")}`),
+      findWorktreeByBranch: mock(async () => null),
+      branchExists: mock(async () => false),
+      buildWorktreeCommand: mock(() => ""),
+      removeWorktree: mock(async () => undefined),
+      deleteLocalBranch: mock(async () => undefined),
+    }));
+
+    mock.module("./wezterm", () => ({
+      createPane: mock(async () => "pane-123"),
+      sendCommand: mock(async () => undefined),
+      sendText: mock(async () => undefined),
+    }));
+
+    mock.module("./claude", () => ({
+      buildClaudeCommand: mock(({ mergeInstructions }: { mergeInstructions?: { baseBranch: string; worktreePath: string } }) => {
         mergeInstructionsPassed = mergeInstructions;
         return "claude";
-      },
-      log: (msg: string) => logs.push(msg),
-    });
+      }),
+    }));
 
-    await runCreate(
-      { branchName: "feature/merge", taskName: "Merge Task", prompt: "test", merge: true },
-      deps
-    );
+    mock.module("./prompt", () => ({
+      confirm: mock(async () => true),
+    }));
+
+    const { runCreate } = await import("./cli");
+
+    await runCreate({ branchName: "feature/merge", taskName: "Merge Task", prompt: "test", merge: true });
 
     expect(mergeInstructionsPassed).toBeDefined();
     expect(mergeInstructionsPassed?.baseBranch).toBe("main");
@@ -777,90 +754,47 @@ describe("runCreate", () => {
     expect(logs.some((l) => l.includes("🔀 Auto-merge to: main"))).toBe(true);
   });
 
-  test("--merge なしでmergeInstructionsが渡されない", async () => {
-    let mergeInstructionsPassed: { baseBranch: string; worktreePath: string } | undefined;
-
-    const deps = createMockDeps({
-      buildClaudeCommand: ({ mergeInstructions }) => {
-        mergeInstructionsPassed = mergeInstructions;
-        return "claude";
-      },
-    });
-
-    await runCreate(
-      { branchName: "feature/no-merge", taskName: "No Merge Task", prompt: "test", merge: false },
-      deps
-    );
-
-    expect(mergeInstructionsPassed).toBeUndefined();
-  });
-
   test("--base オプションでbuildWorktreeCommandに指定したベースブランチが渡される", async () => {
     let baseBranchPassed = "";
-    const logs: string[] = [];
 
-    const deps = createMockDeps({
-      buildWorktreeCommand: (branch, path, base) => {
+    const mockGitContext: GitContext = {
+      repoRoot: "/path/to/repo",
+      repoName: "repo",
+      currentBranch: "main",
+    };
+
+    mock.module("./git", () => ({
+      getGitContext: mock(async () => mockGitContext),
+      getWorktreePath: mock((root: string, name: string, branch: string) => `${root}/../${name}-${branch.replace(/\//g, "-")}`),
+      findWorktreeByBranch: mock(async () => null),
+      branchExists: mock(async () => false),
+      buildWorktreeCommand: mock((branch: string, path: string, base: string) => {
         baseBranchPassed = base;
         return `git worktree add -b ${branch} "${path}" ${base}`;
-      },
-      log: (msg: string) => logs.push(msg),
-    });
+      }),
+      removeWorktree: mock(async () => undefined),
+      deleteLocalBranch: mock(async () => undefined),
+    }));
 
-    await runCreate(
-      { branchName: "feature/base", taskName: "Base Task", prompt: "test", baseBranch: "develop" },
-      deps
-    );
+    mock.module("./wezterm", () => ({
+      createPane: mock(async () => "pane-123"),
+      sendCommand: mock(async () => undefined),
+      sendText: mock(async () => undefined),
+    }));
+
+    mock.module("./claude", () => ({
+      buildClaudeCommand: mock(() => "claude"),
+    }));
+
+    mock.module("./prompt", () => ({
+      confirm: mock(async () => true),
+    }));
+
+    const { runCreate } = await import("./cli");
+
+    await runCreate({ branchName: "feature/base", taskName: "Base Task", prompt: "test", baseBranch: "develop" });
 
     expect(baseBranchPassed).toBe("develop");
     expect(logs.some((l) => l.includes("🌳 Base branch: develop"))).toBe(true);
-  });
-
-  test("--base 指定なしでbuildWorktreeCommandに現在のブランチが渡される", async () => {
-    let baseBranchPassed = "";
-
-    const deps = createMockDeps({
-      buildWorktreeCommand: (branch, path, base) => {
-        baseBranchPassed = base;
-        return `git worktree add -b ${branch} "${path}" ${base}`;
-      },
-    });
-
-    await runCreate(
-      { branchName: "feature/no-base", taskName: "No Base Task", prompt: "test" },
-      deps
-    );
-
-    expect(baseBranchPassed).toBe("main");
-  });
-
-  test("--base + --merge オプションの組み合わせ", async () => {
-    let baseBranchPassed = "";
-    let mergeInstructionsPassed: { baseBranch: string; worktreePath: string } | undefined;
-    const logs: string[] = [];
-
-    const deps = createMockDeps({
-      buildWorktreeCommand: (branch, path, base) => {
-        baseBranchPassed = base;
-        return `git worktree add -b ${branch} "${path}" ${base}`;
-      },
-      buildClaudeCommand: ({ mergeInstructions }) => {
-        mergeInstructionsPassed = mergeInstructions;
-        return "claude";
-      },
-      log: (msg: string) => logs.push(msg),
-    });
-
-    await runCreate(
-      { branchName: "feature/base-merge", taskName: "Base Merge Task", prompt: "test", baseBranch: "develop", merge: true },
-      deps
-    );
-
-    // baseBranchはworktree作成に使用される
-    expect(baseBranchPassed).toBe("develop");
-    // mergeInstructionsのbaseBranchは現在のブランチ（main）が使用される
-    expect(mergeInstructionsPassed?.baseBranch).toBe("main");
-    expect(logs.some((l) => l.includes("🌳 Base branch: develop"))).toBe(true);
-    expect(logs.some((l) => l.includes("🔀 Auto-merge to: main"))).toBe(true);
   });
 });

@@ -215,146 +215,107 @@ async function readPlanFile(filePath: string): Promise<string> {
   return trimmed;
 }
 
-export type CreateDependencies = {
-  getGitContext: typeof getGitContext;
-  getWorktreePath: typeof getWorktreePath;
-  findWorktreeByBranch: typeof findWorktreeByBranch;
-  removeWorktree: typeof removeWorktree;
-  deleteLocalBranch: typeof deleteLocalBranch;
-  branchExists: typeof branchExists;
-  createPane: typeof createPane;
-  sendCommand: typeof sendCommand;
-  sendText: typeof sendText;
-  buildWorktreeCommand: typeof buildWorktreeCommand;
-  buildClaudeCommand: typeof buildClaudeCommand;
-  confirm: typeof confirm;
-  log: typeof console.log;
-  readPlanFile: (path: string) => Promise<string>;
-  sleep: (ms: number) => Promise<void>;
-};
-
-const defaultCreateDependencies: CreateDependencies = {
-  getGitContext,
-  getWorktreePath,
-  findWorktreeByBranch,
-  removeWorktree,
-  deleteLocalBranch,
-  branchExists,
-  createPane,
-  sendCommand,
-  sendText,
-  buildWorktreeCommand,
-  buildClaudeCommand,
-  confirm,
-  log: console.log,
-  readPlanFile,
-  sleep: Bun.sleep,
-};
-
-export async function runCreate(
-  args: CreateArgs,
-  deps: CreateDependencies = defaultCreateDependencies
-): Promise<void> {
+export async function runCreate(args: CreateArgs): Promise<void> {
   const { branchName, taskName, planFile, danger, merge, baseBranch } = args;
   let { prompt } = args;
 
   // プランファイルからプロンプトを読み込み
   if (planFile) {
-    prompt = await deps.readPlanFile(planFile);
+    prompt = await readPlanFile(planFile);
   }
 
   // Git情報を取得
-  const git = await deps.getGitContext();
-  const worktreePath = deps.getWorktreePath(git.repoRoot, git.repoName, branchName);
+  const git = await getGitContext();
+  const worktreePath = getWorktreePath(git.repoRoot, git.repoName, branchName);
 
   // baseBranch が指定されていれば使用、なければ現在のブランチ
   const effectiveBaseBranch = baseBranch ?? git.currentBranch;
 
-  deps.log(`📍 Current branch: ${git.currentBranch}`);
+  console.log(`📍 Current branch: ${git.currentBranch}`);
   if (baseBranch) {
-    deps.log(`🌳 Base branch: ${baseBranch}`);
+    console.log(`🌳 Base branch: ${baseBranch}`);
   }
-  deps.log(`🌿 New branch: ${branchName}`);
-  deps.log(`📂 Worktree path: ${worktreePath}`);
-  deps.log(`📝 Task: ${taskName}`);
+  console.log(`🌿 New branch: ${branchName}`);
+  console.log(`📂 Worktree path: ${worktreePath}`);
+  console.log(`📝 Task: ${taskName}`);
   if (planFile) {
-    deps.log(`📋 Plan file: ${planFile}`);
+    console.log(`📋 Plan file: ${planFile}`);
   }
   if (merge) {
-    deps.log(`🔀 Auto-merge to: ${git.currentBranch}`);
+    console.log(`🔀 Auto-merge to: ${git.currentBranch}`);
   }
 
   // 既存ワークツリーの重複チェック
-  const existingWorktree = await deps.findWorktreeByBranch(branchName);
+  const existingWorktree = await findWorktreeByBranch(branchName);
 
   if (existingWorktree) {
-    deps.log(`\n⚠️  Worktree already exists: ${existingWorktree.path}`);
+    console.log(`\n⚠️  Worktree already exists: ${existingWorktree.path}`);
 
     let confirmed: boolean;
     if (existingWorktree.isDirty) {
-      deps.log("⚠️  警告: 未コミットの変更があります");
-      confirmed = await deps.confirm(
+      console.log("⚠️  警告: 未コミットの変更があります");
+      confirmed = await confirm(
         "変更を破棄してworktreeを削除しますか？"
       );
     } else {
-      confirmed = await deps.confirm(
+      confirmed = await confirm(
         "既存のworktreeを削除して新しいセッションを開始しますか？"
       );
     }
 
     if (!confirmed) {
-      deps.log("キャンセルしました。");
+      console.log("キャンセルしました。");
       return;
     }
 
     // 既存ワークツリーとブランチを削除
-    deps.log("🗑️  既存のworktreeを削除中...");
-    await deps.removeWorktree(existingWorktree.path, existingWorktree.isDirty);
-    deps.log(`  ✓ Worktree deleted: ${existingWorktree.path}`);
+    console.log("🗑️  既存のworktreeを削除中...");
+    await removeWorktree(existingWorktree.path, existingWorktree.isDirty);
+    console.log(`  ✓ Worktree deleted: ${existingWorktree.path}`);
 
     try {
-      await deps.deleteLocalBranch(branchName, true);
-      deps.log(`  ✓ Branch deleted: ${branchName}`);
+      await deleteLocalBranch(branchName, true);
+      console.log(`  ✓ Branch deleted: ${branchName}`);
     } catch {
       // ブランチが存在しない場合は無視
-      deps.log(`  ⚠️  Branch not found (skipping): ${branchName}`);
+      console.log(`  ⚠️  Branch not found (skipping): ${branchName}`);
     }
 
-    deps.log("");
+    console.log("");
   }
 
   // ブランチのみ存在（ワークツリーなし）のチェック
   if (!existingWorktree) {
-    const branchAlreadyExists = await deps.branchExists(branchName);
+    const branchAlreadyExists = await branchExists(branchName);
 
     if (branchAlreadyExists) {
-      deps.log(`\n⚠️  ブランチが既に存在します: ${branchName}`);
+      console.log(`\n⚠️  ブランチが既に存在します: ${branchName}`);
 
-      const confirmed = await deps.confirm(
+      const confirmed = await confirm(
         "ブランチを削除して新規作成しますか？"
       );
 
       if (!confirmed) {
-        deps.log("キャンセルしました。");
+        console.log("キャンセルしました。");
         return;
       }
 
-      deps.log("🗑️  既存のブランチを削除中...");
+      console.log("🗑️  既存のブランチを削除中...");
       try {
-        await deps.deleteLocalBranch(branchName, true);
-        deps.log(`  ✓ Branch deleted: ${branchName}`);
+        await deleteLocalBranch(branchName, true);
+        console.log(`  ✓ Branch deleted: ${branchName}`);
       } catch (e) {
         const errorMessage = e instanceof Error ? e.message : String(e);
-        deps.log(`  ❌ ブランチの削除に失敗しました: ${errorMessage}`);
+        console.log(`  ❌ ブランチの削除に失敗しました: ${errorMessage}`);
         return;
       }
-      deps.log("");
+      console.log("");
     }
   }
 
   // WezTermペインを作成
-  const paneId = await deps.createPane({ title: taskName, keepFocus: true });
-  deps.log(`🪟 Created pane: ${paneId}`);
+  const paneId = await createPane({ title: taskName, keepFocus: true });
+  console.log(`🪟 Created pane: ${paneId}`);
 
   // 実行コマンドを構築
   const claudeOptions = {
@@ -369,19 +330,19 @@ export async function runCreate(
   };
 
   const commands = [
-    deps.buildWorktreeCommand(branchName, worktreePath, effectiveBaseBranch),
+    buildWorktreeCommand(branchName, worktreePath, effectiveBaseBranch),
     `cd "${worktreePath}"`,
-    deps.buildClaudeCommand(claudeOptions),
+    buildClaudeCommand(claudeOptions),
   ].join(" && ");
 
   // コマンドを送信
-  await deps.sendCommand(paneId, commands);
+  await sendCommand(paneId, commands);
 
   // Claude起動後、プロンプト確定のためにEnterを送信
-  await deps.sleep(2000);
-  await deps.sendText(paneId, "\n");
+  await Bun.sleep(2000);
+  await sendText(paneId, "\n");
 
-  deps.log("✅ Worktree created and Claude started in new pane");
+  console.log("✅ Worktree created and Claude started in new pane");
 }
 
 export async function run(command: Command): Promise<void> {
