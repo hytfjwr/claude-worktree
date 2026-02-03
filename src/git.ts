@@ -51,7 +51,7 @@ export function buildWorktreeCommand(branchName: string, worktreePath: string, b
 
 export async function getMainBranch(): Promise<string> {
   // Try to detect the main branch name
-  const result = await $`git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null`.quiet();
+  const result = await $`git symbolic-ref refs/remotes/origin/HEAD`.nothrow().quiet();
   if (result.exitCode === 0) {
     const ref = result.text().trim();
     // refs/remotes/origin/main -> main
@@ -59,7 +59,11 @@ export async function getMainBranch(): Promise<string> {
   }
 
   // Fallback: check if main or master exists
-  const branches = (await $`git branch -a`.text()).trim();
+  const branchResult = await $`git branch -a`.nothrow().quiet();
+  if (branchResult.exitCode !== 0) {
+    return "main"; // Default fallback
+  }
+  const branches = branchResult.text().trim();
   if (branches.includes("remotes/origin/main") || branches.includes(" main")) {
     return "main";
   }
@@ -112,7 +116,11 @@ export function parseWorktreePorcelain(output: string, mainBranch: string): Pars
 }
 
 export async function listWorktrees(): Promise<WorktreeInfo[]> {
-  const output = (await $`git worktree list --porcelain`.text()).trim();
+  const result = await $`git worktree list --porcelain`.nothrow().quiet();
+  if (result.exitCode !== 0) {
+    throw new Error("Failed to list worktrees. Are you in a git repository?");
+  }
+  const output = result.text().trim();
   if (!output) {
     return [];
   }
@@ -130,7 +138,7 @@ export async function listWorktrees(): Promise<WorktreeInfo[]> {
 }
 
 export async function isWorktreeDirty(worktreePath: string): Promise<boolean> {
-  const result = await $`git -C ${worktreePath} status --porcelain`.quiet();
+  const result = await $`git -C ${worktreePath} status --porcelain`.nothrow().quiet();
   if (result.exitCode !== 0) {
     return true; // Treat as dirty if we can't check
   }
