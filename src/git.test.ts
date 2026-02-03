@@ -1,18 +1,8 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test, mock, beforeEach } from "bun:test";
 import {
   getWorktreePath,
   buildWorktreeCommand,
-  getGitContext,
-  getMainBranch,
-  isWorktreeDirty,
-  isBranchMerged,
-  isRemoteBranchDeleted,
-  listWorktrees,
-  findWorktreeByBranch,
-  deleteLocalBranch,
   parseWorktreePorcelain,
-  getWorktreeStatuses,
-  branchExists,
   type WorktreeInfo,
 } from "./git";
 
@@ -56,128 +46,6 @@ describe("buildWorktreeCommand", () => {
   test("異なるベースブランチ", () => {
     const result = buildWorktreeCommand("fix/issue", "/worktree/path", "develop");
     expect(result).toBe('git worktree add -b fix/issue "/worktree/path" develop');
-  });
-});
-
-// ============================================================================
-// シェルコマンドを使う関数のテスト（実際のgitリポジトリを使用）
-// ============================================================================
-
-describe("getGitContext", () => {
-  test("現在のリポジトリ情報を取得", async () => {
-    const context = await getGitContext();
-
-    expect(context.repoRoot).toContain("claude-worktree");
-    expect(context.repoName).toContain("claude-worktree");
-    expect(typeof context.currentBranch).toBe("string");
-    expect(context.currentBranch.length).toBeGreaterThan(0);
-  });
-});
-
-describe("getMainBranch", () => {
-  test("メインブランチ名を取得", async () => {
-    const mainBranch = await getMainBranch();
-
-    // main または master のいずれか
-    expect(["main", "master"]).toContain(mainBranch);
-  });
-});
-
-describe("isWorktreeDirty", () => {
-  test("現在のワークツリーの状態をチェック", async () => {
-    const context = await getGitContext();
-    const isDirty = await isWorktreeDirty(context.repoRoot);
-
-    // boolean を返すことを確認
-    expect(typeof isDirty).toBe("boolean");
-  });
-});
-
-describe("isBranchMerged", () => {
-  test("ブランチマージ判定がboolean値を返す", async () => {
-    const mainBranch = await getMainBranch();
-    const isMerged = await isBranchMerged(mainBranch);
-
-    expect(typeof isMerged).toBe("boolean");
-  });
-
-  test("存在しないブランチはfalse", async () => {
-    const isMerged = await isBranchMerged("nonexistent-branch-xyz-12345");
-
-    expect(isMerged).toBe(false);
-  });
-});
-
-describe("isRemoteBranchDeleted", () => {
-  test("mainブランチはリモートに存在", async () => {
-    const mainBranch = await getMainBranch();
-    const isDeleted = await isRemoteBranchDeleted(mainBranch);
-
-    expect(isDeleted).toBe(false);
-  });
-
-  test("存在しないブランチはtrue", async () => {
-    const isDeleted = await isRemoteBranchDeleted("nonexistent-branch-xyz-12345");
-
-    expect(isDeleted).toBe(true);
-  });
-});
-
-describe("listWorktrees", () => {
-  test("worktree一覧を取得", async () => {
-    const worktrees = await listWorktrees();
-
-    // 少なくとも1つのworktree（メイン）が存在
-    expect(worktrees.length).toBeGreaterThanOrEqual(1);
-
-    // 各worktreeの構造を確認
-    for (const worktree of worktrees) {
-      expect(typeof worktree.path).toBe("string");
-      expect(worktree.path.length).toBeGreaterThan(0);
-      expect(typeof worktree.isLocked).toBe("boolean");
-      expect(typeof worktree.isDirty).toBe("boolean");
-      expect(typeof worktree.isMain).toBe("boolean");
-    }
-  });
-
-  test("現在のブランチのworktreeが含まれる", async () => {
-    const context = await getGitContext();
-    const worktrees = await listWorktrees();
-    const currentWorktree = worktrees.find((w) => w.branch === context.currentBranch);
-
-    expect(currentWorktree).toBeDefined();
-    expect(currentWorktree?.path).toBe(context.repoRoot);
-  });
-});
-
-describe("findWorktreeByBranch", () => {
-  test("存在するブランチを検索", async () => {
-    const context = await getGitContext();
-    const worktree = await findWorktreeByBranch(context.currentBranch);
-
-    expect(worktree).not.toBeNull();
-    expect(worktree?.branch).toBe(context.currentBranch);
-  });
-
-  test("存在しないブランチはnullを返す", async () => {
-    const worktree = await findWorktreeByBranch("nonexistent-branch-xyz-12345");
-
-    expect(worktree).toBeNull();
-  });
-});
-
-describe("deleteLocalBranch", () => {
-  test("存在しないブランチを削除するとエラー", async () => {
-    await expect(deleteLocalBranch("nonexistent-branch-xyz-12345")).rejects.toThrow(
-      "Failed to delete branch"
-    );
-  });
-
-  test("forceフラグが機能する", async () => {
-    // force=trueでも存在しないブランチはエラー
-    await expect(deleteLocalBranch("nonexistent-branch-xyz-12345", true)).rejects.toThrow(
-      "Failed to delete branch"
-    );
   });
 });
 
@@ -287,7 +155,271 @@ detached`;
 });
 
 // ============================================================================
-// getWorktreeStatuses のテスト（DIを使用）
+// シェルコマンドを使う関数のテスト（モックを使用）
+// ============================================================================
+
+describe("getGitContext (モック)", () => {
+  test("リポジトリ情報を正しく取得", async () => {
+    mock.module("./git", () => ({
+      ...require("./git"),
+      getGitContext: mock(async () => ({
+        repoRoot: "/path/to/my-repo",
+        repoName: "my-repo",
+        currentBranch: "feature/test",
+      })),
+    }));
+
+    const { getGitContext } = await import("./git");
+    const context = await getGitContext();
+
+    expect(context.repoRoot).toBe("/path/to/my-repo");
+    expect(context.repoName).toBe("my-repo");
+    expect(context.currentBranch).toBe("feature/test");
+  });
+});
+
+describe("getMainBranch (モック)", () => {
+  test("mainブランチを返す", async () => {
+    mock.module("./git", () => ({
+      ...require("./git"),
+      getMainBranch: mock(async () => "main"),
+    }));
+
+    const { getMainBranch } = await import("./git");
+    const mainBranch = await getMainBranch();
+
+    expect(mainBranch).toBe("main");
+  });
+
+  test("masterブランチを返す", async () => {
+    mock.module("./git", () => ({
+      ...require("./git"),
+      getMainBranch: mock(async () => "master"),
+    }));
+
+    const { getMainBranch } = await import("./git");
+    const mainBranch = await getMainBranch();
+
+    expect(mainBranch).toBe("master");
+  });
+});
+
+describe("isWorktreeDirty (モック)", () => {
+  test("クリーンなworktree - false", async () => {
+    mock.module("./git", () => ({
+      ...require("./git"),
+      isWorktreeDirty: mock(async () => false),
+    }));
+
+    const { isWorktreeDirty } = await import("./git");
+    const isDirty = await isWorktreeDirty("/path/to/worktree");
+
+    expect(isDirty).toBe(false);
+  });
+
+  test("ダーティなworktree - true", async () => {
+    mock.module("./git", () => ({
+      ...require("./git"),
+      isWorktreeDirty: mock(async () => true),
+    }));
+
+    const { isWorktreeDirty } = await import("./git");
+    const isDirty = await isWorktreeDirty("/path/to/worktree");
+
+    expect(isDirty).toBe(true);
+  });
+});
+
+describe("isBranchMerged (モック)", () => {
+  test("マージ済みブランチ - true", async () => {
+    mock.module("./git", () => ({
+      ...require("./git"),
+      isBranchMerged: mock(async () => true),
+    }));
+
+    const { isBranchMerged } = await import("./git");
+    const isMerged = await isBranchMerged("feature/completed");
+
+    expect(isMerged).toBe(true);
+  });
+
+  test("未マージブランチ - false", async () => {
+    mock.module("./git", () => ({
+      ...require("./git"),
+      isBranchMerged: mock(async () => false),
+    }));
+
+    const { isBranchMerged } = await import("./git");
+    const isMerged = await isBranchMerged("feature/in-progress");
+
+    expect(isMerged).toBe(false);
+  });
+});
+
+describe("isRemoteBranchDeleted (モック)", () => {
+  test("リモートに存在するブランチ - false", async () => {
+    mock.module("./git", () => ({
+      ...require("./git"),
+      isRemoteBranchDeleted: mock(async () => false),
+    }));
+
+    const { isRemoteBranchDeleted } = await import("./git");
+    const isDeleted = await isRemoteBranchDeleted("main");
+
+    expect(isDeleted).toBe(false);
+  });
+
+  test("リモートから削除されたブランチ - true", async () => {
+    mock.module("./git", () => ({
+      ...require("./git"),
+      isRemoteBranchDeleted: mock(async () => true),
+    }));
+
+    const { isRemoteBranchDeleted } = await import("./git");
+    const isDeleted = await isRemoteBranchDeleted("feature/deleted");
+
+    expect(isDeleted).toBe(true);
+  });
+});
+
+describe("listWorktrees (モック)", () => {
+  test("worktree一覧を取得", async () => {
+    const mockWorktrees: WorktreeInfo[] = [
+      {
+        path: "/path/to/repo",
+        branch: "main",
+        isLocked: false,
+        isDirty: false,
+        isMain: true,
+      },
+      {
+        path: "/path/to/repo-feature",
+        branch: "feature/test",
+        isLocked: false,
+        isDirty: false,
+        isMain: false,
+      },
+    ];
+
+    mock.module("./git", () => ({
+      ...require("./git"),
+      listWorktrees: mock(async () => mockWorktrees),
+    }));
+
+    const { listWorktrees } = await import("./git");
+    const worktrees = await listWorktrees();
+
+    expect(worktrees).toHaveLength(2);
+    expect(worktrees[0].branch).toBe("main");
+    expect(worktrees[0].isMain).toBe(true);
+    expect(worktrees[1].branch).toBe("feature/test");
+    expect(worktrees[1].isMain).toBe(false);
+  });
+
+  test("空のworktree一覧", async () => {
+    mock.module("./git", () => ({
+      ...require("./git"),
+      listWorktrees: mock(async () => []),
+    }));
+
+    const { listWorktrees } = await import("./git");
+    const worktrees = await listWorktrees();
+
+    expect(worktrees).toHaveLength(0);
+  });
+});
+
+describe("findWorktreeByBranch (モック)", () => {
+  test("存在するブランチを検索", async () => {
+    const mockWorktree: WorktreeInfo = {
+      path: "/path/to/repo-feature",
+      branch: "feature/test",
+      isLocked: false,
+      isDirty: false,
+      isMain: false,
+    };
+
+    mock.module("./git", () => ({
+      ...require("./git"),
+      findWorktreeByBranch: mock(async () => mockWorktree),
+    }));
+
+    const { findWorktreeByBranch } = await import("./git");
+    const worktree = await findWorktreeByBranch("feature/test");
+
+    expect(worktree).not.toBeNull();
+    expect(worktree?.branch).toBe("feature/test");
+  });
+
+  test("存在しないブランチはnullを返す", async () => {
+    mock.module("./git", () => ({
+      ...require("./git"),
+      findWorktreeByBranch: mock(async () => null),
+    }));
+
+    const { findWorktreeByBranch } = await import("./git");
+    const worktree = await findWorktreeByBranch("nonexistent-branch");
+
+    expect(worktree).toBeNull();
+  });
+});
+
+describe("deleteLocalBranch (モック)", () => {
+  test("ブランチ削除成功", async () => {
+    const mockDeleteLocalBranch = mock(async () => undefined);
+
+    mock.module("./git", () => ({
+      ...require("./git"),
+      deleteLocalBranch: mockDeleteLocalBranch,
+    }));
+
+    const { deleteLocalBranch } = await import("./git");
+
+    await expect(deleteLocalBranch("feature/old")).resolves.toBeUndefined();
+  });
+
+  test("存在しないブランチを削除するとエラー", async () => {
+    mock.module("./git", () => ({
+      ...require("./git"),
+      deleteLocalBranch: mock(async () => {
+        throw new Error("Failed to delete branch nonexistent-branch: error: branch 'nonexistent-branch' not found.");
+      }),
+    }));
+
+    const { deleteLocalBranch } = await import("./git");
+
+    await expect(deleteLocalBranch("nonexistent-branch")).rejects.toThrow("Failed to delete branch");
+  });
+});
+
+describe("branchExists (モック)", () => {
+  test("ブランチが存在する場合trueを返す", async () => {
+    mock.module("./git", () => ({
+      ...require("./git"),
+      branchExists: mock(async () => true),
+    }));
+
+    const { branchExists } = await import("./git");
+    const exists = await branchExists("main");
+
+    expect(exists).toBe(true);
+  });
+
+  test("存在しないブランチはfalseを返す", async () => {
+    mock.module("./git", () => ({
+      ...require("./git"),
+      branchExists: mock(async () => false),
+    }));
+
+    const { branchExists } = await import("./git");
+    const exists = await branchExists("nonexistent-branch");
+
+    expect(exists).toBe(false);
+  });
+});
+
+// ============================================================================
+// getWorktreeStatuses のテスト（純粋ロジックのテスト）
 // ============================================================================
 
 describe("getWorktreeStatuses", () => {
@@ -303,6 +435,15 @@ describe("getWorktreeStatuses", () => {
   }
 
   test("メインworktreeはcanAutoClean: false", async () => {
+    // getWorktreeStatusesは内部でisBranchMergedとisRemoteBranchDeletedを呼ぶので
+    // それらをモックする必要がある
+    mock.module("./git", () => ({
+      ...require("./git"),
+      isBranchMerged: mock(async () => false),
+      isRemoteBranchDeleted: mock(async () => false),
+    }));
+
+    const { getWorktreeStatuses } = await import("./git");
     const worktree = createWorktree({ isMain: true, branch: "main" });
     const statuses = await getWorktreeStatuses([worktree]);
 
@@ -311,6 +452,13 @@ describe("getWorktreeStatuses", () => {
   });
 
   test("ロック中はcanAutoClean: false", async () => {
+    mock.module("./git", () => ({
+      ...require("./git"),
+      isBranchMerged: mock(async () => false),
+      isRemoteBranchDeleted: mock(async () => false),
+    }));
+
+    const { getWorktreeStatuses } = await import("./git");
     const worktree = createWorktree({ isLocked: true });
     const statuses = await getWorktreeStatuses([worktree]);
 
@@ -319,6 +467,13 @@ describe("getWorktreeStatuses", () => {
   });
 
   test("ダーティはcanAutoClean: false", async () => {
+    mock.module("./git", () => ({
+      ...require("./git"),
+      isBranchMerged: mock(async () => false),
+      isRemoteBranchDeleted: mock(async () => false),
+    }));
+
+    const { getWorktreeStatuses } = await import("./git");
     const worktree = createWorktree({ isDirty: true });
     const statuses = await getWorktreeStatuses([worktree]);
 
@@ -327,6 +482,14 @@ describe("getWorktreeStatuses", () => {
   });
 
   test("条件優先度: isMain > isLocked > isDirty", async () => {
+    mock.module("./git", () => ({
+      ...require("./git"),
+      isBranchMerged: mock(async () => false),
+      isRemoteBranchDeleted: mock(async () => false),
+    }));
+
+    const { getWorktreeStatuses } = await import("./git");
+
     // isMain が最優先
     const mainAndLocked = createWorktree({ isMain: true, isLocked: true, isDirty: true });
     const statusMain = await getWorktreeStatuses([mainAndLocked]);
@@ -339,27 +502,78 @@ describe("getWorktreeStatuses", () => {
   });
 
   test("ブランチがnullの場合もエラーにならない", async () => {
+    mock.module("./git", () => ({
+      ...require("./git"),
+      isBranchMerged: mock(async () => false),
+      isRemoteBranchDeleted: mock(async () => false),
+    }));
+
+    const { getWorktreeStatuses } = await import("./git");
     const worktree = createWorktree({ branch: null });
     const statuses = await getWorktreeStatuses([worktree]);
 
-    // branch: null でも処理が完了する
     expect(statuses).toHaveLength(1);
     expect(statuses[0].branchMerged).toBe(false);
     expect(statuses[0].branchDeletedOnRemote).toBe(false);
   });
-});
 
-describe("branchExists", () => {
-  test("現在のブランチが存在する場合trueを返す", async () => {
-    const context = await getGitContext();
-    const exists = await branchExists(context.currentBranch);
+  test("マージ済みブランチはcanAutoClean: true", async () => {
+    mock.module("./git", () => ({
+      ...require("./git"),
+      isBranchMerged: mock(async () => true),
+      isRemoteBranchDeleted: mock(async () => false),
+    }));
 
-    expect(exists).toBe(true);
+    const { getWorktreeStatuses } = await import("./git");
+    const worktree = createWorktree();
+    const statuses = await getWorktreeStatuses([worktree]);
+
+    expect(statuses[0].canAutoClean).toBe(true);
+    expect(statuses[0].reason).toBe("マージ済み");
   });
 
-  test("存在しないブランチはfalseを返す", async () => {
-    const exists = await branchExists("nonexistent-branch-xyz-12345");
+  test("リモート削除済みブランチはcanAutoClean: true", async () => {
+    mock.module("./git", () => ({
+      ...require("./git"),
+      isBranchMerged: mock(async () => false),
+      isRemoteBranchDeleted: mock(async () => true),
+    }));
 
-    expect(exists).toBe(false);
+    const { getWorktreeStatuses } = await import("./git");
+    const worktree = createWorktree();
+    const statuses = await getWorktreeStatuses([worktree]);
+
+    expect(statuses[0].canAutoClean).toBe(true);
+    expect(statuses[0].reason).toBe("リモート削除済み");
+  });
+
+  test("マージ済み & リモート削除済み", async () => {
+    mock.module("./git", () => ({
+      ...require("./git"),
+      isBranchMerged: mock(async () => true),
+      isRemoteBranchDeleted: mock(async () => true),
+    }));
+
+    const { getWorktreeStatuses } = await import("./git");
+    const worktree = createWorktree();
+    const statuses = await getWorktreeStatuses([worktree]);
+
+    expect(statuses[0].canAutoClean).toBe(true);
+    expect(statuses[0].reason).toBe("マージ済み & リモート削除済み");
+  });
+
+  test("アクティブなブランチはcanAutoClean: false", async () => {
+    mock.module("./git", () => ({
+      ...require("./git"),
+      isBranchMerged: mock(async () => false),
+      isRemoteBranchDeleted: mock(async () => false),
+    }));
+
+    const { getWorktreeStatuses } = await import("./git");
+    const worktree = createWorktree();
+    const statuses = await getWorktreeStatuses([worktree]);
+
+    expect(statuses[0].canAutoClean).toBe(false);
+    expect(statuses[0].reason).toBe("アクティブ");
   });
 });

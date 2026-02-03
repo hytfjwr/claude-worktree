@@ -154,7 +154,7 @@ export async function isBranchMerged(branch: string, baseBranch?: string): Promi
     return false;
   }
 
-  const mergedBranches = result.text().trim().split("\n").map(b => b.trim().replace("* ", ""));
+  const mergedBranches = result.text().trim().split("\n").map((b: string) => b.trim().replace("* ", ""));
   return mergedBranches.includes(branch);
 }
 
