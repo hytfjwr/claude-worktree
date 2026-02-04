@@ -1,5 +1,5 @@
-import { describe, expect, test, mock, spyOn, beforeEach, afterEach } from "bun:test";
-import type { CleanArgs } from "./clean";
+import { describe, expect, test, mock } from "bun:test";
+import { executeClean, type CleanDependencies, type CleanArgs } from "./clean";
 import type { WorktreeInfo, WorktreeStatus } from "./git";
 
 // テスト用ヘルパー関数
@@ -25,21 +25,20 @@ function createMockStatus(overrides: Partial<WorktreeStatus> = {}): WorktreeStat
   };
 }
 
+function createMockDeps(overrides: Partial<CleanDependencies> = {}): CleanDependencies {
+  return {
+    fetchAndPrune: mock(() => Promise.resolve()),
+    listWorktrees: mock(() => Promise.resolve([])),
+    getWorktreeStatuses: mock(() => Promise.resolve([])),
+    removeWorktree: mock(() => Promise.resolve()),
+    confirm: mock(() => Promise.resolve(true)),
+    selectMultiple: mock(() => Promise.resolve([])),
+    log: mock(() => {}),
+    ...overrides,
+  };
+}
+
 describe("executeClean", () => {
-  let consoleLogSpy: ReturnType<typeof spyOn>;
-  let logs: string[];
-
-  beforeEach(() => {
-    logs = [];
-    consoleLogSpy = spyOn(console, "log").mockImplementation((msg: string) => {
-      logs.push(msg);
-    });
-  });
-
-  afterEach(() => {
-    consoleLogSpy.mockRestore();
-  });
-
   describe("dry-run", () => {
     test("削除せずに候補表示のみ", async () => {
       const worktree = createMockWorktree({ branch: "feature/merged" });
@@ -50,27 +49,16 @@ describe("executeClean", () => {
         reason: "マージ済み",
       });
 
-      const mockRemoveWorktree = mock(async () => undefined);
-
-      mock.module("./git", () => ({
-        fetchAndPrune: mock(async () => undefined),
-        listWorktrees: mock(async () => [worktree]),
-        getWorktreeStatuses: mock(async () => [status]),
-        removeWorktree: mockRemoveWorktree,
-      }));
-
-      mock.module("./prompt", () => ({
-        confirm: mock(async () => true),
-        selectMultiple: mock(async () => []),
-      }));
-
-      const { executeClean } = await import("./clean");
+      const deps = createMockDeps({
+        listWorktrees: mock(() => Promise.resolve([worktree])),
+        getWorktreeStatuses: mock(() => Promise.resolve([status])),
+      });
 
       const args: CleanArgs = { force: false, all: false, dryRun: true };
-      const result = await executeClean(args);
+      const result = await executeClean(args, deps);
 
       // removeWorktreeが呼ばれていないことを確認
-      expect(mockRemoveWorktree).not.toHaveBeenCalled();
+      expect(deps.removeWorktree).not.toHaveBeenCalled();
       // 削除されたworktreeがないことを確認
       expect(result.deleted).toEqual([]);
       expect(result.errors).toEqual([]);
@@ -87,30 +75,18 @@ describe("executeClean", () => {
         reason: "マージ済み",
       });
 
-      const mockRemoveWorktree = mock(async () => undefined);
-      const mockConfirm = mock(async () => true);
-
-      mock.module("./git", () => ({
-        fetchAndPrune: mock(async () => undefined),
-        listWorktrees: mock(async () => [worktree]),
-        getWorktreeStatuses: mock(async () => [status]),
-        removeWorktree: mockRemoveWorktree,
-      }));
-
-      mock.module("./prompt", () => ({
-        confirm: mockConfirm,
-        selectMultiple: mock(async () => []),
-      }));
-
-      const { executeClean } = await import("./clean");
+      const deps = createMockDeps({
+        listWorktrees: mock(() => Promise.resolve([worktree])),
+        getWorktreeStatuses: mock(() => Promise.resolve([status])),
+      });
 
       const args: CleanArgs = { force: true, all: false, dryRun: false };
-      const result = await executeClean(args);
+      const result = await executeClean(args, deps);
 
       // confirmが呼ばれていないことを確認
-      expect(mockConfirm).not.toHaveBeenCalled();
+      expect(deps.confirm).not.toHaveBeenCalled();
       // removeWorktreeが呼ばれたことを確認
-      expect(mockRemoveWorktree).toHaveBeenCalledTimes(1);
+      expect(deps.removeWorktree).toHaveBeenCalledTimes(1);
       expect(result.deleted).toEqual([worktree.path]);
     });
   });
@@ -122,28 +98,17 @@ describe("executeClean", () => {
       const status1 = createMockStatus({ worktree: worktree1, canAutoClean: true });
       const status2 = createMockStatus({ worktree: worktree2, canAutoClean: false });
 
-      const mockSelectMultiple = mock(async () => [status1]);
-      const mockRemoveWorktree = mock(async () => undefined);
-
-      mock.module("./git", () => ({
-        fetchAndPrune: mock(async () => undefined),
-        listWorktrees: mock(async () => [worktree1, worktree2]),
-        getWorktreeStatuses: mock(async () => [status1, status2]),
-        removeWorktree: mockRemoveWorktree,
-      }));
-
-      mock.module("./prompt", () => ({
-        confirm: mock(async () => true),
-        selectMultiple: mockSelectMultiple,
-      }));
-
-      const { executeClean } = await import("./clean");
+      const deps = createMockDeps({
+        listWorktrees: mock(() => Promise.resolve([worktree1, worktree2])),
+        getWorktreeStatuses: mock(() => Promise.resolve([status1, status2])),
+        selectMultiple: mock(() => Promise.resolve([status1])),
+      });
 
       const args: CleanArgs = { force: true, all: true, dryRun: false };
-      const result = await executeClean(args);
+      const result = await executeClean(args, deps);
 
       // selectMultipleが呼ばれたことを確認
-      expect(mockSelectMultiple).toHaveBeenCalledTimes(1);
+      expect(deps.selectMultiple).toHaveBeenCalledTimes(1);
       expect(result.deleted).toEqual([worktree1.path]);
     });
 
@@ -153,28 +118,17 @@ describe("executeClean", () => {
       const status1 = createMockStatus({ worktree: worktree1, canAutoClean: true });
       const status2 = createMockStatus({ worktree: worktree2, canAutoClean: false });
 
-      const mockSelectMultiple = mock(async () => []); // ユーザーが何も選択しない
-      const mockRemoveWorktree = mock(async () => undefined);
-
-      mock.module("./git", () => ({
-        fetchAndPrune: mock(async () => undefined),
-        listWorktrees: mock(async () => [worktree1, worktree2]),
-        getWorktreeStatuses: mock(async () => [status1, status2]),
-        removeWorktree: mockRemoveWorktree,
-      }));
-
-      mock.module("./prompt", () => ({
-        confirm: mock(async () => true),
-        selectMultiple: mockSelectMultiple,
-      }));
-
-      const { executeClean } = await import("./clean");
+      const deps = createMockDeps({
+        listWorktrees: mock(() => Promise.resolve([worktree1, worktree2])),
+        getWorktreeStatuses: mock(() => Promise.resolve([status1, status2])),
+        selectMultiple: mock(() => Promise.resolve([])), // ユーザーが何も選択しない
+      });
 
       const args: CleanArgs = { force: true, all: true, dryRun: false };
-      const result = await executeClean(args);
+      const result = await executeClean(args, deps);
 
       // removeWorktreeが呼ばれていないことを確認
-      expect(mockRemoveWorktree).not.toHaveBeenCalled();
+      expect(deps.removeWorktree).not.toHaveBeenCalled();
       expect(result.deleted).toEqual([]);
     });
   });
@@ -188,22 +142,13 @@ describe("executeClean", () => {
         reason: "マージ済み",
       });
 
-      mock.module("./git", () => ({
-        fetchAndPrune: mock(async () => undefined),
-        listWorktrees: mock(async () => [worktree]),
-        getWorktreeStatuses: mock(async () => [status]),
-        removeWorktree: mock(async () => undefined),
-      }));
-
-      mock.module("./prompt", () => ({
-        confirm: mock(async () => true),
-        selectMultiple: mock(async () => []),
-      }));
-
-      const { executeClean } = await import("./clean");
+      const deps = createMockDeps({
+        listWorktrees: mock(() => Promise.resolve([worktree])),
+        getWorktreeStatuses: mock(() => Promise.resolve([status])),
+      });
 
       const args: CleanArgs = { force: true, all: false, dryRun: false };
-      const result = await executeClean(args);
+      const result = await executeClean(args, deps);
 
       expect(result.deleted).toContain("/path/to/delete");
       expect(result.errors).toEqual([]);
@@ -219,24 +164,14 @@ describe("executeClean", () => {
         reason: "マージ済み",
       });
 
-      mock.module("./git", () => ({
-        fetchAndPrune: mock(async () => undefined),
-        listWorktrees: mock(async () => [worktree]),
-        getWorktreeStatuses: mock(async () => [status]),
-        removeWorktree: mock(async () => {
-          throw new Error("削除に失敗しました");
-        }),
-      }));
-
-      mock.module("./prompt", () => ({
-        confirm: mock(async () => true),
-        selectMultiple: mock(async () => []),
-      }));
-
-      const { executeClean } = await import("./clean");
+      const deps = createMockDeps({
+        listWorktrees: mock(() => Promise.resolve([worktree])),
+        getWorktreeStatuses: mock(() => Promise.resolve([status])),
+        removeWorktree: mock(() => Promise.reject(new Error("削除に失敗しました"))),
+      });
 
       const args: CleanArgs = { force: true, all: false, dryRun: false };
-      const result = await executeClean(args);
+      const result = await executeClean(args, deps);
 
       expect(result.deleted).toEqual([]);
       expect(result.errors).toHaveLength(1);
@@ -247,28 +182,16 @@ describe("executeClean", () => {
 
   describe("worktreeがない場合", () => {
     test("早期リターン", async () => {
-      const mockGetWorktreeStatuses = mock(async () => []);
-
-      mock.module("./git", () => ({
-        fetchAndPrune: mock(async () => undefined),
-        listWorktrees: mock(async () => []),
-        getWorktreeStatuses: mockGetWorktreeStatuses,
-        removeWorktree: mock(async () => undefined),
-      }));
-
-      mock.module("./prompt", () => ({
-        confirm: mock(async () => true),
-        selectMultiple: mock(async () => []),
-      }));
-
-      const { executeClean } = await import("./clean");
+      const deps = createMockDeps({
+        listWorktrees: mock(() => Promise.resolve([])),
+      });
 
       const args: CleanArgs = { force: false, all: false, dryRun: false };
-      const result = await executeClean(args);
+      const result = await executeClean(args, deps);
 
       expect(result.deleted).toEqual([]);
       expect(result.errors).toEqual([]);
-      expect(mockGetWorktreeStatuses).not.toHaveBeenCalled();
+      expect(deps.getWorktreeStatuses).not.toHaveBeenCalled();
     });
   });
 
@@ -277,27 +200,16 @@ describe("executeClean", () => {
       const mainWorktree = createMockWorktree({ isMain: true, branch: "main" });
       const mainStatus = createMockStatus({ worktree: mainWorktree, reason: "メインworktree" });
 
-      const mockRemoveWorktree = mock(async () => undefined);
-
-      mock.module("./git", () => ({
-        fetchAndPrune: mock(async () => undefined),
-        listWorktrees: mock(async () => [mainWorktree]),
-        getWorktreeStatuses: mock(async () => [mainStatus]),
-        removeWorktree: mockRemoveWorktree,
-      }));
-
-      mock.module("./prompt", () => ({
-        confirm: mock(async () => true),
-        selectMultiple: mock(async () => []),
-      }));
-
-      const { executeClean } = await import("./clean");
+      const deps = createMockDeps({
+        listWorktrees: mock(() => Promise.resolve([mainWorktree])),
+        getWorktreeStatuses: mock(() => Promise.resolve([mainStatus])),
+      });
 
       const args: CleanArgs = { force: false, all: false, dryRun: false };
-      const result = await executeClean(args);
+      const result = await executeClean(args, deps);
 
       expect(result.deleted).toEqual([]);
-      expect(mockRemoveWorktree).not.toHaveBeenCalled();
+      expect(deps.removeWorktree).not.toHaveBeenCalled();
     });
   });
 
@@ -310,22 +222,15 @@ describe("executeClean", () => {
         reason: "アクティブ",
       });
 
-      mock.module("./git", () => ({
-        fetchAndPrune: mock(async () => undefined),
-        listWorktrees: mock(async () => [worktree]),
-        getWorktreeStatuses: mock(async () => [status]),
-        removeWorktree: mock(async () => undefined),
-      }));
-
-      mock.module("./prompt", () => ({
-        confirm: mock(async () => true),
-        selectMultiple: mock(async () => []),
-      }));
-
-      const { executeClean } = await import("./clean");
+      const logs: string[] = [];
+      const deps = createMockDeps({
+        listWorktrees: mock(() => Promise.resolve([worktree])),
+        getWorktreeStatuses: mock(() => Promise.resolve([status])),
+        log: mock((msg: string) => logs.push(msg)),
+      });
 
       const args: CleanArgs = { force: false, all: false, dryRun: false };
-      const result = await executeClean(args);
+      const result = await executeClean(args, deps);
 
       expect(result.deleted).toEqual([]);
       expect(logs.some((l) => l.includes("不要なworktreeは検出されませんでした"))).toBe(true);
@@ -341,26 +246,16 @@ describe("executeClean", () => {
         reason: "マージ済み",
       });
 
-      const mockRemoveWorktree = mock(async () => undefined);
-
-      mock.module("./git", () => ({
-        fetchAndPrune: mock(async () => undefined),
-        listWorktrees: mock(async () => [worktree]),
-        getWorktreeStatuses: mock(async () => [status]),
-        removeWorktree: mockRemoveWorktree,
-      }));
-
-      mock.module("./prompt", () => ({
-        confirm: mock(async () => false),
-        selectMultiple: mock(async () => []),
-      }));
-
-      const { executeClean } = await import("./clean");
+      const deps = createMockDeps({
+        listWorktrees: mock(() => Promise.resolve([worktree])),
+        getWorktreeStatuses: mock(() => Promise.resolve([status])),
+        confirm: mock(() => Promise.resolve(false)),
+      });
 
       const args: CleanArgs = { force: false, all: false, dryRun: false };
-      const result = await executeClean(args);
+      const result = await executeClean(args, deps);
 
-      expect(mockRemoveWorktree).not.toHaveBeenCalled();
+      expect(deps.removeWorktree).not.toHaveBeenCalled();
       expect(result.deleted).toEqual([]);
     });
   });
@@ -374,30 +269,17 @@ describe("executeClean", () => {
         reason: "マージ済み",
       });
 
-      const mockListWorktrees = mock(async () => [worktree]);
-      const mockRemoveWorktree = mock(async () => undefined);
-
-      mock.module("./git", () => ({
-        fetchAndPrune: mock(async () => {
-          throw new Error("Network error");
-        }),
-        listWorktrees: mockListWorktrees,
-        getWorktreeStatuses: mock(async () => [status]),
-        removeWorktree: mockRemoveWorktree,
-      }));
-
-      mock.module("./prompt", () => ({
-        confirm: mock(async () => true),
-        selectMultiple: mock(async () => []),
-      }));
-
-      const { executeClean } = await import("./clean");
+      const deps = createMockDeps({
+        fetchAndPrune: mock(() => Promise.reject(new Error("Network error"))),
+        listWorktrees: mock(() => Promise.resolve([worktree])),
+        getWorktreeStatuses: mock(() => Promise.resolve([status])),
+      });
 
       const args: CleanArgs = { force: true, all: false, dryRun: false };
-      const result = await executeClean(args);
+      const result = await executeClean(args, deps);
 
       // エラーがあっても続行されることを確認
-      expect(mockListWorktrees).toHaveBeenCalledTimes(1);
+      expect(deps.listWorktrees).toHaveBeenCalledTimes(1);
       expect(result.deleted).toEqual([worktree.path]);
     });
   });

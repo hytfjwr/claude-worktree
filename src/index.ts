@@ -33,4 +33,4 @@ export { confirm, selectMultiple } from "./prompt";
 
 // CLI
 export { parseArgs, run, showHelp, runCreate } from "./cli";
-export type { CliArgs, CreateArgs, CleanArgs, Command } from "./cli";
+export type { CliArgs, CreateArgs, CleanArgs, Command, CreateDependencies } from "./cli";
