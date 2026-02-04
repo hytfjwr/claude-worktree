@@ -21,6 +21,7 @@ export type CreateArgs = {
   planFile?: string;
   danger?: boolean;
   merge?: boolean;
+  draft?: boolean;
   baseBranch?: string;
 };
 
@@ -51,6 +52,7 @@ Options:
   --base <branch>  ベースブランチを指定（デフォルト: 現在のブランチ）
   --danger         ワークスペース警告をスキップ（--dangerously-skip-permissions を使用）
   --merge          タスク完了後に元ブランチへ自動マージ・クリーンアップ
+  --draft          タスク完了後にDraft PRを自動作成（--mergeと併用不可）
   -h, --help       このヘルプを表示
 
 Clean options:
@@ -64,6 +66,8 @@ Examples:
   claude-worktree feature/api 'API実装' --plan ./plan.md
   claude-worktree feature/auth 'Auth実装' '認証機能を実装して' --danger
   claude-worktree feature/auth 'Auth実装' '認証機能を実装して' --merge
+  claude-worktree feature/auth 'Auth実装' '認証機能を実装して' --draft
+  claude-worktree feature/auth 'Auth実装' '認証機能を実装して' --draft --base main
   claude-worktree clean
   claude-worktree clean --dry-run`);
 }
@@ -92,6 +96,19 @@ export function parseCreateArgs(args: string[]): CreateArgs {
   const merge = remaining.includes("--merge");
   if (merge) {
     remaining = remaining.filter((arg) => arg !== "--merge");
+  }
+
+  // --draft フラグを抽出
+  const draft = remaining.includes("--draft");
+  if (draft) {
+    remaining = remaining.filter((arg) => arg !== "--draft");
+  }
+
+  // --merge と --draft の排他性チェック
+  if (merge && draft) {
+    throw new Error(
+      "Cannot use both --merge and --draft options. Please use one or the other."
+    );
   }
 
   // --base オプションを抽出
@@ -144,6 +161,7 @@ export function parseCreateArgs(args: string[]): CreateArgs {
     planFile,
     danger,
     merge,
+    draft,
     baseBranch,
   };
 }
@@ -216,7 +234,7 @@ async function readPlanFile(filePath: string): Promise<string> {
 }
 
 export async function runCreate(args: CreateArgs): Promise<void> {
-  const { branchName, taskName, planFile, danger, merge, baseBranch } = args;
+  const { branchName, taskName, planFile, danger, merge, draft, baseBranch } = args;
   let { prompt } = args;
 
   // プランファイルからプロンプトを読み込み
@@ -243,6 +261,9 @@ export async function runCreate(args: CreateArgs): Promise<void> {
   }
   if (merge) {
     console.log(`🔀 Auto-merge to: ${git.currentBranch}`);
+  }
+  if (draft) {
+    console.log(`📝 Draft PR to: ${effectiveBaseBranch}`);
   }
 
   // 既存ワークツリーの重複チェック
@@ -325,6 +346,12 @@ export async function runCreate(args: CreateArgs): Promise<void> {
       mergeInstructions: {
         baseBranch: git.currentBranch,
         worktreePath,
+      },
+    }),
+    ...(draft && {
+      draftInstructions: {
+        baseBranch: effectiveBaseBranch,
+        branchName,
       },
     }),
   };

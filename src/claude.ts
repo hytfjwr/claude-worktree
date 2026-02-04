@@ -3,12 +3,18 @@ export type MergeInstructions = {
   worktreePath: string;
 };
 
+export type DraftInstructions = {
+  baseBranch: string;
+  branchName: string;
+};
+
 export type ClaudeOptions = {
   permissionMode?: "plan" | "auto-edit" | "full-auto";
   prompt: string;
   promptSuffix?: string;
   dangerouslySkipPermissions?: boolean;
   mergeInstructions?: MergeInstructions;
+  draftInstructions?: DraftInstructions;
 };
 
 const DEFAULT_PROMPT_SUFFIX = "\n\n不明瞭な点は必ずユーザーに確認し、明確にしながら進めてください";
@@ -29,10 +35,37 @@ const MERGE_INSTRUCTION_TEMPLATE = `
    - ブランチ削除: git branch -d <merged-branch>
 4. **完了報告**`;
 
+const DRAFT_INSTRUCTION_TEMPLATE = `
+
+---
+## 【重要】タスク完了後の処理
+
+タスクが完了したら、以下の手順を実行してください：
+
+1. **すべての変更をコミット**
+   - 変更内容を適切にコミットしてください
+
+2. **リモートへプッシュ**
+   - git push -u origin {branchName}
+
+3. **Draft PRを作成**
+   - コマンド: gh pr create --draft --base {baseBranch}
+   - タイトル: 変更内容を要約した適切なタイトルを生成してください
+   - 本文: 現在のディレクトリの.github配下にPRテンプレートがあれば、そのフォーマットに従って記述してください。なければ変更内容のサマリーを記述してください
+
+4. **完了報告**
+   - 作成したPRのURLを報告してください`;
+
 function buildMergeInstructions(mergeInstructions: MergeInstructions): string {
   return MERGE_INSTRUCTION_TEMPLATE
     .replace("{baseBranch}", mergeInstructions.baseBranch)
     .replace("{worktreePath}", mergeInstructions.worktreePath);
+}
+
+function buildDraftInstructions(draftInstructions: DraftInstructions): string {
+  return DRAFT_INSTRUCTION_TEMPLATE
+    .replace("{baseBranch}", draftInstructions.baseBranch)
+    .replace("{branchName}", draftInstructions.branchName);
 }
 
 /**
@@ -55,12 +88,17 @@ export function buildClaudeCommand(options: ClaudeOptions): string {
     promptSuffix = DEFAULT_PROMPT_SUFFIX,
     dangerouslySkipPermissions = false,
     mergeInstructions,
+    draftInstructions,
   } = options;
 
   let fullPrompt = prompt + promptSuffix;
 
   if (mergeInstructions) {
     fullPrompt += buildMergeInstructions(mergeInstructions);
+  }
+
+  if (draftInstructions) {
+    fullPrompt += buildDraftInstructions(draftInstructions);
   }
 
   const escapedPrompt = escapeForDollarQuote(fullPrompt);

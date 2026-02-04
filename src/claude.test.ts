@@ -157,6 +157,67 @@ describe("buildClaudeCommand", () => {
     expect(result).toContain("--dangerously-skip-permissions");
     expect(result).toContain("【重要】タスク完了後の処理");
   });
+
+  test("draftInstructionsあり - Draft PR指示が含まれる", () => {
+    const result = buildClaudeCommand({
+      prompt: "テスト",
+      draftInstructions: {
+        baseBranch: "main",
+        branchName: "feature/test",
+      },
+    });
+
+    expect(result).toContain("【重要】タスク完了後の処理");
+    expect(result).toContain("Draft PRを作成");
+    expect(result).toContain("gh pr create --draft --base main");
+  });
+
+  test("draftInstructions - ベースブランチ名が正しく埋め込まれる", () => {
+    const result = buildClaudeCommand({
+      prompt: "テスト",
+      draftInstructions: {
+        baseBranch: "develop",
+        branchName: "feature/test",
+      },
+    });
+
+    expect(result).toContain("gh pr create --draft --base develop");
+  });
+
+  test("draftInstructions - ブランチ名が正しく埋め込まれる", () => {
+    const result = buildClaudeCommand({
+      prompt: "テスト",
+      draftInstructions: {
+        baseBranch: "main",
+        branchName: "feature/my-feature",
+      },
+    });
+
+    expect(result).toContain("git push -u origin feature/my-feature");
+  });
+
+  test("draftInstructionsなし - Draft PR指示が含まれない", () => {
+    const result = buildClaudeCommand({
+      prompt: "テスト",
+    });
+
+    expect(result).not.toContain("Draft PRを作成");
+    expect(result).not.toContain("gh pr create --draft");
+  });
+
+  test("draftInstructions + dangerouslySkipPermissions 組み合わせ", () => {
+    const result = buildClaudeCommand({
+      prompt: "テスト",
+      dangerouslySkipPermissions: true,
+      draftInstructions: {
+        baseBranch: "main",
+        branchName: "feature/test",
+      },
+    });
+
+    expect(result).toContain("--dangerously-skip-permissions");
+    expect(result).toContain("Draft PRを作成");
+  });
 });
 
 // ============================================================================

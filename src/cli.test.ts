@@ -57,6 +57,7 @@ describe("parseArgs", () => {
           planFile: undefined,
           danger: false,
           merge: false,
+          draft: false,
           baseBranch: undefined,
         },
       });
@@ -73,6 +74,7 @@ describe("parseArgs", () => {
           planFile: undefined,
           danger: false,
           merge: false,
+          draft: false,
           baseBranch: undefined,
         },
       });
@@ -90,6 +92,7 @@ describe("parseCreateArgs", () => {
       planFile: undefined,
       danger: false,
       merge: false,
+      draft: false,
       baseBranch: undefined,
     });
   });
@@ -103,6 +106,7 @@ describe("parseCreateArgs", () => {
       planFile: undefined,
       danger: false,
       merge: false,
+      draft: false,
       baseBranch: undefined,
     });
   });
@@ -116,6 +120,7 @@ describe("parseCreateArgs", () => {
       planFile: "./plan.md",
       danger: false,
       merge: false,
+      draft: false,
       baseBranch: undefined,
     });
   });
@@ -129,6 +134,7 @@ describe("parseCreateArgs", () => {
       planFile: undefined,
       danger: true,
       merge: false,
+      draft: false,
       baseBranch: undefined,
     });
   });
@@ -142,6 +148,7 @@ describe("parseCreateArgs", () => {
       planFile: "plan.md",
       danger: true,
       merge: false,
+      draft: false,
       baseBranch: undefined,
     });
   });
@@ -155,6 +162,7 @@ describe("parseCreateArgs", () => {
       planFile: undefined,
       danger: false,
       merge: true,
+      draft: false,
       baseBranch: undefined,
     });
   });
@@ -168,6 +176,7 @@ describe("parseCreateArgs", () => {
       planFile: undefined,
       danger: true,
       merge: true,
+      draft: false,
       baseBranch: undefined,
     });
   });
@@ -181,6 +190,7 @@ describe("parseCreateArgs", () => {
       planFile: "plan.md",
       danger: false,
       merge: true,
+      draft: false,
       baseBranch: undefined,
     });
   });
@@ -194,6 +204,7 @@ describe("parseCreateArgs", () => {
       planFile: "plan.md",
       danger: true,
       merge: true,
+      draft: false,
       baseBranch: undefined,
     });
   });
@@ -207,6 +218,7 @@ describe("parseCreateArgs", () => {
       planFile: undefined,
       danger: false,
       merge: false,
+      draft: false,
       baseBranch: "develop",
     });
   });
@@ -220,6 +232,7 @@ describe("parseCreateArgs", () => {
       planFile: undefined,
       danger: true,
       merge: false,
+      draft: false,
       baseBranch: "develop",
     });
   });
@@ -233,6 +246,7 @@ describe("parseCreateArgs", () => {
       planFile: undefined,
       danger: false,
       merge: true,
+      draft: false,
       baseBranch: "develop",
     });
   });
@@ -246,6 +260,7 @@ describe("parseCreateArgs", () => {
       planFile: "plan.md",
       danger: false,
       merge: false,
+      draft: false,
       baseBranch: "develop",
     });
   });
@@ -259,8 +274,71 @@ describe("parseCreateArgs", () => {
       planFile: "plan.md",
       danger: true,
       merge: true,
+      draft: false,
       baseBranch: "develop",
     });
+  });
+
+  test("--draft オプション", () => {
+    const result = parseCreateArgs(["feature/test", "タスク", "プロンプト", "--draft"]);
+    expect(result).toEqual({
+      branchName: "feature/test",
+      taskName: "タスク",
+      prompt: "プロンプト",
+      planFile: undefined,
+      danger: false,
+      merge: false,
+      draft: true,
+      baseBranch: undefined,
+    });
+  });
+
+  test("--draft + --danger オプション", () => {
+    const result = parseCreateArgs(["feature/test", "タスク", "プロンプト", "--draft", "--danger"]);
+    expect(result).toEqual({
+      branchName: "feature/test",
+      taskName: "タスク",
+      prompt: "プロンプト",
+      planFile: undefined,
+      danger: true,
+      merge: false,
+      draft: true,
+      baseBranch: undefined,
+    });
+  });
+
+  test("--draft + --base オプション", () => {
+    const result = parseCreateArgs(["feature/test", "タスク", "プロンプト", "--draft", "--base", "develop"]);
+    expect(result).toEqual({
+      branchName: "feature/test",
+      taskName: "タスク",
+      prompt: "プロンプト",
+      planFile: undefined,
+      danger: false,
+      merge: false,
+      draft: true,
+      baseBranch: "develop",
+    });
+  });
+
+  test("--draft + --plan オプション", () => {
+    const result = parseCreateArgs(["feature/test", "タスク", "--draft", "--plan", "plan.md"]);
+    expect(result).toEqual({
+      branchName: "feature/test",
+      taskName: "タスク",
+      prompt: "タスク",
+      planFile: "plan.md",
+      danger: false,
+      merge: false,
+      draft: true,
+      baseBranch: undefined,
+    });
+  });
+
+  test("エラー: --merge と --draft の排他性", () => {
+    expect(() => parseCreateArgs(["feature/test", "タスク", "プロンプト", "--merge", "--draft"])).toThrow(
+      "Cannot use both --merge and --draft options"
+    );
   });
 
   test("エラー: --base に引数がない", () => {
@@ -796,5 +874,97 @@ describe("runCreate", () => {
 
     expect(baseBranchPassed).toBe("develop");
     expect(logs.some((l) => l.includes("🌳 Base branch: develop"))).toBe(true);
+  });
+
+  test("--draft オプションでdraftInstructionsがbuildClaudeCommandに渡される", async () => {
+    let draftInstructionsPassed: { baseBranch: string; branchName: string } | undefined;
+
+    const mockGitContext: GitContext = {
+      repoRoot: "/path/to/repo",
+      repoName: "repo",
+      currentBranch: "main",
+    };
+
+    mock.module("./git", () => ({
+      getGitContext: mock(async () => mockGitContext),
+      getWorktreePath: mock((root: string, name: string, branch: string) => `${root}/../${name}-${branch.replace(/\//g, "-")}`),
+      findWorktreeByBranch: mock(async () => null),
+      branchExists: mock(async () => false),
+      buildWorktreeCommand: mock(() => ""),
+      removeWorktree: mock(async () => undefined),
+      deleteLocalBranch: mock(async () => undefined),
+    }));
+
+    mock.module("./wezterm", () => ({
+      createPane: mock(async () => "pane-123"),
+      sendCommand: mock(async () => undefined),
+      sendText: mock(async () => undefined),
+    }));
+
+    mock.module("./claude", () => ({
+      buildClaudeCommand: mock(({ draftInstructions }: { draftInstructions?: { baseBranch: string; branchName: string } }) => {
+        draftInstructionsPassed = draftInstructions;
+        return "claude";
+      }),
+    }));
+
+    mock.module("./prompt", () => ({
+      confirm: mock(async () => true),
+    }));
+
+    const { runCreate } = await import("./cli");
+
+    await runCreate({ branchName: "feature/draft", taskName: "Draft Task", prompt: "test", draft: true });
+
+    expect(draftInstructionsPassed).toBeDefined();
+    expect(draftInstructionsPassed?.baseBranch).toBe("main");
+    expect(draftInstructionsPassed?.branchName).toBe("feature/draft");
+    expect(logs.some((l) => l.includes("📝 Draft PR to: main"))).toBe(true);
+  });
+
+  test("--draft + --base オプションでdraftInstructionsに指定したベースブランチが渡される", async () => {
+    let draftInstructionsPassed: { baseBranch: string; branchName: string } | undefined;
+
+    const mockGitContext: GitContext = {
+      repoRoot: "/path/to/repo",
+      repoName: "repo",
+      currentBranch: "main",
+    };
+
+    mock.module("./git", () => ({
+      getGitContext: mock(async () => mockGitContext),
+      getWorktreePath: mock((root: string, name: string, branch: string) => `${root}/../${name}-${branch.replace(/\//g, "-")}`),
+      findWorktreeByBranch: mock(async () => null),
+      branchExists: mock(async () => false),
+      buildWorktreeCommand: mock(() => ""),
+      removeWorktree: mock(async () => undefined),
+      deleteLocalBranch: mock(async () => undefined),
+    }));
+
+    mock.module("./wezterm", () => ({
+      createPane: mock(async () => "pane-123"),
+      sendCommand: mock(async () => undefined),
+      sendText: mock(async () => undefined),
+    }));
+
+    mock.module("./claude", () => ({
+      buildClaudeCommand: mock(({ draftInstructions }: { draftInstructions?: { baseBranch: string; branchName: string } }) => {
+        draftInstructionsPassed = draftInstructions;
+        return "claude";
+      }),
+    }));
+
+    mock.module("./prompt", () => ({
+      confirm: mock(async () => true),
+    }));
+
+    const { runCreate } = await import("./cli");
+
+    await runCreate({ branchName: "feature/draft", taskName: "Draft Task", prompt: "test", draft: true, baseBranch: "develop" });
+
+    expect(draftInstructionsPassed).toBeDefined();
+    expect(draftInstructionsPassed?.baseBranch).toBe("develop");
+    expect(draftInstructionsPassed?.branchName).toBe("feature/draft");
+    expect(logs.some((l) => l.includes("📝 Draft PR to: develop"))).toBe(true);
   });
 });
