@@ -21,7 +21,10 @@ export async function sendText(
   paneId: string,
   text: string
 ): Promise<void> {
-  const proc = Bun.spawn(["wezterm", "cli", "send-text", "--no-paste", "--pane-id", paneId], {
+  // --no-paste を使わない（bracketed paste モードを使用）
+  // --no-paste だと文字が一つずつ入力されるため、$'...' 内の \n がシェルで
+  // 改行として解釈された際にコマンドが途中で実行されてしまう問題がある
+  const proc = Bun.spawn(["wezterm", "cli", "send-text", "--pane-id", paneId], {
     stdin: new TextEncoder().encode(text),
   });
   await proc.exited;
