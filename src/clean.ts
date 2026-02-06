@@ -4,10 +4,12 @@ import {
   getWorktreeStatuses,
   removeWorktree,
   fetchAndPrune,
+  type WorktreeInfo,
   type WorktreeStatus,
+  type GitContext,
 } from "./git";
 import { confirm, selectMultiple } from "./prompt";
-import { loadProjectConfig, buildHookCommand, runHook } from "./config";
+import { loadProjectConfig, buildHookCommand, runHook, type ProjectConfig, type HookVars } from "./config";
 
 export type CleanArgs = {
   force: boolean;
@@ -21,7 +23,33 @@ export type CleanResult = {
   errors: Array<{ path: string; error: string }>;
 };
 
-export async function executeClean(args: CleanArgs): Promise<CleanResult> {
+export type CleanDeps = {
+  fetchAndPrune: () => Promise<void>;
+  listWorktrees: () => Promise<WorktreeInfo[]>;
+  getWorktreeStatuses: (worktrees: WorktreeInfo[]) => Promise<WorktreeStatus[]>;
+  removeWorktree: (path: string, force?: boolean) => Promise<void>;
+  getGitContext: () => Promise<GitContext>;
+  loadProjectConfig: (repoRoot: string) => Promise<ProjectConfig | null>;
+  buildHookCommand: (template: string, vars: HookVars) => string;
+  runHook: (command: string, cwd: string) => Promise<void>;
+  confirm: (message: string) => Promise<boolean>;
+  selectMultiple: (statuses: WorktreeStatus[]) => Promise<WorktreeStatus[]>;
+};
+
+const defaultDeps: CleanDeps = {
+  fetchAndPrune,
+  listWorktrees,
+  getWorktreeStatuses,
+  removeWorktree,
+  getGitContext,
+  loadProjectConfig,
+  buildHookCommand,
+  runHook,
+  confirm,
+  selectMultiple,
+};
+
+export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDeps): Promise<CleanResult> {
   const result: CleanResult = {
     deleted: [],
     skipped: [],
@@ -30,20 +58,20 @@ export async function executeClean(args: CleanArgs): Promise<CleanResult> {
 
   console.log("🔄 リモート参照を更新中...");
   try {
-    await fetchAndPrune();
+    await deps.fetchAndPrune();
   } catch {
     console.log("⚠️  リモート参照の更新に失敗しました（続行します）");
   }
 
   console.log("📋 Worktree一覧を取得中...");
-  const worktrees = await listWorktrees();
+  const worktrees = await deps.listWorktrees();
 
   if (worktrees.length === 0) {
     console.log("Worktreeがありません。");
     return result;
   }
 
-  const statuses = await getWorktreeStatuses(worktrees);
+  const statuses = await deps.getWorktreeStatuses(worktrees);
 
   // Filter out main worktrees for display
   const cleanableStatuses = statuses.filter((s) => !s.worktree.isMain);
@@ -57,7 +85,7 @@ export async function executeClean(args: CleanArgs): Promise<CleanResult> {
 
   if (args.all) {
     // Manual selection mode
-    toDelete = await selectMultiple(cleanableStatuses);
+    toDelete = await deps.selectMultiple(cleanableStatuses);
   } else {
     // Auto-detect mode: show only auto-cleanable ones
     const autoCleanable = cleanableStatuses.filter((s) => s.canAutoClean);
@@ -96,7 +124,7 @@ export async function executeClean(args: CleanArgs): Promise<CleanResult> {
   // Confirmation
   if (!args.force) {
     console.log("");
-    const confirmed = await confirm(
+    const confirmed = await deps.confirm(
       `${toDelete.length}個のworktreeを削除しますか？`
     );
     if (!confirmed) {
@@ -107,11 +135,11 @@ export async function executeClean(args: CleanArgs): Promise<CleanResult> {
 
   // Load config for preClean hook
   let repoRoot: string | undefined;
-  let config: Awaited<ReturnType<typeof loadProjectConfig>> = null;
+  let config: ProjectConfig | null = null;
   try {
-    const git = await getGitContext();
+    const git = await deps.getGitContext();
     repoRoot = git.repoRoot;
-    config = await loadProjectConfig(repoRoot);
+    config = await deps.loadProjectConfig(repoRoot);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.debug(
@@ -126,16 +154,16 @@ export async function executeClean(args: CleanArgs): Promise<CleanResult> {
     try {
       // preClean hook
       if (config?.preClean && repoRoot) {
-        const hookCmd = buildHookCommand(config.preClean, { path: worktree.path });
+        const hookCmd = deps.buildHookCommand(config.preClean, { path: worktree.path });
         try {
-          await runHook(hookCmd, repoRoot);
+          await deps.runHook(hookCmd, repoRoot);
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           console.warn(`  ⚠️  preClean hook failed (continuing): ${message}`);
         }
       }
 
-      await removeWorktree(worktree.path, worktree.isDirty);
+      await deps.removeWorktree(worktree.path, worktree.isDirty);
       console.log(`  ✓ ${worktree.branch || worktree.path}`);
       result.deleted.push(worktree.path);
     } catch (error) {
