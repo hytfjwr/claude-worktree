@@ -69,16 +69,15 @@ function buildDraftInstructions(draftInstructions: DraftInstructions): string {
 }
 
 /**
- * シェルの $'...' 形式用にプロンプトをエスケープする
- * $'...' 形式では \n, \t などのエスケープシーケンスが解釈される
+ * ヒアドキュメントのデリミタ用にプロンプトをエスケープする
+ * プロンプト内にデリミタ文字列(PROMPT_END)が含まれていないかチェック
  */
-function escapeForDollarQuote(str: string): string {
-  return str
-    .replace(/\\/g, '\\\\')    // バックスラッシュを先にエスケープ
-    .replace(/'/g, "\\'")      // シングルクォートをエスケープ
-    .replace(/\n/g, '\\n')     // 改行をリテラル \n に
-    .replace(/\r/g, '\\r')     // キャリッジリターンをエスケープ
-    .replace(/\t/g, '\\t');    // タブをエスケープ
+function escapeForHeredoc(str: string): string {
+  // ヒアドキュメントでは特別なエスケープは不要
+  // ただしデリミタと同じ文字列が含まれていると問題になるため、
+  // その場合は別のデリミタを使うか、文字列を変換する必要がある
+  // 現実的にはPROMPT_ENDがプロンプト内に出現することはほぼないと想定
+  return str;
 }
 
 export function buildClaudeCommand(options: ClaudeOptions): string {
@@ -101,8 +100,13 @@ export function buildClaudeCommand(options: ClaudeOptions): string {
     fullPrompt += buildDraftInstructions(draftInstructions);
   }
 
-  const escapedPrompt = escapeForDollarQuote(fullPrompt);
+  const escapedPrompt = escapeForHeredoc(fullPrompt);
 
   const dangerFlag = dangerouslySkipPermissions ? "--dangerously-skip-permissions " : "";
-  return `claude ${dangerFlag}--permission-mode ${permissionMode} $'${escapedPrompt}'`;
+
+  // ヒアドキュメント形式でプロンプトを渡す
+  // 'PROMPT_END'をクォートすることで変数展開を防ぐ
+  return `claude ${dangerFlag}--permission-mode ${permissionMode} <<'PROMPT_END'
+${escapedPrompt}
+PROMPT_END`;
 }

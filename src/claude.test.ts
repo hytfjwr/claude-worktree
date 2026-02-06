@@ -29,12 +29,13 @@ describe("buildClaudeCommand", () => {
     expect(result).toContain("--permission-mode full-auto");
   });
 
-  test("ダブルクォートのエスケープ - $'...'形式ではエスケープ不要", () => {
+  test("ダブルクォートのエスケープ - ヒアドキュメント形式ではエスケープ不要", () => {
     const result = buildClaudeCommand({ prompt: '"hello" world', promptSuffix: "" });
 
-    // $'...' 形式ではダブルクォートはそのまま使える
+    // ヒアドキュメント形式ではダブルクォートはそのまま使える
     expect(result).toContain('"hello" world');
-    expect(result).toMatch(/\$'.*"hello" world.*'/);
+    expect(result).toContain("<<'PROMPT_END'");
+    expect(result).toContain("PROMPT_END");
   });
 
   test("カスタムpromptSuffix", () => {
@@ -54,7 +55,9 @@ describe("buildClaudeCommand", () => {
       promptSuffix: "",
     });
 
-    expect(result).toBe("claude --permission-mode plan $'テスト'");
+    expect(result).toBe(`claude --permission-mode plan <<'PROMPT_END'
+テスト
+PROMPT_END`);
   });
 
   test("複合ケース - カスタムpermission mode + カスタムsuffix + エスケープ", () => {
@@ -228,37 +231,47 @@ describe("buildClaudeCommand - エッジケース", () => {
   test("空プロンプト - エラーにならない", () => {
     const result = buildClaudeCommand({ prompt: "", promptSuffix: "" });
 
-    expect(result).toBe("claude --permission-mode plan $''");
+    expect(result).toBe(`claude --permission-mode plan <<'PROMPT_END'
+
+PROMPT_END`);
   });
 
-  test("改行を含むプロンプト - 改行が \\n にエスケープされる", () => {
+  test("改行を含むプロンプト - 改行がそのまま保持される", () => {
     const result = buildClaudeCommand({
       prompt: "行1\n行2\n行3",
       promptSuffix: "",
     });
 
-    // 改行は \n にエスケープされる（シェルの $'...' 形式で解釈される）
-    expect(result).toBe("claude --permission-mode plan $'行1\\n行2\\n行3'");
+    // ヒアドキュメント形式では改行がそのまま保持される
+    expect(result).toBe(`claude --permission-mode plan <<'PROMPT_END'
+行1
+行2
+行3
+PROMPT_END`);
   });
 
-  test("バックスラッシュを含むプロンプト - バックスラッシュが \\\\ にエスケープされる", () => {
+  test("バックスラッシュを含むプロンプト - そのまま保持される", () => {
     const result = buildClaudeCommand({
       prompt: "path\\to\\file",
       promptSuffix: "",
     });
 
-    // バックスラッシュは \\\\ にエスケープされる
-    expect(result).toBe("claude --permission-mode plan $'path\\\\to\\\\file'");
+    // ヒアドキュメント形式ではバックスラッシュはそのまま保持される
+    expect(result).toBe(`claude --permission-mode plan <<'PROMPT_END'
+path\\to\\file
+PROMPT_END`);
   });
 
-  test("シングルクォートを含むプロンプト - シングルクォートがエスケープされる", () => {
+  test("シングルクォートを含むプロンプト - そのまま保持される", () => {
     const result = buildClaudeCommand({
       prompt: "It's a test",
       promptSuffix: "",
     });
 
-    // シングルクォートは \\' にエスケープされる
-    expect(result).toBe("claude --permission-mode plan $'It\\'s a test'");
+    // ヒアドキュメント形式ではシングルクォートはそのまま保持される
+    expect(result).toBe(`claude --permission-mode plan <<'PROMPT_END'
+It's a test
+PROMPT_END`);
   });
 
   test("$変数展開の文字 - $がそのまま保持される", () => {
@@ -291,32 +304,39 @@ describe("buildClaudeCommand - エッジケース", () => {
     expect(result.length).toBeGreaterThan(10000);
   });
 
-  test("タブ文字を含むプロンプト - タブが \\t にエスケープされる", () => {
+  test("タブ文字を含むプロンプト - そのまま保持される", () => {
     const result = buildClaudeCommand({
       prompt: "col1\tcol2\tcol3",
       promptSuffix: "",
     });
 
-    expect(result).toBe("claude --permission-mode plan $'col1\\tcol2\\tcol3'");
+    expect(result).toBe(`claude --permission-mode plan <<'PROMPT_END'
+col1\tcol2\tcol3
+PROMPT_END`);
   });
 
-  test("キャリッジリターンを含むプロンプト - CRが \\r にエスケープされる", () => {
+  test("キャリッジリターンを含むプロンプト - そのまま保持される", () => {
     const result = buildClaudeCommand({
       prompt: "line1\r\nline2",
       promptSuffix: "",
     });
 
-    expect(result).toBe("claude --permission-mode plan $'line1\\r\\nline2'");
+    expect(result).toBe(`claude --permission-mode plan <<'PROMPT_END'
+line1\r
+line2
+PROMPT_END`);
   });
 
-  test("複合的な特殊文字 - 全てが正しくエスケープされる", () => {
+  test("複合的な特殊文字 - 全てそのまま保持される", () => {
     const result = buildClaudeCommand({
       prompt: "It's a \"test\"\npath\\to\\file",
       promptSuffix: "",
     });
 
-    // シングルクォート、改行、バックスラッシュがエスケープされる
-    // ダブルクォートはそのまま
-    expect(result).toBe("claude --permission-mode plan $'It\\'s a \"test\"\\npath\\\\to\\\\file'");
+    // ヒアドキュメント形式では全ての特殊文字がそのまま保持される
+    expect(result).toBe(`claude --permission-mode plan <<'PROMPT_END'
+It's a "test"
+path\\to\\file
+PROMPT_END`);
   });
 });
