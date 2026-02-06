@@ -364,7 +364,16 @@ export async function runCreate(args: CreateArgs): Promise<void> {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error(`❌ postCreate hook failed: ${message}`);
-      console.log("🗑️  Rolling back worktree...");
+      console.log("🗑️  Rolling back...");
+      // preClean フックでコンテナ等をクリーンアップしてからワークツリーを削除
+      if (config?.preClean) {
+        const cleanCmd = buildHookCommand(config.preClean, { path: worktreePath });
+        try {
+          await runHook(cleanCmd, git.repoRoot);
+        } catch {
+          console.warn("  ⚠️  preClean hook failed during rollback");
+        }
+      }
       try {
         await removeWorktree(worktreePath);
       } catch {
