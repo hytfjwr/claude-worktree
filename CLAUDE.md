@@ -74,10 +74,12 @@ bin/
   claude-worktree.ts   # Entry point
 src/
   cli.ts               # Argument parsing & orchestration
-  git.ts               # Git operations (repo info, worktree path generation)
+  git.ts               # Git operations (repo info, worktree creation)
   wezterm.ts           # WezTerm pane operations (split, send text)
   claude.ts            # Claude Code command generation
   clean.ts             # Worktree cleanup orchestration
+  config.ts            # Project config (.claude-worktree.json) & hook execution
+  slot.ts              # Port-scan based slot auto-assignment
   prompt.ts            # Interactive user prompts
   index.ts             # Public API (barrel exports)
 
@@ -87,13 +89,28 @@ src/
   cli.test.ts          # Tests for cli.ts
   wezterm.test.ts      # Tests for wezterm.ts
   clean.test.ts        # Tests for clean.ts
+  config.test.ts       # Tests for config.ts
+  slot.test.ts         # Tests for slot.ts
 ```
 
 **Processing Flow:**
 1. Parse arguments (branch name, task name, prompt or plan file)
 2. Get the git repository root and current branch
-3. Split a new pane to the right in WezTerm
-4. In the new pane: create worktree → launch Claude Code
+3. Load project config from `.claude-worktree.json` (if exists)
+4. Create worktree directly via `git worktree add`
+5. Run `postCreate` hook (if configured) — rollback worktree on failure
+6. Split a new pane to the right in WezTerm
+7. In the new pane: cd into worktree → launch Claude Code
+
+**Hook Configuration (`.claude-worktree.json`):**
+```json
+{
+  "postCreate": "cd {path} && docker-compose -p app-{slot} up -d",
+  "preClean": "cd {path} && docker-compose down"
+}
+```
+- `{path}` — worktree path
+- `{slot}` — auto-assigned slot (1-9) based on port availability (8881-8889)
 
 **External Tool Dependencies:** bun, git, wezterm CLI, claude CLI
 

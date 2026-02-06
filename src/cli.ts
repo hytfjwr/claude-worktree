@@ -1,7 +1,7 @@
 import {
   getGitContext,
   getWorktreePath,
-  buildWorktreeCommand,
+  createWorktree,
   findWorktreeByBranch,
   removeWorktree,
   deleteLocalBranch,
@@ -11,6 +11,8 @@ import { createPane, sendCommand, sendText } from "./wezterm";
 import { buildClaudeCommand } from "./claude";
 import { executeClean, type CleanArgs } from "./clean";
 import { confirm } from "./prompt";
+import { loadProjectConfig, buildHookCommand, runHook } from "./config";
+import { findAvailableSlot } from "./slot";
 
 export type { CleanArgs } from "./clean";
 
@@ -249,6 +251,8 @@ export async function runCreate(args: CreateArgs): Promise<void> {
   // baseBranch が指定されていれば使用、なければ現在のブランチ
   const effectiveBaseBranch = baseBranch ?? git.currentBranch;
 
+  const config = await loadProjectConfig(git.repoRoot);
+
   console.log(`📍 Current branch: ${git.currentBranch}`);
   if (baseBranch) {
     console.log(`🌳 Base branch: ${baseBranch}`);
@@ -287,6 +291,17 @@ export async function runCreate(args: CreateArgs): Promise<void> {
     if (!confirmed) {
       console.log("キャンセルしました。");
       return;
+    }
+
+    // preClean hook
+    if (config?.preClean) {
+      const hookCmd = buildHookCommand(config.preClean, { path: existingWorktree.path });
+      try {
+        await runHook(hookCmd, git.repoRoot);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn(`  ⚠️  preClean hook failed (continuing): ${message}`);
+      }
     }
 
     // 既存ワークツリーとブランチを削除
@@ -334,6 +349,31 @@ export async function runCreate(args: CreateArgs): Promise<void> {
     }
   }
 
+  // Create worktree directly
+  await createWorktree(branchName, worktreePath, effectiveBaseBranch);
+
+  // postCreate hook
+  if (config?.postCreate) {
+    let slot: number | undefined;
+    if (config.postCreate.includes("{slot}")) {
+      slot = await findAvailableSlot();
+    }
+    const hookCmd = buildHookCommand(config.postCreate, { path: worktreePath, slot });
+    try {
+      await runHook(hookCmd, git.repoRoot);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`❌ postCreate hook failed: ${message}`);
+      console.log("🗑️  Rolling back worktree...");
+      try {
+        await removeWorktree(worktreePath);
+      } catch {
+        console.warn("  ⚠️  Failed to rollback worktree");
+      }
+      return;
+    }
+  }
+
   // WezTermペインを作成
   const paneId = await createPane({ title: taskName, keepFocus: true });
   console.log(`🪟 Created pane: ${paneId}`);
@@ -357,7 +397,6 @@ export async function runCreate(args: CreateArgs): Promise<void> {
   };
 
   const commands = [
-    buildWorktreeCommand(branchName, worktreePath, effectiveBaseBranch),
     `cd "${worktreePath}"`,
     buildClaudeCommand(claudeOptions),
   ].join(" && ");

@@ -1,4 +1,5 @@
 import {
+  getGitContext,
   listWorktrees,
   getWorktreeStatuses,
   removeWorktree,
@@ -6,6 +7,7 @@ import {
   type WorktreeStatus,
 } from "./git";
 import { confirm, selectMultiple } from "./prompt";
+import { loadProjectConfig, buildHookCommand, runHook } from "./config";
 
 export type CleanArgs = {
   force: boolean;
@@ -103,11 +105,36 @@ export async function executeClean(args: CleanArgs): Promise<CleanResult> {
     }
   }
 
+  // Load config for preClean hook
+  let repoRoot: string | undefined;
+  let config: Awaited<ReturnType<typeof loadProjectConfig>> = null;
+  try {
+    const git = await getGitContext();
+    repoRoot = git.repoRoot;
+    config = await loadProjectConfig(repoRoot);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.debug(
+      `preClean hooks will be skipped: failed to get git context or load project config: ${message}`
+    );
+  }
+
   // Execute deletion
   console.log("\n🗑️  削除中...");
   for (const status of toDelete) {
     const { worktree } = status;
     try {
+      // preClean hook
+      if (config?.preClean && repoRoot) {
+        const hookCmd = buildHookCommand(config.preClean, { path: worktree.path });
+        try {
+          await runHook(hookCmd, repoRoot);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          console.warn(`  ⚠️  preClean hook failed (continuing): ${message}`);
+        }
+      }
+
       await removeWorktree(worktree.path, worktree.isDirty);
       console.log(`  ✓ ${worktree.branch || worktree.path}`);
       result.deleted.push(worktree.path);

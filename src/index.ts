@@ -3,6 +3,7 @@ export {
   getGitContext,
   getWorktreePath,
   buildWorktreeCommand,
+  createWorktree,
   getMainBranch,
   listWorktrees,
   isWorktreeDirty,
@@ -23,6 +24,13 @@ export type { PaneOptions } from "./wezterm";
 // Claude utilities
 export { buildClaudeCommand } from "./claude";
 export type { ClaudeOptions } from "./claude";
+
+// Config utilities
+export { loadProjectConfig, buildHookCommand, runHook } from "./config";
+export type { ProjectConfig, HookVars } from "./config";
+
+// Slot utilities
+export { isPortInUse, findAvailableSlot } from "./slot";
 
 // Clean command
 export { executeClean } from "./clean";

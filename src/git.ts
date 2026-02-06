@@ -49,6 +49,19 @@ export function buildWorktreeCommand(branchName: string, worktreePath: string, b
   return `git worktree add -b ${branchName} "${worktreePath}" ${baseBranch}`;
 }
 
+export async function createWorktree(
+  branchName: string,
+  worktreePath: string,
+  baseBranch: string
+): Promise<void> {
+  const result = await $`git worktree add -b ${branchName} ${worktreePath} ${baseBranch}`
+    .nothrow().quiet();
+  if (result.exitCode !== 0) {
+    const stderr = result.stderr.toString().trim();
+    throw new Error(`Failed to create worktree: ${stderr}`);
+  }
+}
+
 export async function getMainBranch(): Promise<string> {
   // Try to detect the main branch name
   const result = await $`git symbolic-ref refs/remotes/origin/HEAD`.nothrow().quiet();
