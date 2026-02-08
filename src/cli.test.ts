@@ -491,11 +491,16 @@ describe("parseCreateArgs", () => {
     expect(result.prompt).toBe("これは 複数 単語");
   });
 
-  test("不明オプションはプロンプトとして扱われる", () => {
-    // --unknown は parseCreateArgs では単なる文字列として扱われ、プロンプトの一部になる
-    // これは意図した動作として文書化
-    const result = parseCreateArgs(["feature/test", "タスク", "--unknown", "text"]);
-    expect(result.prompt).toBe("--unknown text");
+  test("エラー: 不明オプション", () => {
+    expect(() => parseCreateArgs(["feature/test", "タスク", "--unknown"])).toThrow(
+      "Unknown option: --unknown"
+    );
+  });
+
+  test("エラー: 不明な短縮オプション", () => {
+    expect(() => parseCreateArgs(["feature/test", "タスク", "-x"])).toThrow(
+      "Unknown option: -x"
+    );
   });
 });
 

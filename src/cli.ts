@@ -105,7 +105,9 @@ export function parseCreateArgs(args: string[]): CreateArgs {
       baseBranch: { type: "string", flag: "--base", errorMessage: "--base requires a branch name argument" },
       planFile:   { type: "string", flag: "--plan", errorMessage: "--plan requires a file path argument" },
     },
-    unknownHandling: "passthrough",
+    unknownHandling: "error",
+    ignoredFlags: ["-h", "--help"],
+    unknownErrorPrefix: "Unknown option",
   });
 
   const { pane, danger, merge, draft, verbose } = booleans;
