@@ -7,7 +7,7 @@ import {
   deleteLocalBranch,
   branchExists,
 } from "./git";
-import { createPane, sendCommand, sendText } from "./wezterm";
+import { createPane, sendCommand, sendText, checkWeztermAvailable } from "./wezterm";
 import { buildClaudeCommand } from "./claude";
 import { executeClean, type CleanArgs } from "./clean";
 import { confirm } from "./prompt";
@@ -54,7 +54,7 @@ Arguments:
   [prompt]       Prompt to pass to Claude Code (defaults to task-name if omitted)
 
 Options:
-  -p, --pane       Open in a new WezTerm pane (default: run in current terminal)
+  -p, --pane       Open in a new WezTerm pane (requires WezTerm; default: run in current terminal)
   --plan <file>    Read prompt from a plan file (cannot be used with inline prompt)
   --base <branch>  Specify base branch (default: current branch)
   --danger         Skip workspace warning (uses --dangerously-skip-permissions)
@@ -207,6 +207,18 @@ async function readPlanFile(filePath: string): Promise<string> {
 export async function runCreate(args: CreateArgs): Promise<void> {
   const { branchName, taskName, planFile, danger, merge, draft, baseBranch, pane } = args;
   let { prompt } = args;
+
+  // Check WezTerm availability when --pane is specified
+  if (pane) {
+    const available = await checkWeztermAvailable();
+    if (!available) {
+      throw new Error(
+        "WezTerm CLI is not installed. The --pane option requires WezTerm.\n" +
+          "Install WezTerm: https://wezfurlong.org/wezterm/installation.html\n" +
+          "Or run without --pane to use the current terminal."
+      );
+    }
+  }
 
   // Read prompt from plan file
   if (planFile) {

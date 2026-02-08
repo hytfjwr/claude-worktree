@@ -18,7 +18,7 @@ export {
 export type { GitContext, WorktreeInfo, WorktreeStatus } from "./git";
 
 // WezTerm utilities
-export { splitPaneRight, setTabTitle, sendText, sendCommand, createPane } from "./wezterm";
+export { splitPaneRight, setTabTitle, sendText, sendCommand, createPane, checkWeztermAvailable } from "./wezterm";
 export type { PaneOptions } from "./wezterm";
 
 // Claude utilities

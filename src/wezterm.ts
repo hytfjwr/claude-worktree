@@ -1,5 +1,18 @@
 import { $ } from "bun";
 
+export async function checkWeztermAvailable(): Promise<boolean> {
+  try {
+    const proc = Bun.spawn(["which", "wezterm"], {
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+    const exitCode = await proc.exited;
+    return exitCode === 0;
+  } catch {
+    return false;
+  }
+}
+
 export type PaneOptions = {
   title?: string;
   keepFocus?: boolean; // If true, restore focus to the original pane after split

@@ -1,5 +1,5 @@
 import { describe, expect, test, afterEach, mock } from "bun:test";
-import { getCurrentPaneId } from "./wezterm";
+import { getCurrentPaneId, checkWeztermAvailable } from "./wezterm";
 
 // ============================================================================
 // Tests for pure functions using environment variables (no mocks needed)
@@ -26,6 +26,13 @@ describe("getCurrentPaneId", () => {
     delete process.env.WEZTERM_PANE;
     const result = getCurrentPaneId();
     expect(result).toBeUndefined();
+  });
+});
+
+describe("checkWeztermAvailable", () => {
+  test("returns a boolean", async () => {
+    const result = await checkWeztermAvailable();
+    expect(typeof result).toBe("boolean");
   });
 });
 
