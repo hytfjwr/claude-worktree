@@ -11,6 +11,7 @@ import {
   type CommitInfo,
   type AheadBehind,
 } from "./git";
+import { startSpinner, type Spinner } from "./spinner";
 
 export type ListArgs = {
   json: boolean;
@@ -35,6 +36,7 @@ export type ListDeps = {
   getLastCommit: (worktreePath: string) => Promise<CommitInfo | null>;
   getAheadBehind: (branch: string, baseBranch: string) => Promise<AheadBehind | null>;
   getMainBranch: () => Promise<string>;
+  startSpinner: (message: string) => Spinner;
 };
 
 const defaultDeps: ListDeps = {
@@ -44,6 +46,7 @@ const defaultDeps: ListDeps = {
   getLastCommit,
   getAheadBehind,
   getMainBranch,
+  startSpinner,
 };
 
 // ANSI color codes
@@ -184,36 +187,53 @@ export function formatSummary(entries: WorktreeListEntry[]): string {
 export async function executeList(args: ListArgs, deps: ListDeps = defaultDeps): Promise<ListResult> {
   const result: ListResult = { entries: [] };
 
-  // Fetch and prune (graceful failure)
+  const spinner = args.json ? null : deps.startSpinner("Fetching worktree information...");
+  let succeeded = false;
+
   try {
-    await deps.fetchAndPrune();
-  } catch {
-    // Silently continue
+    // Fetch and prune (graceful failure)
+    try {
+      await deps.fetchAndPrune();
+    } catch {
+      // Silently continue
+    }
+
+    const worktrees = await deps.listWorktrees();
+
+    if (worktrees.length > 0) {
+      const statuses = await deps.getWorktreeStatuses(worktrees);
+      const mainBranch = await deps.getMainBranch();
+
+      // Build entries
+      for (const status of statuses) {
+        const commit = await deps.getLastCommit(status.worktree.path);
+
+        let aheadBehind: AheadBehind | null = null;
+        if (status.worktree.branch && !status.worktree.isMain) {
+          aheadBehind = await deps.getAheadBehind(status.worktree.branch, mainBranch);
+        }
+
+        result.entries.push({ worktree: status.worktree, status, commit, aheadBehind });
+      }
+    }
+
+    succeeded = true;
+  } finally {
+    if (succeeded) {
+      spinner?.stop();
+    } else {
+      spinner?.fail("Failed to fetch worktree information");
+    }
   }
 
-  const worktrees = await deps.listWorktrees();
-  if (worktrees.length === 0) {
+  // Empty result
+  if (result.entries.length === 0) {
     if (args.json) {
       console.log(JSON.stringify({ worktrees: [] }, null, 2));
     } else {
       console.log("No worktrees found.");
     }
     return result;
-  }
-
-  const statuses = await deps.getWorktreeStatuses(worktrees);
-  const mainBranch = await deps.getMainBranch();
-
-  // Build entries
-  for (const status of statuses) {
-    const commit = await deps.getLastCommit(status.worktree.path);
-
-    let aheadBehind: AheadBehind | null = null;
-    if (status.worktree.branch && !status.worktree.isMain) {
-      aheadBehind = await deps.getAheadBehind(status.worktree.branch, mainBranch);
-    }
-
-    result.entries.push({ worktree: status.worktree, status, commit, aheadBehind });
   }
 
   // JSON mode

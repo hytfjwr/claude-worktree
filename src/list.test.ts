@@ -63,6 +63,11 @@ function makeListEntry(overrides: Partial<WorktreeListEntry> = {}): WorktreeList
   };
 }
 
+const noopSpinner = (_message: string) => ({
+  stop: (_finalMessage?: string) => {},
+  fail: (_message: string) => {},
+});
+
 function makeListDeps(overrides: Partial<ListDeps> = {}): ListDeps {
   return {
     fetchAndPrune: async () => {},
@@ -71,6 +76,7 @@ function makeListDeps(overrides: Partial<ListDeps> = {}): ListDeps {
     getLastCommit: async () => makeCommitInfo(),
     getAheadBehind: async () => null,
     getMainBranch: async () => "main",
+    startSpinner: noopSpinner,
     ...overrides,
   };
 }
@@ -501,5 +507,60 @@ describe("executeList", () => {
 
     const parsed = JSON.parse(jsonOutput);
     expect(parsed.worktrees).toEqual([]);
+  });
+
+  test("spinner is not started in JSON mode", async () => {
+    let spinnerStarted = false;
+    const deps = makeListDeps({
+      startSpinner: (_message: string) => {
+        spinnerStarted = true;
+        return { stop: () => {}, fail: (_msg: string) => {} };
+      },
+    });
+
+    await executeList({ json: true, verbose: false }, deps);
+
+    expect(spinnerStarted).toBe(false);
+  });
+
+  test("spinner stop is called on success", async () => {
+    const mainWt = makeWorktree({ isMain: true, branch: "main", path: "/repo" });
+    const mainStatus = makeStatus({ isMain: true, branch: "main", path: "/repo" });
+
+    let stopped = false;
+    const deps = makeListDeps({
+      listWorktrees: async () => [mainWt],
+      getWorktreeStatuses: async () => [mainStatus],
+      getLastCommit: async () => makeCommitInfo(),
+      startSpinner: (_message: string) => ({
+        stop: () => {
+          stopped = true;
+        },
+        fail: (_msg: string) => {},
+      }),
+    });
+
+    await executeList(defaultArgs, deps);
+
+    expect(stopped).toBe(true);
+  });
+
+  test("spinner fail is called on error", async () => {
+    let failMessage = "";
+    const deps = makeListDeps({
+      listWorktrees: async () => {
+        throw new Error("git error");
+      },
+      startSpinner: (_message: string) => ({
+        stop: () => {},
+        fail: (msg: string) => {
+          failMessage = msg;
+        },
+      }),
+    });
+
+    await expect(executeList(defaultArgs, deps)).rejects.toThrow("git error");
+
+    expect(failMessage).toBe("Failed to fetch worktree information");
   });
 });
