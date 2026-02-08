@@ -37,7 +37,7 @@ export type Command =
   | { type: "clean"; args: CleanArgs };
 
 export function showHelp(): void {
-  console.log(`claude-worktree - WezTerm + git worktree + Claude Code で並列開発するCLI
+  console.log(`claude-worktree - CLI for parallel development with WezTerm + git worktree + Claude Code
 
 Usage:
   claude-worktree <branch-name> <task-name> [prompt]
@@ -49,35 +49,35 @@ Commands:
   clean                      Remove unnecessary worktrees
 
 Arguments:
-  <branch-name>  作成するgit worktreeのブランチ名
-  <task-name>    タスク名（WezTermタブのタイトルになる）
-  [prompt]       Claude Codeに渡すプロンプト（省略時はtask-nameを使用）
+  <branch-name>  Branch name for the git worktree to create
+  <task-name>    Task name (used as WezTerm tab title)
+  [prompt]       Prompt to pass to Claude Code (defaults to task-name if omitted)
 
 Options:
-  -p, --pane       WezTermの新しいペインで開く（デフォルト: 現在のターミナルで実行）
-  --plan <file>    プランファイルからプロンプトを読み込む（インラインpromptと併用不可）
-  --base <branch>  ベースブランチを指定（デフォルト: 現在のブランチ）
-  --danger         ワークスペース警告をスキップ（--dangerously-skip-permissions を使用）
-  --merge          タスク完了後に元ブランチへ自動マージ・クリーンアップ
-  --draft          タスク完了後にDraft PRを自動作成（--mergeと併用不可）
-  -v, --verbose    フック実行時のログを表示
-  -h, --help       このヘルプを表示
+  -p, --pane       Open in a new WezTerm pane (default: run in current terminal)
+  --plan <file>    Read prompt from a plan file (cannot be used with inline prompt)
+  --base <branch>  Specify base branch (default: current branch)
+  --danger         Skip workspace warning (uses --dangerously-skip-permissions)
+  --merge          Auto-merge into base branch and cleanup after task completion
+  --draft          Auto-create Draft PR after task completion (cannot be used with --merge)
+  -v, --verbose    Show hook execution logs
+  -h, --help       Show this help
 
 Clean options:
-  -f, --force    確認プロンプトをスキップ
-  -a, --all      全worktreeを表示して手動選択
-  -n, --dry-run  削除せず対象を表示のみ
-  -v, --verbose  フック実行時のログを表示
+  -f, --force    Skip confirmation prompt
+  -a, --all      Show all worktrees for manual selection
+  -n, --dry-run  Preview targets without deleting
+  -v, --verbose  Show hook execution logs
 
 Examples:
-  claude-worktree feature/auth 'Auth実装' '認証機能を実装して'
-  claude-worktree feature/auth 'Auth実装' '認証機能を実装して' -p
-  claude-worktree fix/bug-123 'バグ修正' --pane
-  claude-worktree feature/api 'API実装' --plan ./plan.md
-  claude-worktree feature/auth 'Auth実装' '認証機能を実装して' --danger
-  claude-worktree feature/auth 'Auth実装' '認証機能を実装して' --merge
-  claude-worktree feature/auth 'Auth実装' '認証機能を実装して' --draft
-  claude-worktree feature/auth 'Auth実装' '認証機能を実装して' --draft --base main
+  claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature'
+  claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature' -p
+  claude-worktree fix/bug-123 'Fix Bug' --pane
+  claude-worktree feature/api 'Implement API' --plan ./plan.md
+  claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature' --danger
+  claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature' --merge
+  claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature' --draft
+  claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature' --draft --base main
   claude-worktree clean
   claude-worktree clean --dry-run`);
 }
@@ -87,8 +87,8 @@ export function parseCreateArgs(args: string[]): CreateArgs {
     throw new Error(
       "Usage: claude-worktree <branch-name> <task-name> [prompt]\n" +
         "       claude-worktree <branch-name> <task-name> --plan <file-path>\n" +
-        "Example: claude-worktree feature/auth 'Auth実装' '認証機能を実装して'\n" +
-        "         claude-worktree feature/auth 'Auth実装' --plan ./plan.md"
+        "Example: claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature'\n" +
+        "         claude-worktree feature/auth 'Implement Auth' --plan ./plan.md"
     );
   }
 
@@ -113,7 +113,13 @@ export function parseCreateArgs(args: string[]): CreateArgs {
   const { pane, danger, merge, draft, verbose } = booleans;
   const { baseBranch, planFile } = strings;
 
-  // --merge と --draft の排他性チェック
+  // Check for unknown options
+  const unknownFlag = remaining.find((arg) => arg.startsWith("-"));
+  if (unknownFlag) {
+    throw new Error(`Unknown option: ${unknownFlag}`);
+  }
+
+  // Mutual exclusivity check for --merge and --draft
   if (merge && draft) {
     throw new Error(
       "Cannot use both --merge and --draft options. Please use one or the other."
@@ -122,7 +128,7 @@ export function parseCreateArgs(args: string[]): CreateArgs {
 
   const inlinePrompt = remaining.join(" ");
 
-  // 排他性チェック: --plan とインラインプロンプトの両方は指定不可
+  // Mutual exclusivity check: cannot specify both --plan and inline prompt
   if (planFile && inlinePrompt) {
     throw new Error(
       "Cannot use both --plan and inline prompt. Please use one or the other."
@@ -165,7 +171,7 @@ export function parseCleanArgs(args: string[]): CleanArgs {
 }
 
 export function parseArgs(args: string[]): Command {
-  // ヘルプフラグのチェック
+  // Check for help flags
   if (args.length === 0 || args.includes("-h") || args.includes("--help")) {
     return { type: "help" };
   }
@@ -202,16 +208,16 @@ export async function runCreate(args: CreateArgs): Promise<void> {
   const { branchName, taskName, planFile, danger, merge, draft, baseBranch, pane } = args;
   let { prompt } = args;
 
-  // プランファイルからプロンプトを読み込み
+  // Read prompt from plan file
   if (planFile) {
     prompt = await readPlanFile(planFile);
   }
 
-  // Git情報を取得
+  // Get git info
   const git = await getGitContext();
   const worktreePath = getWorktreePath(git.repoRoot, git.repoName, branchName);
 
-  // baseBranch が指定されていれば使用、なければ現在のブランチ
+  // Use baseBranch if specified, otherwise use current branch
   const effectiveBaseBranch = baseBranch ?? git.currentBranch;
 
   const config = await loadProjectConfig(git.repoRoot);
@@ -233,7 +239,7 @@ export async function runCreate(args: CreateArgs): Promise<void> {
     console.log(`📝 Draft PR to: ${effectiveBaseBranch}`);
   }
 
-  // 既存ワークツリーの重複チェック
+  // Check for duplicate existing worktree
   const existingWorktree = await findWorktreeByBranch(branchName);
 
   if (existingWorktree) {
@@ -241,25 +247,25 @@ export async function runCreate(args: CreateArgs): Promise<void> {
 
     let confirmed: boolean;
     if (existingWorktree.isDirty) {
-      console.log("⚠️  警告: 未コミットの変更があります");
+      console.log("⚠️  Warning: there are uncommitted changes");
       confirmed = await confirm(
-        "変更を破棄してworktreeを削除しますか？"
+        "Discard changes and delete the worktree?"
       );
     } else {
       confirmed = await confirm(
-        "既存のworktreeを削除して新しいセッションを開始しますか？"
+        "Delete the existing worktree and start a new session?"
       );
     }
 
     if (!confirmed) {
-      console.log("キャンセルしました。");
+      console.log("Cancelled.");
       return;
     }
 
     // preClean hook
     if (config?.preClean) {
       const hookCmd = buildHookCommand(config.preClean, { path: existingWorktree.path });
-      const spinner = args.verbose ? null : startSpinner("preClean hook を実行中...");
+      const spinner = args.verbose ? null : startSpinner("Running preClean hook...");
       try {
         await runHook(hookCmd, git.repoRoot, { verbose: args.verbose });
         spinner?.stop();
@@ -270,8 +276,8 @@ export async function runCreate(args: CreateArgs): Promise<void> {
       }
     }
 
-    // 既存ワークツリーとブランチを削除
-    console.log("🗑️  既存のworktreeを削除中...");
+    // Delete existing worktree and branch
+    console.log("🗑️  Deleting existing worktree...");
     await removeWorktree(existingWorktree.path, existingWorktree.isDirty);
     console.log(`  ✓ Worktree deleted: ${existingWorktree.path}`);
 
@@ -279,36 +285,36 @@ export async function runCreate(args: CreateArgs): Promise<void> {
       await deleteLocalBranch(branchName, true);
       console.log(`  ✓ Branch deleted: ${branchName}`);
     } catch {
-      // ブランチが存在しない場合は無視
+      // Ignore if branch does not exist
       console.log(`  ⚠️  Branch not found (skipping): ${branchName}`);
     }
 
     console.log("");
   }
 
-  // ブランチのみ存在（ワークツリーなし）のチェック
+  // Check if branch exists without a worktree
   if (!existingWorktree) {
     const branchAlreadyExists = await branchExists(branchName);
 
     if (branchAlreadyExists) {
-      console.log(`\n⚠️  ブランチが既に存在します: ${branchName}`);
+      console.log(`\n⚠️  Branch already exists: ${branchName}`);
 
       const confirmed = await confirm(
-        "ブランチを削除して新規作成しますか？"
+        "Delete the branch and create a new one?"
       );
 
       if (!confirmed) {
-        console.log("キャンセルしました。");
+        console.log("Cancelled.");
         return;
       }
 
-      console.log("🗑️  既存のブランチを削除中...");
+      console.log("🗑️  Deleting existing branch...");
       try {
         await deleteLocalBranch(branchName, true);
         console.log(`  ✓ Branch deleted: ${branchName}`);
       } catch (e) {
         const errorMessage = e instanceof Error ? e.message : String(e);
-        console.log(`  ❌ ブランチの削除に失敗しました: ${errorMessage}`);
+        console.log(`  ❌ Failed to delete branch: ${errorMessage}`);
         return;
       }
       console.log("");
@@ -325,7 +331,7 @@ export async function runCreate(args: CreateArgs): Promise<void> {
       slot = await findAvailableSlot();
     }
     const hookCmd = buildHookCommand(config.postCreate, { path: worktreePath, slot });
-    const spinner = args.verbose ? null : startSpinner("postCreate hook を実行中...");
+    const spinner = args.verbose ? null : startSpinner("Running postCreate hook...");
     try {
       await runHook(hookCmd, git.repoRoot, { verbose: args.verbose });
       spinner?.stop();
@@ -334,7 +340,7 @@ export async function runCreate(args: CreateArgs): Promise<void> {
       spinner?.fail("postCreate hook failed");
       console.error(`❌ postCreate hook failed: ${message}`);
       console.log("🗑️  Rolling back...");
-      // preClean フックでコンテナ等をクリーンアップしてからワークツリーを削除
+      // Run preClean hook to clean up containers etc. before removing worktree
       if (config?.preClean) {
         const cleanCmd = buildHookCommand(config.preClean, { path: worktreePath });
         try {
@@ -352,7 +358,7 @@ export async function runCreate(args: CreateArgs): Promise<void> {
     }
   }
 
-  // 実行コマンドを構築
+  // Build execution command
   const claudeOptions = {
     prompt,
     dangerouslySkipPermissions: danger,
@@ -371,7 +377,7 @@ export async function runCreate(args: CreateArgs): Promise<void> {
   };
 
   if (pane) {
-    // WezTermペインを作成してコマンドを送信
+    // Create WezTerm pane and send command
     const paneId = await createPane({ title: taskName, keepFocus: true });
     console.log(`🪟 Created pane: ${paneId}`);
 
@@ -382,13 +388,13 @@ export async function runCreate(args: CreateArgs): Promise<void> {
 
     await sendCommand(paneId, commands);
 
-    // Claude起動後、プロンプト確定のためにEnterを送信
+    // Send Enter to confirm the prompt after Claude starts
     await Bun.sleep(2000);
     await sendText(paneId, "\n");
 
     console.log("✅ Worktree created and Claude started in new pane");
   } else {
-    // 現在のターミナルでClaude Codeを起動
+    // Launch Claude Code in current terminal
     console.log("✅ Worktree created. Starting Claude Code...");
 
     const commands = [

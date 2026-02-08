@@ -48,7 +48,7 @@ claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature'
 claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature' --pane
 claude-worktree fix/bug-123 'Fix login bug' -p
 claude-worktree feature/api 'API Implementation' --plan ./plan.md
-claude-worktree feature/auth 'Auth実装' '認証機能を実装' --base develop
+claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature' --base develop
 claude-worktree clean
 claude-worktree clean --dry-run
 ```
@@ -57,7 +57,7 @@ claude-worktree clean --dry-run
 
 - `-p, --pane` - Open in a new WezTerm pane (default: run in current terminal)
 - `--plan <file>` - Read prompt from a file (cannot be used with inline prompt)
-- `--base <branch>` - ベースブランチを指定（デフォルト: 現在のブランチ）
+- `--base <branch>` - Specify base branch (default: current branch)
 - `--danger` - Skip workspace warning (uses --dangerously-skip-permissions)
 - `-h, --help` - Show help
 

@@ -61,18 +61,18 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
     errors: [],
   };
 
-  console.log("🔄 リモート参照を更新中...");
+  console.log("🔄 Updating remote references...");
   try {
     await deps.fetchAndPrune();
   } catch {
-    console.log("⚠️  リモート参照の更新に失敗しました（続行します）");
+    console.log("⚠️  Failed to update remote references (continuing)");
   }
 
-  console.log("📋 Worktree一覧を取得中...");
+  console.log("📋 Fetching worktree list...");
   const worktrees = await deps.listWorktrees();
 
   if (worktrees.length === 0) {
-    console.log("Worktreeがありません。");
+    console.log("No worktrees found.");
     return result;
   }
 
@@ -82,7 +82,7 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
   const cleanableStatuses = statuses.filter((s) => !s.worktree.isMain);
 
   if (cleanableStatuses.length === 0) {
-    console.log("削除可能なworktreeがありません。");
+    console.log("No cleanable worktrees found.");
     return result;
   }
 
@@ -96,12 +96,12 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
     const autoCleanable = cleanableStatuses.filter((s) => s.canAutoClean);
 
     if (autoCleanable.length === 0) {
-      console.log("\n✨ 不要なworktreeは検出されませんでした。");
-      console.log("ヒント: --all オプションで全worktreeを表示できます。");
+      console.log("\n✨ No unnecessary worktrees detected.");
+      console.log("Hint: use --all option to show all worktrees.");
       return result;
     }
 
-    console.log("\n🗑️  削除候補:");
+    console.log("\n🗑️  Deletion candidates:");
     for (const status of autoCleanable) {
       const branch = status.worktree.branch || "(detached)";
       console.log(`  • ${branch}`);
@@ -113,13 +113,13 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
   }
 
   if (toDelete.length === 0) {
-    console.log("\n削除対象がありません。");
+    console.log("\nNo targets to delete.");
     return result;
   }
 
   // Dry run mode
   if (args.dryRun) {
-    console.log("\n[dry-run] 以下のworktreeが削除されます:");
+    console.log("\n[dry-run] The following worktrees would be deleted:");
     for (const status of toDelete) {
       console.log(`  • ${status.worktree.branch || status.worktree.path}`);
     }
@@ -130,10 +130,10 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
   if (!args.force) {
     console.log("");
     const confirmed = await deps.confirm(
-      `${toDelete.length}個のworktreeを削除しますか？`
+      `Delete ${toDelete.length} worktree(s)?`
     );
     if (!confirmed) {
-      console.log("キャンセルしました。");
+      console.log("Cancelled.");
       return result;
     }
   }
@@ -153,14 +153,14 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
   }
 
   // Execute deletion
-  console.log("\n🗑️  削除中...");
+  console.log("\n🗑️  Deleting...");
   for (const status of toDelete) {
     const { worktree } = status;
     try {
       // preClean hook
       if (config?.preClean && repoRoot) {
         const hookCmd = deps.buildHookCommand(config.preClean, { path: worktree.path });
-        const spinner = args.verbose ? null : startSpinner("preClean hook を実行中...");
+        const spinner = args.verbose ? null : startSpinner("Running preClean hook...");
         try {
           await deps.runHook(hookCmd, repoRoot, { verbose: args.verbose });
           spinner?.stop();
@@ -179,7 +179,7 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
           await deps.deleteLocalBranch(worktree.branch, true);
         } catch (error) {
           const branchError = error instanceof Error ? error.message : String(error);
-          console.warn(`  ⚠️  ブランチ ${worktree.branch} の削除に失敗しました: ${branchError}`);
+          console.warn(`  ⚠️  Failed to delete branch ${worktree.branch}: ${branchError}`);
         }
       }
 
@@ -195,10 +195,10 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
   // Summary
   console.log("");
   if (result.deleted.length > 0) {
-    console.log(`✅ ${result.deleted.length}個のworktreeを削除しました。`);
+    console.log(`✅ Deleted ${result.deleted.length} worktree(s).`);
   }
   if (result.errors.length > 0) {
-    console.log(`⚠️  ${result.errors.length}個のworktreeの削除に失敗しました。`);
+    console.log(`⚠️  Failed to delete ${result.errors.length} worktree(s).`);
   }
 
   return result;

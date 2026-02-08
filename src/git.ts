@@ -86,7 +86,7 @@ export async function getMainBranch(): Promise<string> {
 export type ParsedWorktree = Omit<WorktreeInfo, "isDirty">;
 
 /**
- * git worktree list --porcelain の出力をパースする純粋関数
+ * Pure function to parse git worktree list --porcelain output.
  */
 export function parseWorktreePorcelain(output: string, mainBranch: string): ParsedWorktree[] {
   const trimmed = output.trim();
@@ -221,7 +221,7 @@ export async function getWorktreeStatuses(worktrees: WorktreeInfo[]): Promise<Wo
         branchMerged: false,
         branchDeletedOnRemote: false,
         canAutoClean: false,
-        reason: "メインworktree",
+        reason: "Main worktree",
       });
       continue;
     }
@@ -232,7 +232,7 @@ export async function getWorktreeStatuses(worktrees: WorktreeInfo[]): Promise<Wo
         branchMerged: false,
         branchDeletedOnRemote: false,
         canAutoClean: false,
-        reason: "ロック中",
+        reason: "Locked",
       });
       continue;
     }
@@ -243,7 +243,7 @@ export async function getWorktreeStatuses(worktrees: WorktreeInfo[]): Promise<Wo
         branchMerged: false,
         branchDeletedOnRemote: false,
         canAutoClean: false,
-        reason: "未コミットの変更あり",
+        reason: "Has uncommitted changes",
       });
       continue;
     }
@@ -254,13 +254,13 @@ export async function getWorktreeStatuses(worktrees: WorktreeInfo[]): Promise<Wo
 
     let reason = "";
     if (branchMerged && branchDeletedOnRemote) {
-      reason = "マージ済み & リモート削除済み";
+      reason = "Merged & remote deleted";
     } else if (branchMerged) {
-      reason = "マージ済み";
+      reason = "Merged";
     } else if (branchDeletedOnRemote) {
-      reason = "リモート削除済み";
+      reason = "Remote deleted";
     } else {
-      reason = "アクティブ";
+      reason = "Active";
     }
 
     statuses.push({

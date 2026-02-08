@@ -1,7 +1,7 @@
 {
   "name": "claude-worktree",
   "version": "1.0.0",
-  "description": "WezTerm + git worktree + Claude Code で並列開発するCLI",
+  "description": "CLI for parallel development with WezTerm + git worktree + Claude Code",
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",

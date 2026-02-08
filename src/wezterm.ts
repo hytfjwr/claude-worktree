@@ -2,7 +2,7 @@ import { $ } from "bun";
 
 export type PaneOptions = {
   title?: string;
-  keepFocus?: boolean; // trueの場合、split後に元のペインにフォーカスを戻す
+  keepFocus?: boolean; // If true, restore focus to the original pane after split
 };
 
 export async function splitPaneRight(): Promise<string> {
@@ -21,9 +21,9 @@ export async function sendText(
   paneId: string,
   text: string
 ): Promise<void> {
-  // --no-paste を使用（文字を直接送信）
-  // ヒアドキュメント形式でプロンプトを渡すため、改行があっても
-  // シェルはデリミタが来るまで入力を待ち続ける
+  // Use --no-paste (send characters directly).
+  // Since we pass the prompt via heredoc format, the shell will keep
+  // waiting for input until the delimiter is reached, even with newlines.
   const proc = Bun.spawn(["wezterm", "cli", "send-text", "--no-paste", "--pane-id", paneId], {
     stdin: new TextEncoder().encode(text),
   });
@@ -37,12 +37,12 @@ export async function sendCommand(
   await sendText(paneId, command + "\n");
 }
 
-// 現在のペインIDを取得（WezTermが自動設定する環境変数を使用）
+// Get current pane ID (uses the environment variable automatically set by WezTerm)
 export function getCurrentPaneId(): string | undefined {
   return process.env.WEZTERM_PANE;
 }
 
-// 指定ペインにフォーカスを移動
+// Move focus to the specified pane
 export async function activatePane(
   paneId: string
 ): Promise<void> {

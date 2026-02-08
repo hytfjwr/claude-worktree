@@ -3,34 +3,34 @@ import { parseArgs, parseCreateArgs, parseCleanArgs } from "./cli";
 
 describe("parseArgs", () => {
   describe("help", () => {
-    test("空args - ヘルプを返す", () => {
+    test("empty args - returns help", () => {
       const result = parseArgs([]);
       expect(result).toEqual({ type: "help" });
     });
 
-    test("-h フラグ - ヘルプを返す", () => {
+    test("-h flag - returns help", () => {
       const result = parseArgs(["-h"]);
       expect(result).toEqual({ type: "help" });
     });
 
-    test("--help フラグ - ヘルプを返す", () => {
+    test("--help flag - returns help", () => {
       const result = parseArgs(["--help"]);
       expect(result).toEqual({ type: "help" });
     });
 
-    test("途中の -h - ヘルプを返す", () => {
+    test("-h in the middle - returns help", () => {
       const result = parseArgs(["feature/test", "-h", "task"]);
       expect(result).toEqual({ type: "help" });
     });
 
-    test("途中の --help - ヘルプを返す", () => {
+    test("--help in the middle - returns help", () => {
       const result = parseArgs(["clean", "--help"]);
       expect(result).toEqual({ type: "help" });
     });
   });
 
   describe("clean", () => {
-    test("基本 - cleanコマンド", () => {
+    test("basic - clean command", () => {
       const result = parseArgs(["clean"]);
       expect(result).toEqual({
         type: "clean",
@@ -38,21 +38,21 @@ describe("parseArgs", () => {
       });
     });
 
-    test("clean + create引数 - cleanとして解釈", () => {
+    test("clean + create args - interpreted as clean", () => {
       const result = parseArgs(["clean"]);
       expect(result.type).toBe("clean");
     });
   });
 
   describe("create", () => {
-    test("branch + task - 基本的なcreate", () => {
-      const result = parseArgs(["feature/auth", "Auth実装"]);
+    test("branch + task - basic create", () => {
+      const result = parseArgs(["feature/auth", "Implement Auth"]);
       expect(result).toEqual({
         type: "create",
         args: {
           branchName: "feature/auth",
-          taskName: "Auth実装",
-          prompt: "Auth実装",
+          taskName: "Implement Auth",
+          prompt: "Implement Auth",
           planFile: undefined,
           danger: false,
           merge: false,
@@ -65,13 +65,13 @@ describe("parseArgs", () => {
     });
 
     test("branch + task + inline prompt", () => {
-      const result = parseArgs(["feature/auth", "Auth実装", "認証機能を実装して"]);
+      const result = parseArgs(["feature/auth", "Implement Auth", "Implement authentication feature"]);
       expect(result).toEqual({
         type: "create",
         args: {
           branchName: "feature/auth",
-          taskName: "Auth実装",
-          prompt: "認証機能を実装して",
+          taskName: "Implement Auth",
+          prompt: "Implement authentication feature",
           planFile: undefined,
           danger: false,
           merge: false,
@@ -86,12 +86,12 @@ describe("parseArgs", () => {
 });
 
 describe("parseCreateArgs", () => {
-  test("基本 - branch + task", () => {
-    const result = parseCreateArgs(["feature/test", "テストタスク"]);
+  test("basic - branch + task", () => {
+    const result = parseCreateArgs(["feature/test", "Test Task"]);
     expect(result).toEqual({
       branchName: "feature/test",
-      taskName: "テストタスク",
-      prompt: "テストタスク",
+      taskName: "Test Task",
+      prompt: "Test Task",
       planFile: undefined,
       danger: false,
       merge: false,
@@ -102,12 +102,12 @@ describe("parseCreateArgs", () => {
     });
   });
 
-  test("inline prompt あり", () => {
-    const result = parseCreateArgs(["fix/bug", "バグ修正", "このバグを直して"]);
+  test("with inline prompt", () => {
+    const result = parseCreateArgs(["fix/bug", "Fix Bug", "Fix this bug"]);
     expect(result).toEqual({
       branchName: "fix/bug",
-      taskName: "バグ修正",
-      prompt: "このバグを直して",
+      taskName: "Fix Bug",
+      prompt: "Fix this bug",
       planFile: undefined,
       danger: false,
       merge: false,
@@ -118,12 +118,12 @@ describe("parseCreateArgs", () => {
     });
   });
 
-  test("--plan オプション", () => {
-    const result = parseCreateArgs(["feature/api", "API実装", "--plan", "./plan.md"]);
+  test("--plan option", () => {
+    const result = parseCreateArgs(["feature/api", "Implement API", "--plan", "./plan.md"]);
     expect(result).toEqual({
       branchName: "feature/api",
-      taskName: "API実装",
-      prompt: "API実装",
+      taskName: "Implement API",
+      prompt: "Implement API",
       planFile: "./plan.md",
       danger: false,
       merge: false,
@@ -134,12 +134,12 @@ describe("parseCreateArgs", () => {
     });
   });
 
-  test("--danger オプション", () => {
-    const result = parseCreateArgs(["feature/test", "タスク", "プロンプト", "--danger"]);
+  test("--danger option", () => {
+    const result = parseCreateArgs(["feature/test", "Task", "Prompt", "--danger"]);
     expect(result).toEqual({
       branchName: "feature/test",
-      taskName: "タスク",
-      prompt: "プロンプト",
+      taskName: "Task",
+      prompt: "Prompt",
       planFile: undefined,
       danger: true,
       merge: false,
@@ -150,12 +150,12 @@ describe("parseCreateArgs", () => {
     });
   });
 
-  test("--danger + --plan オプション", () => {
-    const result = parseCreateArgs(["feature/test", "タスク", "--plan", "plan.md", "--danger"]);
+  test("--danger + --plan options", () => {
+    const result = parseCreateArgs(["feature/test", "Task", "--plan", "plan.md", "--danger"]);
     expect(result).toEqual({
       branchName: "feature/test",
-      taskName: "タスク",
-      prompt: "タスク",
+      taskName: "Task",
+      prompt: "Task",
       planFile: "plan.md",
       danger: true,
       merge: false,
@@ -166,12 +166,12 @@ describe("parseCreateArgs", () => {
     });
   });
 
-  test("--merge オプション", () => {
-    const result = parseCreateArgs(["feature/test", "タスク", "プロンプト", "--merge"]);
+  test("--merge option", () => {
+    const result = parseCreateArgs(["feature/test", "Task", "Prompt", "--merge"]);
     expect(result).toEqual({
       branchName: "feature/test",
-      taskName: "タスク",
-      prompt: "プロンプト",
+      taskName: "Task",
+      prompt: "Prompt",
       planFile: undefined,
       danger: false,
       merge: true,
@@ -182,12 +182,12 @@ describe("parseCreateArgs", () => {
     });
   });
 
-  test("--merge + --danger オプション", () => {
-    const result = parseCreateArgs(["feature/test", "タスク", "プロンプト", "--merge", "--danger"]);
+  test("--merge + --danger options", () => {
+    const result = parseCreateArgs(["feature/test", "Task", "Prompt", "--merge", "--danger"]);
     expect(result).toEqual({
       branchName: "feature/test",
-      taskName: "タスク",
-      prompt: "プロンプト",
+      taskName: "Task",
+      prompt: "Prompt",
       planFile: undefined,
       danger: true,
       merge: true,
@@ -198,12 +198,12 @@ describe("parseCreateArgs", () => {
     });
   });
 
-  test("--merge + --plan オプション", () => {
-    const result = parseCreateArgs(["feature/test", "タスク", "--plan", "plan.md", "--merge"]);
+  test("--merge + --plan options", () => {
+    const result = parseCreateArgs(["feature/test", "Task", "--plan", "plan.md", "--merge"]);
     expect(result).toEqual({
       branchName: "feature/test",
-      taskName: "タスク",
-      prompt: "タスク",
+      taskName: "Task",
+      prompt: "Task",
       planFile: "plan.md",
       danger: false,
       merge: true,
@@ -214,12 +214,12 @@ describe("parseCreateArgs", () => {
     });
   });
 
-  test("全オプション組み合わせ --merge + --danger + --plan", () => {
-    const result = parseCreateArgs(["feature/test", "タスク", "--plan", "plan.md", "--merge", "--danger"]);
+  test("all options combined --merge + --danger + --plan", () => {
+    const result = parseCreateArgs(["feature/test", "Task", "--plan", "plan.md", "--merge", "--danger"]);
     expect(result).toEqual({
       branchName: "feature/test",
-      taskName: "タスク",
-      prompt: "タスク",
+      taskName: "Task",
+      prompt: "Task",
       planFile: "plan.md",
       danger: true,
       merge: true,
@@ -230,12 +230,12 @@ describe("parseCreateArgs", () => {
     });
   });
 
-  test("--base オプション", () => {
-    const result = parseCreateArgs(["feature/test", "タスク", "プロンプト", "--base", "develop"]);
+  test("--base option", () => {
+    const result = parseCreateArgs(["feature/test", "Task", "Prompt", "--base", "develop"]);
     expect(result).toEqual({
       branchName: "feature/test",
-      taskName: "タスク",
-      prompt: "プロンプト",
+      taskName: "Task",
+      prompt: "Prompt",
       planFile: undefined,
       danger: false,
       merge: false,
@@ -246,12 +246,12 @@ describe("parseCreateArgs", () => {
     });
   });
 
-  test("--base + --danger オプション", () => {
-    const result = parseCreateArgs(["feature/test", "タスク", "プロンプト", "--base", "develop", "--danger"]);
+  test("--base + --danger options", () => {
+    const result = parseCreateArgs(["feature/test", "Task", "Prompt", "--base", "develop", "--danger"]);
     expect(result).toEqual({
       branchName: "feature/test",
-      taskName: "タスク",
-      prompt: "プロンプト",
+      taskName: "Task",
+      prompt: "Prompt",
       planFile: undefined,
       danger: true,
       merge: false,
@@ -262,12 +262,12 @@ describe("parseCreateArgs", () => {
     });
   });
 
-  test("--base + --merge オプション", () => {
-    const result = parseCreateArgs(["feature/test", "タスク", "プロンプト", "--base", "develop", "--merge"]);
+  test("--base + --merge options", () => {
+    const result = parseCreateArgs(["feature/test", "Task", "Prompt", "--base", "develop", "--merge"]);
     expect(result).toEqual({
       branchName: "feature/test",
-      taskName: "タスク",
-      prompt: "プロンプト",
+      taskName: "Task",
+      prompt: "Prompt",
       planFile: undefined,
       danger: false,
       merge: true,
@@ -278,12 +278,12 @@ describe("parseCreateArgs", () => {
     });
   });
 
-  test("--base + --plan オプション", () => {
-    const result = parseCreateArgs(["feature/test", "タスク", "--base", "develop", "--plan", "plan.md"]);
+  test("--base + --plan options", () => {
+    const result = parseCreateArgs(["feature/test", "Task", "--base", "develop", "--plan", "plan.md"]);
     expect(result).toEqual({
       branchName: "feature/test",
-      taskName: "タスク",
-      prompt: "タスク",
+      taskName: "Task",
+      prompt: "Task",
       planFile: "plan.md",
       danger: false,
       merge: false,
@@ -294,12 +294,12 @@ describe("parseCreateArgs", () => {
     });
   });
 
-  test("全オプション組み合わせ --base + --merge + --danger + --plan", () => {
-    const result = parseCreateArgs(["feature/test", "タスク", "--base", "develop", "--plan", "plan.md", "--merge", "--danger"]);
+  test("all options combined --base + --merge + --danger + --plan", () => {
+    const result = parseCreateArgs(["feature/test", "Task", "--base", "develop", "--plan", "plan.md", "--merge", "--danger"]);
     expect(result).toEqual({
       branchName: "feature/test",
-      taskName: "タスク",
-      prompt: "タスク",
+      taskName: "Task",
+      prompt: "Task",
       planFile: "plan.md",
       danger: true,
       merge: true,
@@ -310,12 +310,12 @@ describe("parseCreateArgs", () => {
     });
   });
 
-  test("--draft オプション", () => {
-    const result = parseCreateArgs(["feature/test", "タスク", "プロンプト", "--draft"]);
+  test("--draft option", () => {
+    const result = parseCreateArgs(["feature/test", "Task", "Prompt", "--draft"]);
     expect(result).toEqual({
       branchName: "feature/test",
-      taskName: "タスク",
-      prompt: "プロンプト",
+      taskName: "Task",
+      prompt: "Prompt",
       planFile: undefined,
       danger: false,
       merge: false,
@@ -326,12 +326,12 @@ describe("parseCreateArgs", () => {
     });
   });
 
-  test("--draft + --danger オプション", () => {
-    const result = parseCreateArgs(["feature/test", "タスク", "プロンプト", "--draft", "--danger"]);
+  test("--draft + --danger options", () => {
+    const result = parseCreateArgs(["feature/test", "Task", "Prompt", "--draft", "--danger"]);
     expect(result).toEqual({
       branchName: "feature/test",
-      taskName: "タスク",
-      prompt: "プロンプト",
+      taskName: "Task",
+      prompt: "Prompt",
       planFile: undefined,
       danger: true,
       merge: false,
@@ -342,12 +342,12 @@ describe("parseCreateArgs", () => {
     });
   });
 
-  test("--draft + --base オプション", () => {
-    const result = parseCreateArgs(["feature/test", "タスク", "プロンプト", "--draft", "--base", "develop"]);
+  test("--draft + --base options", () => {
+    const result = parseCreateArgs(["feature/test", "Task", "Prompt", "--draft", "--base", "develop"]);
     expect(result).toEqual({
       branchName: "feature/test",
-      taskName: "タスク",
-      prompt: "プロンプト",
+      taskName: "Task",
+      prompt: "Prompt",
       planFile: undefined,
       danger: false,
       merge: false,
@@ -358,12 +358,12 @@ describe("parseCreateArgs", () => {
     });
   });
 
-  test("--draft + --plan オプション", () => {
-    const result = parseCreateArgs(["feature/test", "タスク", "--draft", "--plan", "plan.md"]);
+  test("--draft + --plan options", () => {
+    const result = parseCreateArgs(["feature/test", "Task", "--draft", "--plan", "plan.md"]);
     expect(result).toEqual({
       branchName: "feature/test",
-      taskName: "タスク",
-      prompt: "タスク",
+      taskName: "Task",
+      prompt: "Task",
       planFile: "plan.md",
       danger: false,
       merge: false,
@@ -374,12 +374,12 @@ describe("parseCreateArgs", () => {
     });
   });
 
-  test("--pane オプション", () => {
-    const result = parseCreateArgs(["feature/test", "タスク", "プロンプト", "--pane"]);
+  test("--pane option", () => {
+    const result = parseCreateArgs(["feature/test", "Task", "Prompt", "--pane"]);
     expect(result).toEqual({
       branchName: "feature/test",
-      taskName: "タスク",
-      prompt: "プロンプト",
+      taskName: "Task",
+      prompt: "Prompt",
       planFile: undefined,
       danger: false,
       merge: false,
@@ -390,12 +390,12 @@ describe("parseCreateArgs", () => {
     });
   });
 
-  test("-p オプション", () => {
-    const result = parseCreateArgs(["feature/test", "タスク", "プロンプト", "-p"]);
+  test("-p option", () => {
+    const result = parseCreateArgs(["feature/test", "Task", "Prompt", "-p"]);
     expect(result).toEqual({
       branchName: "feature/test",
-      taskName: "タスク",
-      prompt: "プロンプト",
+      taskName: "Task",
+      prompt: "Prompt",
       planFile: undefined,
       danger: false,
       merge: false,
@@ -406,12 +406,12 @@ describe("parseCreateArgs", () => {
     });
   });
 
-  test("--pane + --danger オプション", () => {
-    const result = parseCreateArgs(["feature/test", "タスク", "プロンプト", "--pane", "--danger"]);
+  test("--pane + --danger options", () => {
+    const result = parseCreateArgs(["feature/test", "Task", "Prompt", "--pane", "--danger"]);
     expect(result).toEqual({
       branchName: "feature/test",
-      taskName: "タスク",
-      prompt: "プロンプト",
+      taskName: "Task",
+      prompt: "Prompt",
       planFile: undefined,
       danger: true,
       merge: false,
@@ -422,12 +422,12 @@ describe("parseCreateArgs", () => {
     });
   });
 
-  test("--pane + --draft + --base オプション", () => {
-    const result = parseCreateArgs(["feature/test", "タスク", "プロンプト", "--pane", "--draft", "--base", "develop"]);
+  test("--pane + --draft + --base options", () => {
+    const result = parseCreateArgs(["feature/test", "Task", "Prompt", "--pane", "--draft", "--base", "develop"]);
     expect(result).toEqual({
       branchName: "feature/test",
-      taskName: "タスク",
-      prompt: "プロンプト",
+      taskName: "Task",
+      prompt: "Prompt",
       planFile: undefined,
       danger: false,
       merge: false,
@@ -438,134 +438,140 @@ describe("parseCreateArgs", () => {
     });
   });
 
-  test("--verbose オプション", () => {
-    const result = parseCreateArgs(["feature/test", "タスク", "プロンプト", "--verbose"]);
+  test("--verbose option", () => {
+    const result = parseCreateArgs(["feature/test", "Task", "Prompt", "--verbose"]);
     expect(result.verbose).toBe(true);
   });
 
-  test("-v オプション", () => {
-    const result = parseCreateArgs(["feature/test", "タスク", "プロンプト", "-v"]);
+  test("-v option", () => {
+    const result = parseCreateArgs(["feature/test", "Task", "Prompt", "-v"]);
     expect(result.verbose).toBe(true);
   });
 
-  test("-p はプロンプトの一部にならない", () => {
-    const result = parseCreateArgs(["feature/test", "タスク", "-p", "プロンプト"]);
+  test("-p does not become part of prompt", () => {
+    const result = parseCreateArgs(["feature/test", "Task", "-p", "Prompt"]);
     expect(result.pane).toBe(true);
-    expect(result.prompt).toBe("プロンプト");
+    expect(result.prompt).toBe("Prompt");
   });
 
-  test("エラー: --merge と --draft の排他性", () => {
-    expect(() => parseCreateArgs(["feature/test", "タスク", "プロンプト", "--merge", "--draft"])).toThrow(
+  test("error: --merge and --draft are mutually exclusive", () => {
+    expect(() => parseCreateArgs(["feature/test", "Task", "Prompt", "--merge", "--draft"])).toThrow(
       "Cannot use both --merge and --draft options"
     );
   });
 
-  test("エラー: --base に引数がない", () => {
-    expect(() => parseCreateArgs(["feature/test", "タスク", "--base"])).toThrow(
+  test("error: --base without argument", () => {
+    expect(() => parseCreateArgs(["feature/test", "Task", "--base"])).toThrow(
       "--base requires a branch name argument"
     );
   });
 
-  test("エラー: 引数が足りない（0個）", () => {
+  test("error: not enough arguments (0)", () => {
     expect(() => parseCreateArgs([])).toThrow("Usage:");
   });
 
-  test("エラー: 引数が足りない（1個）", () => {
+  test("error: not enough arguments (1)", () => {
     expect(() => parseCreateArgs(["feature/test"])).toThrow("Usage:");
   });
 
-  test("エラー: --plan に引数がない", () => {
-    expect(() => parseCreateArgs(["feature/test", "タスク", "--plan"])).toThrow(
+  test("error: --plan without argument", () => {
+    expect(() => parseCreateArgs(["feature/test", "Task", "--plan"])).toThrow(
       "--plan requires a file path argument"
     );
   });
 
-  test("エラー: --plan とインラインプロンプトの両方", () => {
+  test("error: both --plan and inline prompt", () => {
     expect(() =>
-      parseCreateArgs(["feature/test", "タスク", "プロンプト", "--plan", "plan.md"])
+      parseCreateArgs(["feature/test", "Task", "Prompt", "--plan", "plan.md"])
     ).toThrow("Cannot use both --plan and inline prompt");
   });
 
-  test("複数単語のインラインプロンプト", () => {
-    const result = parseCreateArgs(["feature/test", "タスク", "これは", "複数", "単語"]);
-    expect(result.prompt).toBe("これは 複数 単語");
+  test("multi-word inline prompt", () => {
+    const result = parseCreateArgs(["feature/test", "Task", "this", "is", "multi-word"]);
+    expect(result.prompt).toBe("this is multi-word");
   });
 
-  test("エラー: 不明オプション", () => {
-    expect(() => parseCreateArgs(["feature/test", "タスク", "--unknown"])).toThrow(
+  test("error: unknown option --unknown", () => {
+    expect(() => parseCreateArgs(["feature/test", "Task", "--unknown", "text"])).toThrow(
       "Unknown option: --unknown"
     );
   });
 
-  test("エラー: 不明な短縮オプション", () => {
-    expect(() => parseCreateArgs(["feature/test", "タスク", "-x"])).toThrow(
+  test("error: unknown short option -x", () => {
+    expect(() => parseCreateArgs(["feature/test", "Task", "-x"])).toThrow(
       "Unknown option: -x"
+    );
+  });
+
+  test("error: unknown option after prompt", () => {
+    expect(() => parseCreateArgs(["feature/test", "Task", "Prompt", "--foo"])).toThrow(
+      "Unknown option: --foo"
     );
   });
 });
 
 describe("parseCleanArgs", () => {
-  test("基本 - オプションなし", () => {
+  test("basic - no options", () => {
     const result = parseCleanArgs([]);
     expect(result).toEqual({ force: false, all: false, dryRun: false, verbose: false });
   });
 
-  test("--force フラグ", () => {
+  test("--force flag", () => {
     const result = parseCleanArgs(["--force"]);
     expect(result.force).toBe(true);
   });
 
-  test("-f フラグ", () => {
+  test("-f flag", () => {
     const result = parseCleanArgs(["-f"]);
     expect(result.force).toBe(true);
   });
 
-  test("--all フラグ", () => {
+  test("--all flag", () => {
     const result = parseCleanArgs(["--all"]);
     expect(result.all).toBe(true);
   });
 
-  test("-a フラグ", () => {
+  test("-a flag", () => {
     const result = parseCleanArgs(["-a"]);
     expect(result.all).toBe(true);
   });
 
-  test("--dry-run フラグ", () => {
+  test("--dry-run flag", () => {
     const result = parseCleanArgs(["--dry-run"]);
     expect(result.dryRun).toBe(true);
   });
 
-  test("-n フラグ", () => {
+  test("-n flag", () => {
     const result = parseCleanArgs(["-n"]);
     expect(result.dryRun).toBe(true);
   });
 
-  test("複合フラグ - --force --all --dry-run", () => {
+  test("combined flags - --force --all --dry-run", () => {
     const result = parseCleanArgs(["--force", "--all", "--dry-run"]);
     expect(result).toEqual({ force: true, all: true, dryRun: true, verbose: false });
   });
 
-  test("複合フラグ - 短縮形 -f -a -n", () => {
+  test("combined short flags - -f -a -n", () => {
     const result = parseCleanArgs(["-f", "-a", "-n"]);
     expect(result).toEqual({ force: true, all: true, dryRun: true, verbose: false });
   });
 
-  test("-h/--help は無視される（例外を投げない）", () => {
+  test("-h/--help is ignored (does not throw)", () => {
     const result = parseCleanArgs(["-h"]);
     expect(result).toEqual({ force: false, all: false, dryRun: false, verbose: false });
   });
 
-  test("--verbose フラグ", () => {
+  test("--verbose flag", () => {
     const result = parseCleanArgs(["--verbose"]);
     expect(result.verbose).toBe(true);
   });
 
-  test("-v フラグ", () => {
+  test("-v flag", () => {
     const result = parseCleanArgs(["-v"]);
     expect(result.verbose).toBe(true);
   });
 
-  test("エラー: 不明オプション", () => {
+  test("error: unknown option", () => {
     expect(() => parseCleanArgs(["--unknown"])).toThrow("Unknown option for clean command: --unknown");
   });
 });

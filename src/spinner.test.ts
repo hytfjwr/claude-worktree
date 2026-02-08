@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { lerp, shimmerText, smoothstep, startSpinner } from "./spinner";
 
 describe("startSpinner", () => {
-  test("Spinner オブジェクトを返す", () => {
-    const spinner = startSpinner("テスト中...");
+  test("returns a Spinner object", () => {
+    const spinner = startSpinner("Testing...");
     expect(spinner).toHaveProperty("stop");
     expect(spinner).toHaveProperty("fail");
     expect(typeof spinner.stop).toBe("function");
@@ -11,82 +11,82 @@ describe("startSpinner", () => {
     spinner.stop();
   });
 
-  test("stop() を正常に呼べる", () => {
-    const spinner = startSpinner("処理中...");
+  test("stop() can be called normally", () => {
+    const spinner = startSpinner("Processing...");
     expect(() => spinner.stop()).not.toThrow();
   });
 
-  test("stop() にメッセージを渡せる", () => {
-    const spinner = startSpinner("処理中...");
-    expect(() => spinner.stop("完了しました")).not.toThrow();
+  test("stop() accepts a message", () => {
+    const spinner = startSpinner("Processing...");
+    expect(() => spinner.stop("Completed")).not.toThrow();
   });
 
-  test("fail() を正常に呼べる", () => {
-    const spinner = startSpinner("処理中...");
-    expect(() => spinner.fail("エラーが発生しました")).not.toThrow();
+  test("fail() can be called normally", () => {
+    const spinner = startSpinner("Processing...");
+    expect(() => spinner.fail("An error occurred")).not.toThrow();
   });
 });
 
 describe("lerp", () => {
-  test("t=0 のとき a を返す", () => {
+  test("returns a when t=0", () => {
     expect(lerp(0, 100, 0)).toBe(0);
   });
 
-  test("t=1 のとき b を返す", () => {
+  test("returns b when t=1", () => {
     expect(lerp(0, 100, 1)).toBe(100);
   });
 
-  test("t=0.5 のとき中間値を返す", () => {
+  test("returns midpoint when t=0.5", () => {
     expect(lerp(0, 100, 0.5)).toBe(50);
   });
 });
 
 describe("smoothstep", () => {
-  test("t=0 のとき 0 を返す", () => {
+  test("returns 0 when t=0", () => {
     expect(smoothstep(0)).toBe(0);
   });
 
-  test("t=1 のとき 1 を返す", () => {
+  test("returns 1 when t=1", () => {
     expect(smoothstep(1)).toBe(1);
   });
 
-  test("t=0.5 のとき 0.5 を返す", () => {
+  test("returns 0.5 when t=0.5", () => {
     expect(smoothstep(0.5)).toBe(0.5);
   });
 
-  test("0 < t < 0.5 のとき t より小さい値を返す（ease-in）", () => {
+  test("returns value less than t for 0 < t < 0.5 (ease-in)", () => {
     const t = 0.25;
     expect(smoothstep(t)).toBeLessThan(t);
   });
 
-  test("0.5 < t < 1 のとき t より大きい値を返す（ease-out）", () => {
+  test("returns value greater than t for 0.5 < t < 1 (ease-out)", () => {
     const t = 0.75;
     expect(smoothstep(t)).toBeGreaterThan(t);
   });
 });
 
 describe("shimmerText", () => {
-  test("ANSI カラーコードを含む文字列を返す", () => {
+  test("returns string containing ANSI color codes", () => {
     const result = shimmerText("hello", 2);
     expect(result).toContain("\x1b[38;2;");
     expect(result).toContain("\x1b[0m");
   });
 
-  test("元のテキストの全文字を含む", () => {
+  test("contains all characters of original text", () => {
     const result = shimmerText("ABC", 1);
     expect(result).toContain("A");
     expect(result).toContain("B");
     expect(result).toContain("C");
   });
 
-  test("日本語テキストでも動作する", () => {
-    const result = shimmerText("処理中", 1);
-    expect(result).toContain("処");
-    expect(result).toContain("理");
-    expect(result).toContain("中");
+  test("works with CJK text", () => {
+    const result = shimmerText("Processing", 1);
+    expect(result).toContain("P");
+    expect(result).toContain("r");
+    expect(result).toContain("o");
   });
 
-  test("shimmerPos が遠い場合すべてベースカラーになる", () => {
+  test("all chars become base color when shimmerPos is far away", () => {
     const result = shimmerText("AB", 100);
     // Both chars should be base color (120, 110, 170)
     const baseColorCode = "\x1b[38;2;120;110;170m";

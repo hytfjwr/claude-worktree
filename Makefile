@@ -1,77 +1,77 @@
 .PHONY: install uninstall reinstall link unlink test help dev clean check setup typecheck pull
 
-# デフォルトターゲット
+# Default target
 help:
-	@echo "claude-worktree Makefile コマンド一覧"
+	@echo "claude-worktree Makefile commands"
 	@echo ""
-	@echo "  make install    - 依存関係インストール + グローバルリンク"
-	@echo "  make uninstall  - グローバルからアンインストール"
-	@echo "  make reinstall  - 再インストール"
-	@echo "  make setup      - 依存関係のみインストール"
-	@echo "  make dev        - 開発モードで実行 (引数なし)"
-	@echo "  make test       - Bunテストを実行"
-	@echo "  make typecheck  - TypeScript型チェック"
-	@echo "  make clean      - node_modules等を削除"
-	@echo "  make check      - 依存関係の確認"
+	@echo "  make install    - Install dependencies + global link"
+	@echo "  make uninstall  - Uninstall from global"
+	@echo "  make reinstall  - Reinstall"
+	@echo "  make setup      - Install dependencies only"
+	@echo "  make dev        - Run in development mode (no args)"
+	@echo "  make test       - Run Bun tests"
+	@echo "  make typecheck  - TypeScript type check"
+	@echo "  make clean      - Remove node_modules etc."
+	@echo "  make check      - Check dependencies"
 	@echo ""
 
-# 最新の変更を取得
+# Pull latest changes
 pull:
-	@echo "📥 最新の変更を取得中..."
+	@echo "📥 Pulling latest changes..."
 	@git pull
-	@echo "✅ 最新の状態に更新しました"
+	@echo "✅ Updated to latest"
 
-# 依存関係インストール
+# Install dependencies
 setup:
 	@bun install
-	@echo "✅ 依存関係をインストールしました"
+	@echo "✅ Dependencies installed"
 
-# グローバルにインストール
+# Install globally
 install: pull setup link
-	@echo "✅ claude-worktree をインストールしました"
+	@echo "✅ claude-worktree installed"
 	@echo "📍 $$(which claude-worktree)"
 
-# bun linkを実行
+# Run bun link
 link:
 	@bun link
 	@chmod +x bin/claude-worktree.ts
 
-# アンインストール
+# Uninstall
 uninstall: unlink
-	@echo "✅ claude-worktree をアンインストールしました"
+	@echo "✅ claude-worktree uninstalled"
 
-# bun unlinkを実行
+# Run bun unlink
 unlink:
 	@bun unlink claude-worktree 2>/dev/null || true
 	@rm -f ~/.bun/bin/claude-worktree
 
-# 再インストール
+# Reinstall
 reinstall: uninstall install
 
-# テスト
+# Test
 test:
 	@bun test
 
-# 開発モードで実行
+# Run in development mode
 dev:
 	@bun run bin/claude-worktree.ts
 
-# TypeScript型チェック
+# TypeScript type check
 typecheck:
 	@bun x tsc --noEmit
-	@echo "✅ 型チェック完了"
+	@echo "✅ Type check passed"
 
-# キャッシュ削除
+# Delete cache
 clean:
 	@rm -rf node_modules bun.lockb 2>/dev/null || true
-	@echo "✅ キャッシュを削除しました"
+	@echo "✅ Cache deleted"
 
-# 依存関係の確認
+# Check dependencies
 check:
-	@echo "=== 依存関係の確認 ==="
+	@echo "=== Dependency check ==="
 	@printf "bun:     " && (which bun >/dev/null && bun --version) || echo "❌ not found"
 	@printf "git:     " && (which git >/dev/null && git --version | cut -d' ' -f3) || echo "❌ not found"
 	@printf "wezterm: " && (which wezterm >/dev/null && wezterm --version | cut -d' ' -f2) || echo "❌ not found"
 	@printf "claude:  " && (which claude >/dev/null && claude --version 2>/dev/null | head -1) || echo "❌ not found"
 	@echo ""
-	@echo "✅ 確認完了"
+	@echo "✅ Check complete"

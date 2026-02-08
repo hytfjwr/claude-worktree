@@ -30,8 +30,8 @@ export async function confirm(message: string): Promise<boolean> {
 export async function selectMultiple(
   statuses: WorktreeStatus[]
 ): Promise<WorktreeStatus[]> {
-  console.log("\n削除するworktreeを選択してください（番号をスペース区切りで入力）:");
-  console.log("例: 1 3 5 または all で全選択、空でキャンセル\n");
+  console.log("\nSelect worktrees to delete (enter numbers separated by spaces):");
+  console.log("Example: 1 3 5 or 'all' to select all, empty to cancel\n");
 
   statuses.forEach((status, index) => {
     const marker = status.canAutoClean ? "●" : "○";
@@ -43,7 +43,7 @@ export async function selectMultiple(
 
   const rl = createReadlineInterface();
   try {
-    const answer = await question(rl, "\n選択: ");
+    const answer = await question(rl, "\nSelection: ");
     const input = answer.trim().toLowerCase();
 
     if (!input) {

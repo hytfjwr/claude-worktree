@@ -2,7 +2,7 @@ import { describe, expect, test, afterEach, mock } from "bun:test";
 import { getCurrentPaneId } from "./wezterm";
 
 // ============================================================================
-// 環境変数を使う純粋関数のテスト（モック不要）
+// Tests for pure functions using environment variables (no mocks needed)
 // ============================================================================
 
 describe("getCurrentPaneId", () => {
@@ -16,13 +16,13 @@ describe("getCurrentPaneId", () => {
     }
   });
 
-  test("環境変数から取得", () => {
+  test("retrieves from environment variable", () => {
     process.env.WEZTERM_PANE = "123";
     const result = getCurrentPaneId();
     expect(result).toBe("123");
   });
 
-  test("未設定時はundefined", () => {
+  test("returns undefined when not set", () => {
     delete process.env.WEZTERM_PANE;
     const result = getCurrentPaneId();
     expect(result).toBeUndefined();
@@ -30,11 +30,11 @@ describe("getCurrentPaneId", () => {
 });
 
 // ============================================================================
-// シェルコマンドを使う関数のテスト（mock.moduleを使用）
+// Tests for functions using shell commands (using mock.module)
 // ============================================================================
 
-describe("splitPaneRight (モック)", () => {
-  test("ペインIDを返す", async () => {
+describe("splitPaneRight (mock)", () => {
+  test("returns pane ID", async () => {
     mock.module("./wezterm", () => ({
       ...require("./wezterm"),
       splitPaneRight: mock(async () => "new-pane-123"),
@@ -47,8 +47,8 @@ describe("splitPaneRight (モック)", () => {
   });
 });
 
-describe("setTabTitle (モック)", () => {
-  test("タイトルを設定", async () => {
+describe("setTabTitle (mock)", () => {
+  test("sets title", async () => {
     const mockSetTabTitle = mock(async () => undefined);
 
     mock.module("./wezterm", () => ({
@@ -63,8 +63,8 @@ describe("setTabTitle (モック)", () => {
   });
 });
 
-describe("sendText (モック)", () => {
-  test("テキストを送信", async () => {
+describe("sendText (mock)", () => {
+  test("sends text", async () => {
     const mockSendText = mock(async () => undefined);
 
     mock.module("./wezterm", () => ({
@@ -79,8 +79,8 @@ describe("sendText (モック)", () => {
   });
 });
 
-describe("sendCommand (モック)", () => {
-  test("改行付きでテキストを送信", async () => {
+describe("sendCommand (mock)", () => {
+  test("sends text with newline", async () => {
     const mockSendCommand = mock(async () => undefined);
 
     mock.module("./wezterm", () => ({
@@ -95,8 +95,8 @@ describe("sendCommand (モック)", () => {
   });
 });
 
-describe("activatePane (モック)", () => {
-  test("ペインをアクティブ化", async () => {
+describe("activatePane (mock)", () => {
+  test("activates pane", async () => {
     const mockActivatePane = mock(async () => undefined);
 
     mock.module("./wezterm", () => ({
@@ -111,8 +111,8 @@ describe("activatePane (モック)", () => {
   });
 });
 
-describe("createPane (モック)", () => {
-  test("ペインを作成して新しいpaneIdを返す", async () => {
+describe("createPane (mock)", () => {
+  test("creates pane and returns new paneId", async () => {
     mock.module("./wezterm", () => ({
       ...require("./wezterm"),
       createPane: mock(async () => "created-pane-999"),
@@ -124,7 +124,7 @@ describe("createPane (モック)", () => {
     expect(result).toBe("created-pane-999");
   });
 
-  test("title指定でペインを作成", async () => {
+  test("creates pane with title", async () => {
     mock.module("./wezterm", () => ({
       ...require("./wezterm"),
       createPane: mock(async () => "new-pane"),
@@ -136,7 +136,7 @@ describe("createPane (モック)", () => {
     expect(result).toBe("new-pane");
   });
 
-  test("keepFocus指定でペインを作成", async () => {
+  test("creates pane with keepFocus", async () => {
     mock.module("./wezterm", () => ({
       ...require("./wezterm"),
       createPane: mock(async () => "new-pane"),

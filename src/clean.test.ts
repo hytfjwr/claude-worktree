@@ -3,7 +3,7 @@ import { executeClean, type CleanArgs, type CleanDeps } from "./clean";
 import type { WorktreeInfo, WorktreeStatus } from "./git";
 
 // ============================================================================
-// ヘルパー関数
+// Helper functions
 // ============================================================================
 
 function makeWorktree(overrides: Partial<WorktreeInfo> = {}): WorktreeInfo {
@@ -26,7 +26,7 @@ function makeStatus(
     branchMerged: false,
     branchDeletedOnRemote: false,
     canAutoClean: false,
-    reason: "アクティブ",
+    reason: "Active",
     ...statusOverrides,
   };
 }
@@ -55,7 +55,7 @@ function makeDeps(overrides: Partial<CleanDeps> = {}): CleanDeps {
 
 const defaultArgs: CleanArgs = { force: false, all: false, dryRun: false, verbose: false };
 
-// console 出力を抑制
+// Suppress console output
 let consoleWarnSpy: ReturnType<typeof spyOn>;
 
 beforeEach(() => {
@@ -65,12 +65,12 @@ beforeEach(() => {
 });
 
 // ============================================================================
-// テスト
+// Tests
 // ============================================================================
 
 describe("executeClean", () => {
-  describe("worktree が存在しない場合", () => {
-    test("空の結果を返す", async () => {
+  describe("when no worktrees exist", () => {
+    test("returns empty result", async () => {
       const deps = makeDeps({
         listWorktrees: async () => [],
       });
@@ -81,15 +81,15 @@ describe("executeClean", () => {
     });
   });
 
-  describe("削除可能な worktree がない場合", () => {
-    test("全て main worktree の場合は空の結果を返す", async () => {
+  describe("when no cleanable worktrees exist", () => {
+    test("returns empty result when all are main worktrees", async () => {
       const mainWorktree = makeWorktree({ isMain: true, branch: "main" });
       const deps = makeDeps({
         listWorktrees: async () => [mainWorktree],
         getWorktreeStatuses: async () => [
           makeStatus(
             { isMain: true, branch: "main" },
-            { reason: "メインworktree" }
+            { reason: "Main worktree" }
           ),
         ],
       });
@@ -100,13 +100,13 @@ describe("executeClean", () => {
     });
   });
 
-  describe("自動検出モード（--all なし）", () => {
-    test("canAutoClean が全て false の場合は空の結果を返す", async () => {
+  describe("auto-detect mode (without --all)", () => {
+    test("returns empty result when all canAutoClean are false", async () => {
       const worktree = makeWorktree();
       const deps = makeDeps({
         listWorktrees: async () => [worktree],
         getWorktreeStatuses: async () => [
-          makeStatus({}, { canAutoClean: false, reason: "アクティブ" }),
+          makeStatus({}, { canAutoClean: false, reason: "Active" }),
         ],
       });
 
@@ -115,14 +115,14 @@ describe("executeClean", () => {
       expect(result).toEqual({ deleted: [], skipped: [], errors: [] });
     });
 
-    test("canAutoClean な worktree を削除する", async () => {
+    test("deletes canAutoClean worktrees", async () => {
       const worktree = makeWorktree({
         path: "/tmp/repo-feature-merged",
         branch: "feature/merged",
       });
       const status = makeStatus(
         { path: "/tmp/repo-feature-merged", branch: "feature/merged" },
-        { canAutoClean: true, branchMerged: true, reason: "マージ済み" }
+        { canAutoClean: true, branchMerged: true, reason: "Merged" }
       );
       const deps = makeDeps({
         listWorktrees: async () => [worktree],
@@ -137,8 +137,8 @@ describe("executeClean", () => {
     });
   });
 
-  describe("--all モード", () => {
-    test("selectMultiple で選択した worktree を削除する", async () => {
+  describe("--all mode", () => {
+    test("deletes worktrees selected via selectMultiple", async () => {
       const wt1 = makeWorktree({
         path: "/tmp/repo-a",
         branch: "feature/a",
@@ -171,7 +171,7 @@ describe("executeClean", () => {
       expect(result.deleted).toEqual(["/tmp/repo-b"]);
     });
 
-    test("selectMultiple で何も選択しない場合は削除しない", async () => {
+    test("does not delete when nothing selected via selectMultiple", async () => {
       const worktree = makeWorktree();
       const deps = makeDeps({
         listWorktrees: async () => [worktree],
@@ -188,15 +188,15 @@ describe("executeClean", () => {
     });
   });
 
-  describe("--dry-run モード", () => {
-    test("削除せずに結果を返す", async () => {
+  describe("--dry-run mode", () => {
+    test("returns result without deleting", async () => {
       const worktree = makeWorktree({
         path: "/tmp/repo-feature-merged",
         branch: "feature/merged",
       });
       const status = makeStatus(
         { path: "/tmp/repo-feature-merged", branch: "feature/merged" },
-        { canAutoClean: true, reason: "マージ済み" }
+        { canAutoClean: true, reason: "Merged" }
       );
       let removeWorktreeCalled = false;
       const deps = makeDeps({
@@ -217,10 +217,10 @@ describe("executeClean", () => {
     });
   });
 
-  describe("確認プロンプト", () => {
-    test("confirm が false を返すと削除しない", async () => {
+  describe("confirmation prompt", () => {
+    test("does not delete when confirm returns false", async () => {
       const worktree = makeWorktree();
-      const status = makeStatus({}, { canAutoClean: true, reason: "マージ済み" });
+      const status = makeStatus({}, { canAutoClean: true, reason: "Merged" });
       let removeWorktreeCalled = false;
       const deps = makeDeps({
         listWorktrees: async () => [worktree],
@@ -237,9 +237,9 @@ describe("executeClean", () => {
       expect(result).toEqual({ deleted: [], skipped: [], errors: [] });
     });
 
-    test("--force で確認をスキップする", async () => {
+    test("--force skips confirmation", async () => {
       const worktree = makeWorktree();
-      const status = makeStatus({}, { canAutoClean: true, reason: "マージ済み" });
+      const status = makeStatus({}, { canAutoClean: true, reason: "Merged" });
       let confirmCalled = false;
       const deps = makeDeps({
         listWorktrees: async () => [worktree],
@@ -256,8 +256,8 @@ describe("executeClean", () => {
     });
   });
 
-  describe("削除実行", () => {
-    test("正常に削除できた worktree を deleted に記録する", async () => {
+  describe("deletion execution", () => {
+    test("records successfully deleted worktrees in deleted", async () => {
       const wt1 = makeWorktree({ path: "/tmp/repo-a", branch: "feature/a" });
       const wt2 = makeWorktree({ path: "/tmp/repo-b", branch: "feature/b" });
       const status1 = makeStatus(
@@ -282,7 +282,7 @@ describe("executeClean", () => {
       expect(result.errors).toEqual([]);
     });
 
-    test("removeWorktree が失敗した場合は errors に記録する", async () => {
+    test("records failed removeWorktree in errors", async () => {
       const worktree = makeWorktree({
         path: "/tmp/repo-fail",
         branch: "feature/fail",
@@ -310,7 +310,7 @@ describe("executeClean", () => {
       ]);
     });
 
-    test("dirty な worktree は force=true で removeWorktree を呼ぶ", async () => {
+    test("dirty worktree calls removeWorktree with force=true", async () => {
       const worktree = makeWorktree({
         path: "/tmp/repo-dirty",
         branch: "feature/dirty",
@@ -334,7 +334,7 @@ describe("executeClean", () => {
       expect(removedWithForce).toBe(true);
     });
 
-    test("一部の削除が失敗しても他の削除は続行する", async () => {
+    test("continues deleting others when some deletions fail", async () => {
       const wt1 = makeWorktree({ path: "/tmp/repo-ok", branch: "feature/ok" });
       const wt2 = makeWorktree({
         path: "/tmp/repo-fail",
@@ -379,7 +379,7 @@ describe("executeClean", () => {
   });
 
   describe("fetchAndPrune", () => {
-    test("fetchAndPrune が失敗しても続行する", async () => {
+    test("continues even when fetchAndPrune fails", async () => {
       const worktree = makeWorktree();
       const status = makeStatus({}, { canAutoClean: true });
       const deps = makeDeps({
@@ -399,8 +399,8 @@ describe("executeClean", () => {
     });
   });
 
-  describe("preClean フック", () => {
-    test("config に preClean がある場合フックを実行する", async () => {
+  describe("preClean hook", () => {
+    test("executes hook when config has preClean", async () => {
       const worktree = makeWorktree({ path: "/tmp/repo-hook" });
       const status = makeStatus(
         { path: "/tmp/repo-hook" },
@@ -434,7 +434,7 @@ describe("executeClean", () => {
       expect(hookCwd).toBe("/repo");
     });
 
-    test("preClean フックが失敗しても削除を続行する", async () => {
+    test("continues deletion even when preClean hook fails", async () => {
       const worktree = makeWorktree({ path: "/tmp/repo-hook-fail" });
       const status = makeStatus(
         { path: "/tmp/repo-hook-fail" },
@@ -460,7 +460,7 @@ describe("executeClean", () => {
       expect(consoleWarnSpy).toHaveBeenCalled();
     });
 
-    test("config が null の場合フックを実行しない", async () => {
+    test("does not execute hook when config is null", async () => {
       const worktree = makeWorktree();
       const status = makeStatus({}, { canAutoClean: true });
       let hookCalled = false;
@@ -478,7 +478,7 @@ describe("executeClean", () => {
       expect(hookCalled).toBe(false);
     });
 
-    test("getGitContext が失敗した場合フックをスキップする", async () => {
+    test("skips hook when getGitContext fails", async () => {
       const worktree = makeWorktree();
       const status = makeStatus({}, { canAutoClean: true });
       let hookCalled = false;
@@ -506,8 +506,8 @@ describe("executeClean", () => {
     });
   });
 
-  describe("branch が null の場合（detached HEAD）", () => {
-    test("path をフォールバックとして使用する", async () => {
+  describe("when branch is null (detached HEAD)", () => {
+    test("uses path as fallback", async () => {
       const worktree = makeWorktree({
         path: "/tmp/repo-detached",
         branch: null,
@@ -530,8 +530,8 @@ describe("executeClean", () => {
     });
   });
 
-  describe("ローカルブランチ削除", () => {
-    test("worktree 削除後にローカルブランチを force 削除する", async () => {
+  describe("local branch deletion", () => {
+    test("force deletes local branch after worktree removal", async () => {
       const worktree = makeWorktree({
         path: "/tmp/repo-branch",
         branch: "feature/branch",
@@ -557,7 +557,7 @@ describe("executeClean", () => {
       expect(deletedWithForce).toBe(true);
     });
 
-    test("detached HEAD の場合はブランチ削除をスキップする", async () => {
+    test("skips branch deletion for detached HEAD", async () => {
       const worktree = makeWorktree({
         path: "/tmp/repo-detached",
         branch: null,
@@ -580,7 +580,7 @@ describe("executeClean", () => {
       expect(deleteLocalBranchCalled).toBe(false);
     });
 
-    test("ブランチ削除に失敗しても worktree は削除成功として記録する", async () => {
+    test("records worktree as deleted even when branch deletion fails", async () => {
       const worktree = makeWorktree({
         path: "/tmp/repo-branch-fail",
         branch: "feature/branch-fail",
@@ -607,7 +607,7 @@ describe("executeClean", () => {
       expect(consoleWarnSpy).toHaveBeenCalled();
     });
 
-    test("--dry-run の場合はブランチ削除しない", async () => {
+    test("does not delete branch in --dry-run mode", async () => {
       const worktree = makeWorktree({
         path: "/tmp/repo-dry",
         branch: "feature/dry",
@@ -630,7 +630,7 @@ describe("executeClean", () => {
       expect(deleteLocalBranchCalled).toBe(false);
     });
 
-    test("removeWorktree が失敗した場合はブランチ削除しない", async () => {
+    test("does not delete branch when removeWorktree fails", async () => {
       const worktree = makeWorktree({
         path: "/tmp/repo-wt-fail",
         branch: "feature/wt-fail",
