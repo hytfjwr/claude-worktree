@@ -6,8 +6,8 @@ A CLI tool for parallel development using WezTerm + git worktree + Claude Code. 
 
 - [Bun](https://bun.sh/)
 - [Git](https://git-scm.com/)
-- [WezTerm](https://wezfurlong.org/wezterm/)
 - [Claude Code](https://claude.ai/code)
+- [WezTerm](https://wezfurlong.org/wezterm/) (optional, required only for `--pane`)
 
 ## Installation
 
