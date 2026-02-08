@@ -14,20 +14,11 @@ export async function checkWeztermAvailable(): Promise<boolean> {
 }
 
 export type PaneOptions = {
-  title?: string;
   keepFocus?: boolean; // If true, restore focus to the original pane after split
 };
 
 export async function splitPaneRight(): Promise<string> {
   return (await $`wezterm cli split-pane --right`.text()).trim();
-}
-
-export async function setTabTitle(
-  paneId: string,
-  title: string
-): Promise<void> {
-  const proc = Bun.spawn(["wezterm", "cli", "set-tab-title", "--pane-id", paneId, title]);
-  await proc.exited;
 }
 
 export async function sendText(
@@ -69,10 +60,6 @@ export async function createPane(
   const originalPaneId = options.keepFocus ? getCurrentPaneId() : undefined;
 
   const paneId = await splitPaneRight();
-
-  if (options.title) {
-    await setTabTitle(paneId, options.title);
-  }
 
   if (options.keepFocus && originalPaneId) {
     await activatePane(originalPaneId);

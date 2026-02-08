@@ -34,8 +34,8 @@ make check
 
 ```bash
 # Create command
-claude-worktree <branch-name> <task-name> [prompt]
-claude-worktree <branch-name> <task-name> --plan <file-path>
+claude-worktree <branch-name> <prompt>
+claude-worktree <branch-name> --plan <file-path>
 
 # Clean command
 claude-worktree clean [options]
@@ -44,15 +44,15 @@ claude-worktree clean [options]
 claude-worktree -h / --help
 
 # Examples
-claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature'
-claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature' --pane
+claude-worktree feature/auth 'Implement authentication feature'
+claude-worktree feature/auth 'Implement authentication feature' --pane
 claude-worktree fix/bug-123 'Fix login bug' -p
-claude-worktree feature/api 'API Implementation' --plan ./plan.md
-claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature' --base develop
-claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature' --danger
-claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature' --merge
-claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature' --draft
-claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature' --draft --base main
+claude-worktree feature/api --plan ./plan.md
+claude-worktree feature/auth 'Implement authentication feature' --base develop
+claude-worktree feature/auth 'Implement authentication feature' --danger
+claude-worktree feature/auth 'Implement authentication feature' --merge
+claude-worktree feature/auth 'Implement authentication feature' --draft
+claude-worktree feature/auth 'Implement authentication feature' --draft --base main
 claude-worktree clean
 claude-worktree clean --dry-run
 ```
@@ -107,7 +107,7 @@ src/
 ```
 
 **Processing Flow:**
-1. Parse arguments (branch name, task name, prompt or plan file)
+1. Parse arguments (branch name, prompt or plan file)
 2. Get the git repository root and current branch
 3. Load project config from `.claude-worktree.json` (if exists)
 4. Create worktree directly via `git worktree add`

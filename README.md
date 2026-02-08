@@ -26,8 +26,8 @@ bun link
 ### Create Command
 
 ```bash
-claude-worktree <branch-name> <task-name> [prompt]
-claude-worktree <branch-name> <task-name> --plan <file-path>
+claude-worktree <branch-name> <prompt>
+claude-worktree <branch-name> --plan <file-path>
 ```
 
 ### Clean Command
@@ -65,31 +65,31 @@ claude-worktree --help
 
 ```bash
 # Create a worktree and start Claude Code in current terminal
-claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature'
+claude-worktree feature/auth 'Implement authentication feature'
 
 # Open in a new WezTerm pane
-claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature' --pane
+claude-worktree feature/auth 'Implement authentication feature' --pane
 
 # Short form
 claude-worktree fix/bug-123 'Fix login bug' -p
 
 # Read prompt from a plan file
-claude-worktree feature/api 'API Implementation' --plan ./plan.md
+claude-worktree feature/api --plan ./plan.md
 
 # Create worktree from specific base branch
-claude-worktree feature/auth 'Implement Auth' 'Implement auth' --base develop
+claude-worktree feature/auth 'Implement authentication feature' --base develop
 
 # Skip workspace warning
-claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature' --danger
+claude-worktree feature/auth 'Implement authentication feature' --danger
 
 # Auto-merge into base branch after task completion
-claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature' --merge
+claude-worktree feature/auth 'Implement authentication feature' --merge
 
 # Auto-create Draft PR after task completion
-claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature' --draft
+claude-worktree feature/auth 'Implement authentication feature' --draft
 
 # Draft PR with specific base branch
-claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature' --draft --base main
+claude-worktree feature/auth 'Implement authentication feature' --draft --base main
 
 # Clean up unnecessary worktrees
 claude-worktree clean
@@ -124,7 +124,7 @@ You can define project-specific hooks in `.claude-worktree.json` at the reposito
 
 ## How It Works
 
-1. Parses arguments (branch name, task name, optional prompt or plan file)
+1. Parses arguments (branch name, prompt or plan file)
 2. Gets the git repository root and current branch
 3. Loads project config from `.claude-worktree.json` (if exists)
 4. Creates worktree directly via `git worktree add`

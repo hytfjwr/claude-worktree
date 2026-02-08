@@ -54,22 +54,6 @@ describe("splitPaneRight (mock)", () => {
   });
 });
 
-describe("setTabTitle (mock)", () => {
-  test("sets title", async () => {
-    const mockSetTabTitle = mock(async () => undefined);
-
-    mock.module("./wezterm", () => ({
-      ...require("./wezterm"),
-      setTabTitle: mockSetTabTitle,
-    }));
-
-    const { setTabTitle } = await import("./wezterm");
-    await setTabTitle("pane-123", "My Title");
-
-    expect(mockSetTabTitle).toHaveBeenCalledWith("pane-123", "My Title");
-  });
-});
-
 describe("sendText (mock)", () => {
   test("sends text", async () => {
     const mockSendText = mock(async () => undefined);
@@ -129,18 +113,6 @@ describe("createPane (mock)", () => {
     const result = await createPane({});
 
     expect(result).toBe("created-pane-999");
-  });
-
-  test("creates pane with title", async () => {
-    mock.module("./wezterm", () => ({
-      ...require("./wezterm"),
-      createPane: mock(async () => "new-pane"),
-    }));
-
-    const { createPane } = await import("./wezterm");
-    const result = await createPane({ title: "Test Title" });
-
-    expect(result).toBe("new-pane");
   });
 
   test("creates pane with keepFocus", async () => {

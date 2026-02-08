@@ -20,7 +20,6 @@ export type { CleanArgs } from "./clean";
 
 export type CreateArgs = {
   branchName: string;
-  taskName: string;
   prompt: string;
   planFile?: string;
   danger?: boolean;
@@ -40,18 +39,17 @@ export function showHelp(): void {
   console.log(`claude-worktree - CLI for parallel development with WezTerm + git worktree + Claude Code
 
 Usage:
-  claude-worktree <branch-name> <task-name> [prompt]
-  claude-worktree <branch-name> <task-name> --plan <file-path>
+  claude-worktree <branch-name> <prompt>
+  claude-worktree <branch-name> --plan <file-path>
   claude-worktree clean [options]
 
 Commands:
-  <branch-name> <task-name>  Create a new worktree with Claude Code
-  clean                      Remove unnecessary worktrees
+  <branch-name>  Create a new worktree with Claude Code
+  clean          Remove unnecessary worktrees
 
 Arguments:
   <branch-name>  Branch name for the git worktree to create
-  <task-name>    Task name (used as WezTerm tab title)
-  [prompt]       Prompt to pass to Claude Code (defaults to task-name if omitted)
+  <prompt>       Prompt to pass to Claude Code
 
 Options:
   -p, --pane       Open in a new WezTerm pane (requires WezTerm; default: run in current terminal)
@@ -70,32 +68,31 @@ Clean options:
   -v, --verbose  Show hook execution logs
 
 Examples:
-  claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature'
-  claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature' -p
-  claude-worktree fix/bug-123 'Fix Bug' --pane
-  claude-worktree feature/api 'Implement API' --plan ./plan.md
-  claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature' --danger
-  claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature' --merge
-  claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature' --draft
-  claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature' --draft --base main
+  claude-worktree feature/auth 'Implement authentication feature'
+  claude-worktree feature/auth 'Implement authentication feature' -p
+  claude-worktree fix/bug-123 'Fix login bug' --pane
+  claude-worktree feature/api --plan ./plan.md
+  claude-worktree feature/auth 'Implement authentication feature' --danger
+  claude-worktree feature/auth 'Implement authentication feature' --merge
+  claude-worktree feature/auth 'Implement authentication feature' --draft
+  claude-worktree feature/auth 'Implement authentication feature' --draft --base main
   claude-worktree clean
   claude-worktree clean --dry-run`);
 }
 
 export function parseCreateArgs(args: string[]): CreateArgs {
-  if (args.length < 2) {
+  if (args.length < 1) {
     throw new Error(
-      "Usage: claude-worktree <branch-name> <task-name> [prompt]\n" +
-        "       claude-worktree <branch-name> <task-name> --plan <file-path>\n" +
-        "Example: claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature'\n" +
-        "         claude-worktree feature/auth 'Implement Auth' --plan ./plan.md"
+      "Usage: claude-worktree <branch-name> <prompt>\n" +
+        "       claude-worktree <branch-name> --plan <file-path>\n" +
+        "Example: claude-worktree feature/auth 'Implement authentication feature'\n" +
+        "         claude-worktree feature/auth --plan ./plan.md"
     );
   }
 
   const branchName = args[0];
-  const taskName = args[1];
 
-  const { booleans, strings, remaining } = extractOptions(args.slice(2), {
+  const { booleans, strings, remaining } = extractOptions(args.slice(1), {
     options: {
       pane:    { type: "boolean", flag: "--pane", alias: "-p" },
       danger:  { type: "boolean", flag: "--danger" },
@@ -135,10 +132,18 @@ export function parseCreateArgs(args: string[]): CreateArgs {
     );
   }
 
+  // Require either inline prompt or --plan
+  if (!inlinePrompt && !planFile) {
+    throw new Error(
+      "A prompt or --plan option is required.\n" +
+        "Usage: claude-worktree <branch-name> <prompt>\n" +
+        "       claude-worktree <branch-name> --plan <file-path>"
+    );
+  }
+
   return {
     branchName,
-    taskName,
-    prompt: inlinePrompt || taskName,
+    prompt: inlinePrompt,
     planFile,
     danger,
     merge,
@@ -205,7 +210,7 @@ async function readPlanFile(filePath: string): Promise<string> {
 }
 
 export async function runCreate(args: CreateArgs): Promise<void> {
-  const { branchName, taskName, planFile, danger, merge, draft, baseBranch, pane } = args;
+  const { branchName, planFile, danger, merge, draft, baseBranch, pane } = args;
   let { prompt } = args;
 
   // Check WezTerm availability when --pane is specified
@@ -240,7 +245,6 @@ export async function runCreate(args: CreateArgs): Promise<void> {
   }
   console.log(`🌿 New branch: ${branchName}`);
   console.log(`📂 Worktree path: ${worktreePath}`);
-  console.log(`📝 Task: ${taskName}`);
   if (planFile) {
     console.log(`📋 Plan file: ${planFile}`);
   }
@@ -390,7 +394,7 @@ export async function runCreate(args: CreateArgs): Promise<void> {
 
   if (pane) {
     // Create WezTerm pane and send command
-    const paneId = await createPane({ title: taskName, keepFocus: true });
+    const paneId = await createPane({ keepFocus: true });
     console.log(`🪟 Created pane: ${paneId}`);
 
     const commands = [
