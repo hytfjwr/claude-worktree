@@ -48,6 +48,10 @@ claude-worktree --help
 - `-p, --pane` - Open in a new WezTerm pane (default: run in current terminal)
 - `--plan <file>` - Read prompt from a file (cannot be used with inline prompt)
 - `--base <branch>` - Base branch for worktree (default: current branch)
+- `--danger` - Skip workspace warning (uses --dangerously-skip-permissions)
+- `--merge` - Auto-merge into base branch and cleanup after task completion
+- `--draft` - Auto-create Draft PR after task completion (cannot be used with --merge)
+- `-v, --verbose` - Show hook execution logs
 - `-h, --help` - Show help
 
 ### Clean Options
@@ -55,6 +59,7 @@ claude-worktree --help
 - `-f, --force` - Skip confirmation prompt
 - `-a, --all` - Show all worktrees for manual selection
 - `-n, --dry-run` - Preview targets without deleting
+- `-v, --verbose` - Show hook execution logs
 
 ### Examples
 
@@ -73,6 +78,18 @@ claude-worktree feature/api 'API Implementation' --plan ./plan.md
 
 # Create worktree from specific base branch
 claude-worktree feature/auth 'Implement Auth' 'Implement auth' --base develop
+
+# Skip workspace warning
+claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature' --danger
+
+# Auto-merge into base branch after task completion
+claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature' --merge
+
+# Auto-create Draft PR after task completion
+claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature' --draft
+
+# Draft PR with specific base branch
+claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature' --draft --base main
 
 # Clean up unnecessary worktrees
 claude-worktree clean
@@ -129,25 +146,6 @@ bun run lint
 
 # Check dependencies (bun, git, wezterm, claude)
 make check
-```
-
-## Architecture
-
-A TypeScript CLI tool running on the Bun runtime with zero external npm dependencies (uses only Bun built-in APIs).
-
-```
-bin/
-  claude-worktree.ts   # Entry point
-src/
-  cli.ts               # Argument parsing & orchestration
-  git.ts               # Git operations (repo info, worktree creation)
-  wezterm.ts           # WezTerm pane operations (split, send text)
-  claude.ts            # Claude Code command generation
-  clean.ts             # Worktree cleanup orchestration
-  config.ts            # Project config (.claude-worktree.json) & hook execution
-  slot.ts              # Port-scan based slot auto-assignment
-  prompt.ts            # Interactive user prompts
-  index.ts             # Public API (barrel exports)
 ```
 
 ## License

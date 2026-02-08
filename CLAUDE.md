@@ -49,6 +49,10 @@ claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature'
 claude-worktree fix/bug-123 'Fix login bug' -p
 claude-worktree feature/api 'API Implementation' --plan ./plan.md
 claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature' --base develop
+claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature' --danger
+claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature' --merge
+claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature' --draft
+claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature' --draft --base main
 claude-worktree clean
 claude-worktree clean --dry-run
 ```
@@ -59,6 +63,9 @@ claude-worktree clean --dry-run
 - `--plan <file>` - Read prompt from a file (cannot be used with inline prompt)
 - `--base <branch>` - Specify base branch (default: current branch)
 - `--danger` - Skip workspace warning (uses --dangerously-skip-permissions)
+- `--merge` - Auto-merge into base branch and cleanup after task completion
+- `--draft` - Auto-create Draft PR after task completion (cannot be used with --merge)
+- `-v, --verbose` - Show hook execution logs
 - `-h, --help` - Show help
 
 ### Clean Options
@@ -66,6 +73,7 @@ claude-worktree clean --dry-run
 - `-f, --force` - Skip confirmation prompt
 - `-a, --all` - Show all worktrees for manual selection
 - `-n, --dry-run` - Preview targets without deleting
+- `-v, --verbose` - Show hook execution logs
 
 ## Architecture
 
@@ -83,6 +91,8 @@ src/
   config.ts            # Project config (.claude-worktree.json) & hook execution
   slot.ts              # Port-scan based slot auto-assignment
   prompt.ts            # Interactive user prompts
+  options.ts           # CLI option extraction utility
+  spinner.ts           # Terminal spinner with shimmer effect
   index.ts             # Public API (barrel exports)
 
   # Test files (co-located)
@@ -92,7 +102,8 @@ src/
   wezterm.test.ts      # Tests for wezterm.ts
   clean.test.ts        # Tests for clean.ts
   config.test.ts       # Tests for config.ts
-  slot.test.ts         # Tests for slot.ts
+  options.test.ts      # Tests for options.ts
+  spinner.test.ts      # Tests for spinner.ts
 ```
 
 **Processing Flow:**
@@ -122,4 +133,4 @@ Uses Bun test. Test files are co-located with source files in the same directory
 
 - **Pure functions**: Tested without mocks (buildClaudeCommand, getWorktreePath, etc.)
 - **Shell commands**: Tested using the actual git repository
-- **DI (Dependency Injection)**: clean.ts uses CleanDependencies type for mockability
+- **DI (Dependency Injection)**: clean.ts uses CleanDeps type for mockability
