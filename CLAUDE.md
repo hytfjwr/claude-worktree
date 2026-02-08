@@ -37,6 +37,9 @@ make check
 claude-worktree <branch-name> <prompt>
 claude-worktree <branch-name> --plan <file-path>
 
+# List command
+claude-worktree list [options]
+
 # Clean command
 claude-worktree clean [options]
 
@@ -53,6 +56,9 @@ claude-worktree feature/auth 'Implement authentication feature' --danger
 claude-worktree feature/auth 'Implement authentication feature' --merge
 claude-worktree feature/auth 'Implement authentication feature' --draft
 claude-worktree feature/auth 'Implement authentication feature' --draft --base main
+claude-worktree list
+claude-worktree list --json
+claude-worktree list -v
 claude-worktree clean
 claude-worktree clean --dry-run
 ```
@@ -67,6 +73,11 @@ claude-worktree clean --dry-run
 - `--draft` - Auto-create Draft PR after task completion (cannot be used with --merge)
 - `-v, --verbose` - Show hook execution logs
 - `-h, --help` - Show help
+
+### List Options
+
+- `--json` - Output as JSON
+- `-v, --verbose` - Show full paths and details
 
 ### Clean Options
 
@@ -87,6 +98,7 @@ src/
   git.ts               # Git operations (repo info, worktree creation)
   wezterm.ts           # WezTerm pane operations (split, send text)
   claude.ts            # Claude Code command generation
+  list.ts              # Worktree listing with rich display
   clean.ts             # Worktree cleanup orchestration
   config.ts            # Project config (.claude-worktree.json) & hook execution
   slot.ts              # Port-scan based slot auto-assignment
@@ -100,6 +112,7 @@ src/
   git.test.ts          # Tests for git.ts
   cli.test.ts          # Tests for cli.ts
   wezterm.test.ts      # Tests for wezterm.ts
+  list.test.ts         # Tests for list.ts
   clean.test.ts        # Tests for clean.ts
   config.test.ts       # Tests for config.ts
   options.test.ts      # Tests for options.ts
@@ -133,4 +146,4 @@ Uses Bun test. Test files are co-located with source files in the same directory
 
 - **Pure functions**: Tested without mocks (buildClaudeCommand, getWorktreePath, etc.)
 - **Shell commands**: Tested using the actual git repository
-- **DI (Dependency Injection)**: clean.ts uses CleanDeps type for mockability
+- **DI (Dependency Injection)**: clean.ts and list.ts use DI types (CleanDeps, ListDeps) for mockability

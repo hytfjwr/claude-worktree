@@ -10,6 +10,7 @@ import {
 import { createPane, sendCommand, sendText, checkWeztermAvailable } from "./wezterm";
 import { buildClaudeCommand } from "./claude";
 import { executeClean, type CleanArgs } from "./clean";
+import { executeList, type ListArgs } from "./list";
 import { confirm } from "./prompt";
 import { loadProjectConfig, buildHookCommand, runHook } from "./config";
 import { findAvailableSlot } from "./slot";
@@ -17,6 +18,7 @@ import { extractOptions } from "./options";
 import { startSpinner } from "./spinner";
 
 export type { CleanArgs } from "./clean";
+export type { ListArgs } from "./list";
 
 export type CreateArgs = {
   branchName: string;
@@ -33,7 +35,8 @@ export type CreateArgs = {
 export type Command =
   | { type: "help" }
   | { type: "create"; args: CreateArgs }
-  | { type: "clean"; args: CleanArgs };
+  | { type: "clean"; args: CleanArgs }
+  | { type: "list"; args: ListArgs };
 
 export function showHelp(): void {
   console.log(`claude-worktree - CLI for parallel development with WezTerm + git worktree + Claude Code
@@ -41,10 +44,12 @@ export function showHelp(): void {
 Usage:
   claude-worktree <branch-name> <prompt>
   claude-worktree <branch-name> --plan <file-path>
+  claude-worktree list [options]
   claude-worktree clean [options]
 
 Commands:
   <branch-name>  Create a new worktree with Claude Code
+  list           List existing worktrees with status
   clean          Remove unnecessary worktrees
 
 Arguments:
@@ -61,6 +66,10 @@ Options:
   -v, --verbose    Show hook execution logs
   -h, --help       Show this help
 
+List options:
+  --json         Output as JSON
+  -v, --verbose  Show full paths and details
+
 Clean options:
   -f, --force    Skip confirmation prompt
   -a, --all      Show all worktrees for manual selection
@@ -76,6 +85,8 @@ Examples:
   claude-worktree feature/auth 'Implement authentication feature' --merge
   claude-worktree feature/auth 'Implement authentication feature' --draft
   claude-worktree feature/auth 'Implement authentication feature' --draft --base main
+  claude-worktree list
+  claude-worktree list --json
   claude-worktree clean
   claude-worktree clean --dry-run`);
 }
@@ -175,10 +186,31 @@ export function parseCleanArgs(args: string[]): CleanArgs {
   };
 }
 
+export function parseListArgs(args: string[]): ListArgs {
+  const { booleans } = extractOptions(args, {
+    options: {
+      json:    { type: "boolean", flag: "--json" },
+      verbose: { type: "boolean", flag: "--verbose", alias: "-v" },
+    },
+    unknownHandling: "error",
+    ignoredFlags: ["-h", "--help"],
+    unknownErrorPrefix: "Unknown option for list command",
+  });
+
+  return {
+    json: booleans.json,
+    verbose: booleans.verbose,
+  };
+}
+
 export function parseArgs(args: string[]): Command {
   // Check for help flags
   if (args.length === 0 || args.includes("-h") || args.includes("--help")) {
     return { type: "help" };
+  }
+
+  if (args[0] === "list") {
+    return { type: "list", args: parseListArgs(args.slice(1)) };
   }
 
   if (args[0] === "clean") {
@@ -433,6 +465,9 @@ export async function run(command: Command): Promise<void> {
       break;
     case "create":
       await runCreate(command.args);
+      break;
+    case "list":
+      await executeList(command.args);
       break;
     case "clean":
       await executeClean(command.args);

@@ -14,8 +14,10 @@ export {
   getWorktreeStatuses,
   findWorktreeByBranch,
   deleteLocalBranch,
+  getLastCommit,
+  getAheadBehind,
 } from "./git";
-export type { GitContext, WorktreeInfo, WorktreeStatus } from "./git";
+export type { GitContext, WorktreeInfo, WorktreeStatus, CommitInfo, AheadBehind } from "./git";
 
 // WezTerm utilities
 export { splitPaneRight, sendText, sendCommand, createPane, checkWeztermAvailable } from "./wezterm";
@@ -36,6 +38,10 @@ export { isPortInUse, findAvailableSlot } from "./slot";
 export { executeClean } from "./clean";
 export type { CleanArgs as CleanCommandArgs, CleanResult } from "./clean";
 
+// List command
+export { executeList } from "./list";
+export type { ListArgs, ListResult, WorktreeListEntry, ListDeps } from "./list";
+
 // Spinner utilities
 export { startSpinner } from "./spinner";
 export type { Spinner } from "./spinner";
@@ -54,5 +60,5 @@ export type {
 } from "./options";
 
 // CLI
-export { parseArgs, run, showHelp, runCreate } from "./cli";
+export { parseArgs, run, showHelp, runCreate, parseListArgs } from "./cli";
 export type { CliArgs, CreateArgs, CleanArgs, Command } from "./cli";

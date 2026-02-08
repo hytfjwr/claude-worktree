@@ -202,6 +202,51 @@ export async function deleteLocalBranch(branchName: string, force = false): Prom
   }
 }
 
+export type CommitInfo = {
+  hash: string;
+  message: string;
+  date: Date;
+};
+
+export type AheadBehind = {
+  ahead: number;
+  behind: number;
+};
+
+export async function getLastCommit(worktreePath: string): Promise<CommitInfo | null> {
+  const result = await $`git -C ${worktreePath} log -1 --format=%h%x00%s%x00%aI`.nothrow().quiet();
+  if (result.exitCode !== 0) {
+    return null;
+  }
+  const output = result.text().trim();
+  if (!output) {
+    return null;
+  }
+  const [hash, message, dateStr] = output.split("\0");
+  if (!hash || !message || !dateStr) {
+    return null;
+  }
+  return { hash, message, date: new Date(dateStr) };
+}
+
+export async function getAheadBehind(branch: string, baseBranch: string): Promise<AheadBehind | null> {
+  const result = await $`git rev-list --left-right --count ${branch}...${baseBranch}`.nothrow().quiet();
+  if (result.exitCode !== 0) {
+    return null;
+  }
+  const output = result.text().trim();
+  const parts = output.split(/\s+/);
+  if (parts.length !== 2) {
+    return null;
+  }
+  const ahead = Number.parseInt(parts[0], 10);
+  const behind = Number.parseInt(parts[1], 10);
+  if (Number.isNaN(ahead) || Number.isNaN(behind)) {
+    return null;
+  }
+  return { ahead, behind };
+}
+
 export async function fetchAndPrune(): Promise<void> {
   await $`git fetch --prune`.quiet();
 }

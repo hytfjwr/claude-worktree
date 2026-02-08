@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseArgs, parseCreateArgs, parseCleanArgs } from "./cli";
+import { parseArgs, parseCreateArgs, parseCleanArgs, parseListArgs } from "./cli";
 
 describe("parseArgs", () => {
   describe("help", () => {
@@ -41,6 +41,48 @@ describe("parseArgs", () => {
     test("clean + create args - interpreted as clean", () => {
       const result = parseArgs(["clean"]);
       expect(result.type).toBe("clean");
+    });
+  });
+
+  describe("list", () => {
+    test("basic - list command", () => {
+      const result = parseArgs(["list"]);
+      expect(result).toEqual({
+        type: "list",
+        args: { json: false, verbose: false },
+      });
+    });
+
+    test("list --json", () => {
+      const result = parseArgs(["list", "--json"]);
+      expect(result).toEqual({
+        type: "list",
+        args: { json: true, verbose: false },
+      });
+    });
+
+    test("list --verbose", () => {
+      const result = parseArgs(["list", "--verbose"]);
+      expect(result).toEqual({
+        type: "list",
+        args: { json: false, verbose: true },
+      });
+    });
+
+    test("list -v", () => {
+      const result = parseArgs(["list", "-v"]);
+      expect(result).toEqual({
+        type: "list",
+        args: { json: false, verbose: true },
+      });
+    });
+
+    test("list --json --verbose", () => {
+      const result = parseArgs(["list", "--json", "--verbose"]);
+      expect(result).toEqual({
+        type: "list",
+        args: { json: true, verbose: true },
+      });
     });
   });
 
@@ -518,5 +560,41 @@ describe("parseCleanArgs", () => {
 
   test("error: unknown option", () => {
     expect(() => parseCleanArgs(["--unknown"])).toThrow("Unknown option for clean command: --unknown");
+  });
+});
+
+describe("parseListArgs", () => {
+  test("basic - no options", () => {
+    const result = parseListArgs([]);
+    expect(result).toEqual({ json: false, verbose: false });
+  });
+
+  test("--json flag", () => {
+    const result = parseListArgs(["--json"]);
+    expect(result.json).toBe(true);
+  });
+
+  test("--verbose flag", () => {
+    const result = parseListArgs(["--verbose"]);
+    expect(result.verbose).toBe(true);
+  });
+
+  test("-v flag", () => {
+    const result = parseListArgs(["-v"]);
+    expect(result.verbose).toBe(true);
+  });
+
+  test("--json + --verbose", () => {
+    const result = parseListArgs(["--json", "--verbose"]);
+    expect(result).toEqual({ json: true, verbose: true });
+  });
+
+  test("-h/--help is ignored (does not throw)", () => {
+    const result = parseListArgs(["-h"]);
+    expect(result).toEqual({ json: false, verbose: false });
+  });
+
+  test("error: unknown option", () => {
+    expect(() => parseListArgs(["--unknown"])).toThrow("Unknown option for list command: --unknown");
   });
 });

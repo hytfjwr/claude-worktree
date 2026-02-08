@@ -30,6 +30,12 @@ claude-worktree <branch-name> <prompt>
 claude-worktree <branch-name> --plan <file-path>
 ```
 
+### List Command
+
+```bash
+claude-worktree list [options]
+```
+
 ### Clean Command
 
 ```bash
@@ -53,6 +59,11 @@ claude-worktree --help
 - `--draft` - Auto-create Draft PR after task completion (cannot be used with --merge)
 - `-v, --verbose` - Show hook execution logs
 - `-h, --help` - Show help
+
+### List Options
+
+- `--json` - Output as JSON
+- `-v, --verbose` - Show full paths and details
 
 ### Clean Options
 
@@ -90,6 +101,12 @@ claude-worktree feature/auth 'Implement authentication feature' --draft
 
 # Draft PR with specific base branch
 claude-worktree feature/auth 'Implement authentication feature' --draft --base main
+
+# List worktrees with status
+claude-worktree list
+
+# List worktrees as JSON
+claude-worktree list --json
 
 # Clean up unnecessary worktrees
 claude-worktree clean
