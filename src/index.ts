@@ -39,6 +39,16 @@ export type { CleanArgs as CleanCommandArgs, CleanResult } from "./clean";
 // Prompt utilities
 export { confirm, selectMultiple } from "./prompt";
 
+// Options extraction
+export { extractOptions } from "./options";
+export type {
+  BooleanOptionDef,
+  StringOptionDef,
+  OptionDef,
+  OptionSchema,
+  ExtractResult,
+} from "./options";
+
 // CLI
 export { parseArgs, run, showHelp, runCreate } from "./cli";
 export type { CliArgs, CreateArgs, CleanArgs, Command } from "./cli";

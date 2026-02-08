@@ -13,6 +13,7 @@ import { executeClean, type CleanArgs } from "./clean";
 import { confirm } from "./prompt";
 import { loadProjectConfig, buildHookCommand, runHook } from "./config";
 import { findAvailableSlot } from "./slot";
+import { extractOptions } from "./options";
 
 export type { CleanArgs } from "./clean";
 
@@ -89,31 +90,21 @@ export function parseCreateArgs(args: string[]): CreateArgs {
 
   const branchName = args[0];
   const taskName = args[1];
-  let remaining = args.slice(2);
 
-  // --pane / -p フラグを抽出
-  const pane = remaining.includes("--pane") || remaining.includes("-p");
-  if (pane) {
-    remaining = remaining.filter((arg) => arg !== "--pane" && arg !== "-p");
-  }
+  const { booleans, strings, remaining } = extractOptions(args.slice(2), {
+    options: {
+      pane:   { type: "boolean", flag: "--pane", alias: "-p" },
+      danger: { type: "boolean", flag: "--danger" },
+      merge:  { type: "boolean", flag: "--merge" },
+      draft:  { type: "boolean", flag: "--draft" },
+      baseBranch: { type: "string", flag: "--base", errorMessage: "--base requires a branch name argument" },
+      planFile:   { type: "string", flag: "--plan", errorMessage: "--plan requires a file path argument" },
+    },
+    unknownHandling: "passthrough",
+  });
 
-  // --danger フラグを抽出
-  const danger = remaining.includes("--danger");
-  if (danger) {
-    remaining = remaining.filter((arg) => arg !== "--danger");
-  }
-
-  // --merge フラグを抽出
-  const merge = remaining.includes("--merge");
-  if (merge) {
-    remaining = remaining.filter((arg) => arg !== "--merge");
-  }
-
-  // --draft フラグを抽出
-  const draft = remaining.includes("--draft");
-  if (draft) {
-    remaining = remaining.filter((arg) => arg !== "--draft");
-  }
+  const { pane, danger, merge, draft } = booleans;
+  const { baseBranch, planFile } = strings;
 
   // --merge と --draft の排他性チェック
   if (merge && draft) {
@@ -122,41 +113,7 @@ export function parseCreateArgs(args: string[]): CreateArgs {
     );
   }
 
-  // --base オプションを抽出
-  const baseIndex = remaining.indexOf("--base");
-  let baseBranch: string | undefined;
-
-  if (baseIndex !== -1) {
-    if (baseIndex + 1 >= remaining.length) {
-      throw new Error("--base requires a branch name argument");
-    }
-    baseBranch = remaining[baseIndex + 1];
-    remaining = [
-      ...remaining.slice(0, baseIndex),
-      ...remaining.slice(baseIndex + 2),
-    ];
-  }
-
-  // --plan オプションを抽出
-  const planIndex = remaining.indexOf("--plan");
-  let planFile: string | undefined;
-  let inlinePromptParts: string[] = [];
-
-  if (planIndex !== -1) {
-    if (planIndex + 1 >= remaining.length) {
-      throw new Error("--plan requires a file path argument");
-    }
-    planFile = remaining[planIndex + 1];
-    // --plan とそのパスを除いた残りをインラインプロンプトとする
-    inlinePromptParts = [
-      ...remaining.slice(0, planIndex),
-      ...remaining.slice(planIndex + 2),
-    ];
-  } else {
-    inlinePromptParts = remaining;
-  }
-
-  const inlinePrompt = inlinePromptParts.join(" ");
+  const inlinePrompt = remaining.join(" ");
 
   // 排他性チェック: --plan とインラインプロンプトの両方は指定不可
   if (planFile && inlinePrompt) {
@@ -179,36 +136,22 @@ export function parseCreateArgs(args: string[]): CreateArgs {
 }
 
 export function parseCleanArgs(args: string[]): CleanArgs {
-  const cleanArgs: CleanArgs = {
-    force: false,
-    all: false,
-    dryRun: false,
+  const { booleans } = extractOptions(args, {
+    options: {
+      force:  { type: "boolean", flag: "--force", alias: "-f" },
+      all:    { type: "boolean", flag: "--all",   alias: "-a" },
+      dryRun: { type: "boolean", flag: "--dry-run", alias: "-n" },
+    },
+    unknownHandling: "error",
+    ignoredFlags: ["-h", "--help"],
+    unknownErrorPrefix: "Unknown option for clean command",
+  });
+
+  return {
+    force: booleans.force,
+    all: booleans.all,
+    dryRun: booleans.dryRun,
   };
-
-  for (const arg of args) {
-    switch (arg) {
-      case "--force":
-      case "-f":
-        cleanArgs.force = true;
-        break;
-      case "--all":
-      case "-a":
-        cleanArgs.all = true;
-        break;
-      case "--dry-run":
-      case "-n":
-        cleanArgs.dryRun = true;
-        break;
-      case "-h":
-      case "--help":
-        // clean --help は全体ヘルプを表示
-        break;
-      default:
-        throw new Error(`Unknown option for clean command: ${arg}`);
-    }
-  }
-
-  return cleanArgs;
 }
 
 export function parseArgs(args: string[]): Command {
