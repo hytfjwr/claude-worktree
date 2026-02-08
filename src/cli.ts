@@ -25,6 +25,7 @@ export type CreateArgs = {
   merge?: boolean;
   draft?: boolean;
   baseBranch?: string;
+  pane?: boolean;
 };
 
 export type Command =
@@ -50,6 +51,7 @@ Arguments:
   [prompt]       Claude Codeに渡すプロンプト（省略時はtask-nameを使用）
 
 Options:
+  -p, --pane       WezTermの新しいペインで開く（デフォルト: 現在のターミナルで実行）
   --plan <file>    プランファイルからプロンプトを読み込む（インラインpromptと併用不可）
   --base <branch>  ベースブランチを指定（デフォルト: 現在のブランチ）
   --danger         ワークスペース警告をスキップ（--dangerously-skip-permissions を使用）
@@ -64,7 +66,8 @@ Clean options:
 
 Examples:
   claude-worktree feature/auth 'Auth実装' '認証機能を実装して'
-  claude-worktree fix/bug-123 'バグ修正'
+  claude-worktree feature/auth 'Auth実装' '認証機能を実装して' -p
+  claude-worktree fix/bug-123 'バグ修正' --pane
   claude-worktree feature/api 'API実装' --plan ./plan.md
   claude-worktree feature/auth 'Auth実装' '認証機能を実装して' --danger
   claude-worktree feature/auth 'Auth実装' '認証機能を実装して' --merge
@@ -87,6 +90,12 @@ export function parseCreateArgs(args: string[]): CreateArgs {
   const branchName = args[0];
   const taskName = args[1];
   let remaining = args.slice(2);
+
+  // --pane / -p フラグを抽出
+  const pane = remaining.includes("--pane") || remaining.includes("-p");
+  if (pane) {
+    remaining = remaining.filter((arg) => arg !== "--pane" && arg !== "-p");
+  }
 
   // --danger フラグを抽出
   const danger = remaining.includes("--danger");
@@ -165,6 +174,7 @@ export function parseCreateArgs(args: string[]): CreateArgs {
     merge,
     draft,
     baseBranch,
+    pane,
   };
 }
 
@@ -236,7 +246,7 @@ async function readPlanFile(filePath: string): Promise<string> {
 }
 
 export async function runCreate(args: CreateArgs): Promise<void> {
-  const { branchName, taskName, planFile, danger, merge, draft, baseBranch } = args;
+  const { branchName, taskName, planFile, danger, merge, draft, baseBranch, pane } = args;
   let { prompt } = args;
 
   // プランファイルからプロンプトを読み込み
@@ -383,10 +393,6 @@ export async function runCreate(args: CreateArgs): Promise<void> {
     }
   }
 
-  // WezTermペインを作成
-  const paneId = await createPane({ title: taskName, keepFocus: true });
-  console.log(`🪟 Created pane: ${paneId}`);
-
   // 実行コマンドを構築
   const claudeOptions = {
     prompt,
@@ -405,19 +411,38 @@ export async function runCreate(args: CreateArgs): Promise<void> {
     }),
   };
 
-  const commands = [
-    `cd "${worktreePath}"`,
-    buildClaudeCommand(claudeOptions),
-  ].join(" && ");
+  if (pane) {
+    // WezTermペインを作成してコマンドを送信
+    const paneId = await createPane({ title: taskName, keepFocus: true });
+    console.log(`🪟 Created pane: ${paneId}`);
 
-  // コマンドを送信
-  await sendCommand(paneId, commands);
+    const commands = [
+      `cd "${worktreePath}"`,
+      buildClaudeCommand(claudeOptions),
+    ].join(" && ");
 
-  // Claude起動後、プロンプト確定のためにEnterを送信
-  await Bun.sleep(2000);
-  await sendText(paneId, "\n");
+    await sendCommand(paneId, commands);
 
-  console.log("✅ Worktree created and Claude started in new pane");
+    // Claude起動後、プロンプト確定のためにEnterを送信
+    await Bun.sleep(2000);
+    await sendText(paneId, "\n");
+
+    console.log("✅ Worktree created and Claude started in new pane");
+  } else {
+    // 現在のターミナルでClaude Codeを起動
+    console.log("✅ Worktree created. Starting Claude Code...");
+
+    const commands = [
+      `cd "${worktreePath}"`,
+      buildClaudeCommand(claudeOptions),
+    ].join(" && ");
+
+    const proc = Bun.spawn(["sh", "-c", commands], {
+      stdio: ["inherit", "inherit", "inherit"],
+    });
+
+    await proc.exited;
+  }
 }
 
 export async function run(command: Command): Promise<void> {

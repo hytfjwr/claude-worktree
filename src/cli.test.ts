@@ -58,6 +58,7 @@ describe("parseArgs", () => {
           merge: false,
           draft: false,
           baseBranch: undefined,
+          pane: false,
         },
       });
     });
@@ -75,6 +76,7 @@ describe("parseArgs", () => {
           merge: false,
           draft: false,
           baseBranch: undefined,
+          pane: false,
         },
       });
     });
@@ -93,6 +95,7 @@ describe("parseCreateArgs", () => {
       merge: false,
       draft: false,
       baseBranch: undefined,
+      pane: false,
     });
   });
 
@@ -107,6 +110,7 @@ describe("parseCreateArgs", () => {
       merge: false,
       draft: false,
       baseBranch: undefined,
+      pane: false,
     });
   });
 
@@ -121,6 +125,7 @@ describe("parseCreateArgs", () => {
       merge: false,
       draft: false,
       baseBranch: undefined,
+      pane: false,
     });
   });
 
@@ -135,6 +140,7 @@ describe("parseCreateArgs", () => {
       merge: false,
       draft: false,
       baseBranch: undefined,
+      pane: false,
     });
   });
 
@@ -149,6 +155,7 @@ describe("parseCreateArgs", () => {
       merge: false,
       draft: false,
       baseBranch: undefined,
+      pane: false,
     });
   });
 
@@ -163,6 +170,7 @@ describe("parseCreateArgs", () => {
       merge: true,
       draft: false,
       baseBranch: undefined,
+      pane: false,
     });
   });
 
@@ -177,6 +185,7 @@ describe("parseCreateArgs", () => {
       merge: true,
       draft: false,
       baseBranch: undefined,
+      pane: false,
     });
   });
 
@@ -191,6 +200,7 @@ describe("parseCreateArgs", () => {
       merge: true,
       draft: false,
       baseBranch: undefined,
+      pane: false,
     });
   });
 
@@ -205,6 +215,7 @@ describe("parseCreateArgs", () => {
       merge: true,
       draft: false,
       baseBranch: undefined,
+      pane: false,
     });
   });
 
@@ -219,6 +230,7 @@ describe("parseCreateArgs", () => {
       merge: false,
       draft: false,
       baseBranch: "develop",
+      pane: false,
     });
   });
 
@@ -233,6 +245,7 @@ describe("parseCreateArgs", () => {
       merge: false,
       draft: false,
       baseBranch: "develop",
+      pane: false,
     });
   });
 
@@ -247,6 +260,7 @@ describe("parseCreateArgs", () => {
       merge: true,
       draft: false,
       baseBranch: "develop",
+      pane: false,
     });
   });
 
@@ -261,6 +275,7 @@ describe("parseCreateArgs", () => {
       merge: false,
       draft: false,
       baseBranch: "develop",
+      pane: false,
     });
   });
 
@@ -275,6 +290,7 @@ describe("parseCreateArgs", () => {
       merge: true,
       draft: false,
       baseBranch: "develop",
+      pane: false,
     });
   });
 
@@ -289,6 +305,7 @@ describe("parseCreateArgs", () => {
       merge: false,
       draft: true,
       baseBranch: undefined,
+      pane: false,
     });
   });
 
@@ -303,6 +320,7 @@ describe("parseCreateArgs", () => {
       merge: false,
       draft: true,
       baseBranch: undefined,
+      pane: false,
     });
   });
 
@@ -317,6 +335,7 @@ describe("parseCreateArgs", () => {
       merge: false,
       draft: true,
       baseBranch: "develop",
+      pane: false,
     });
   });
 
@@ -331,7 +350,74 @@ describe("parseCreateArgs", () => {
       merge: false,
       draft: true,
       baseBranch: undefined,
+      pane: false,
     });
+  });
+
+  test("--pane オプション", () => {
+    const result = parseCreateArgs(["feature/test", "タスク", "プロンプト", "--pane"]);
+    expect(result).toEqual({
+      branchName: "feature/test",
+      taskName: "タスク",
+      prompt: "プロンプト",
+      planFile: undefined,
+      danger: false,
+      merge: false,
+      draft: false,
+      baseBranch: undefined,
+      pane: true,
+    });
+  });
+
+  test("-p オプション", () => {
+    const result = parseCreateArgs(["feature/test", "タスク", "プロンプト", "-p"]);
+    expect(result).toEqual({
+      branchName: "feature/test",
+      taskName: "タスク",
+      prompt: "プロンプト",
+      planFile: undefined,
+      danger: false,
+      merge: false,
+      draft: false,
+      baseBranch: undefined,
+      pane: true,
+    });
+  });
+
+  test("--pane + --danger オプション", () => {
+    const result = parseCreateArgs(["feature/test", "タスク", "プロンプト", "--pane", "--danger"]);
+    expect(result).toEqual({
+      branchName: "feature/test",
+      taskName: "タスク",
+      prompt: "プロンプト",
+      planFile: undefined,
+      danger: true,
+      merge: false,
+      draft: false,
+      baseBranch: undefined,
+      pane: true,
+    });
+  });
+
+  test("--pane + --draft + --base オプション", () => {
+    const result = parseCreateArgs(["feature/test", "タスク", "プロンプト", "--pane", "--draft", "--base", "develop"]);
+    expect(result).toEqual({
+      branchName: "feature/test",
+      taskName: "タスク",
+      prompt: "プロンプト",
+      planFile: undefined,
+      danger: false,
+      merge: false,
+      draft: true,
+      baseBranch: "develop",
+      pane: true,
+    });
+  });
+
+  test("-p はプロンプトの一部にならない", () => {
+    const result = parseCreateArgs(["feature/test", "タスク", "-p", "プロンプト"]);
+    expect(result.pane).toBe(true);
+    expect(result.prompt).toBe("プロンプト");
   });
 
   test("エラー: --merge と --draft の排他性", () => {

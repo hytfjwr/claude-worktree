@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A CLI tool for parallel development using WezTerm + git worktree + Claude Code. It creates a git worktree in a new WezTerm pane and automatically launches Claude Code.
+A CLI tool for parallel development using WezTerm + git worktree + Claude Code. It creates a git worktree and launches Claude Code. With the `--pane` option, it opens in a new WezTerm pane for parallel development.
 
 ## Commands
 
@@ -45,7 +45,8 @@ claude-worktree -h / --help
 
 # Examples
 claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature'
-claude-worktree fix/bug-123 'Fix login bug'
+claude-worktree feature/auth 'Implement Auth' 'Implement authentication feature' --pane
+claude-worktree fix/bug-123 'Fix login bug' -p
 claude-worktree feature/api 'API Implementation' --plan ./plan.md
 claude-worktree feature/auth 'Auth実装' '認証機能を実装' --base develop
 claude-worktree clean
@@ -54,6 +55,7 @@ claude-worktree clean --dry-run
 
 ### Options
 
+- `-p, --pane` - Open in a new WezTerm pane (default: run in current terminal)
 - `--plan <file>` - Read prompt from a file (cannot be used with inline prompt)
 - `--base <branch>` - ベースブランチを指定（デフォルト: 現在のブランチ）
 - `--danger` - Skip workspace warning (uses --dangerously-skip-permissions)
@@ -99,8 +101,8 @@ src/
 3. Load project config from `.claude-worktree.json` (if exists)
 4. Create worktree directly via `git worktree add`
 5. Run `postCreate` hook (if configured) — rollback worktree on failure
-6. Split a new pane to the right in WezTerm
-7. In the new pane: cd into worktree → launch Claude Code
+6. If `--pane`: Split a new pane to the right in WezTerm → cd into worktree → launch Claude Code
+7. Otherwise: cd into worktree → launch Claude Code in current terminal
 
 **Hook Configuration (`.claude-worktree.json`):**
 ```json
