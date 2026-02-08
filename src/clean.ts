@@ -3,6 +3,7 @@ import {
   listWorktrees,
   getWorktreeStatuses,
   removeWorktree,
+  deleteLocalBranch,
   fetchAndPrune,
   type WorktreeInfo,
   type WorktreeStatus,
@@ -28,6 +29,7 @@ export type CleanDeps = {
   listWorktrees: () => Promise<WorktreeInfo[]>;
   getWorktreeStatuses: (worktrees: WorktreeInfo[]) => Promise<WorktreeStatus[]>;
   removeWorktree: (path: string, force?: boolean) => Promise<void>;
+  deleteLocalBranch: (branchName: string, force?: boolean) => Promise<void>;
   getGitContext: () => Promise<GitContext>;
   loadProjectConfig: (repoRoot: string) => Promise<ProjectConfig | null>;
   buildHookCommand: (template: string, vars: HookVars) => string;
@@ -41,6 +43,7 @@ const defaultDeps: CleanDeps = {
   listWorktrees,
   getWorktreeStatuses,
   removeWorktree,
+  deleteLocalBranch,
   getGitContext,
   loadProjectConfig,
   buildHookCommand,
@@ -164,6 +167,17 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
       }
 
       await deps.removeWorktree(worktree.path, worktree.isDirty);
+
+      // Delete local branch (skip for detached HEAD)
+      if (worktree.branch) {
+        try {
+          await deps.deleteLocalBranch(worktree.branch, true);
+        } catch (error) {
+          const branchError = error instanceof Error ? error.message : String(error);
+          console.warn(`  ⚠️  ブランチ ${worktree.branch} の削除に失敗しました: ${branchError}`);
+        }
+      }
+
       console.log(`  ✓ ${worktree.branch || worktree.path}`);
       result.deleted.push(worktree.path);
     } catch (error) {

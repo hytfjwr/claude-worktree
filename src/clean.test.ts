@@ -37,6 +37,7 @@ function makeDeps(overrides: Partial<CleanDeps> = {}): CleanDeps {
     listWorktrees: async () => [],
     getWorktreeStatuses: async () => [],
     removeWorktree: async () => {},
+    deleteLocalBranch: async () => {},
     getGitContext: async () => ({
       repoRoot: "/repo",
       repoName: "repo",
@@ -526,6 +527,133 @@ describe("executeClean", () => {
       );
 
       expect(result.deleted).toEqual(["/tmp/repo-detached"]);
+    });
+  });
+
+  describe("ローカルブランチ削除", () => {
+    test("worktree 削除後にローカルブランチを force 削除する", async () => {
+      const worktree = makeWorktree({
+        path: "/tmp/repo-branch",
+        branch: "feature/branch",
+      });
+      const status = makeStatus(
+        { path: "/tmp/repo-branch", branch: "feature/branch" },
+        { canAutoClean: true }
+      );
+      let deletedBranch = "";
+      let deletedWithForce = false;
+      const deps = makeDeps({
+        listWorktrees: async () => [worktree],
+        getWorktreeStatuses: async () => [status],
+        deleteLocalBranch: async (branch, force) => {
+          deletedBranch = branch;
+          deletedWithForce = force === true;
+        },
+      });
+
+      await executeClean({ ...defaultArgs, force: true }, deps);
+
+      expect(deletedBranch).toBe("feature/branch");
+      expect(deletedWithForce).toBe(true);
+    });
+
+    test("detached HEAD の場合はブランチ削除をスキップする", async () => {
+      const worktree = makeWorktree({
+        path: "/tmp/repo-detached",
+        branch: null,
+      });
+      const status = makeStatus(
+        { path: "/tmp/repo-detached", branch: null },
+        { canAutoClean: true }
+      );
+      let deleteLocalBranchCalled = false;
+      const deps = makeDeps({
+        listWorktrees: async () => [worktree],
+        getWorktreeStatuses: async () => [status],
+        deleteLocalBranch: async () => {
+          deleteLocalBranchCalled = true;
+        },
+      });
+
+      await executeClean({ ...defaultArgs, force: true }, deps);
+
+      expect(deleteLocalBranchCalled).toBe(false);
+    });
+
+    test("ブランチ削除に失敗しても worktree は削除成功として記録する", async () => {
+      const worktree = makeWorktree({
+        path: "/tmp/repo-branch-fail",
+        branch: "feature/branch-fail",
+      });
+      const status = makeStatus(
+        { path: "/tmp/repo-branch-fail", branch: "feature/branch-fail" },
+        { canAutoClean: true }
+      );
+      const deps = makeDeps({
+        listWorktrees: async () => [worktree],
+        getWorktreeStatuses: async () => [status],
+        deleteLocalBranch: async () => {
+          throw new Error("Branch delete failed");
+        },
+      });
+
+      const result = await executeClean(
+        { ...defaultArgs, force: true },
+        deps
+      );
+
+      expect(result.deleted).toEqual(["/tmp/repo-branch-fail"]);
+      expect(result.errors).toEqual([]);
+      expect(consoleWarnSpy).toHaveBeenCalled();
+    });
+
+    test("--dry-run の場合はブランチ削除しない", async () => {
+      const worktree = makeWorktree({
+        path: "/tmp/repo-dry",
+        branch: "feature/dry",
+      });
+      const status = makeStatus(
+        { path: "/tmp/repo-dry", branch: "feature/dry" },
+        { canAutoClean: true }
+      );
+      let deleteLocalBranchCalled = false;
+      const deps = makeDeps({
+        listWorktrees: async () => [worktree],
+        getWorktreeStatuses: async () => [status],
+        deleteLocalBranch: async () => {
+          deleteLocalBranchCalled = true;
+        },
+      });
+
+      await executeClean({ ...defaultArgs, dryRun: true }, deps);
+
+      expect(deleteLocalBranchCalled).toBe(false);
+    });
+
+    test("removeWorktree が失敗した場合はブランチ削除しない", async () => {
+      const worktree = makeWorktree({
+        path: "/tmp/repo-wt-fail",
+        branch: "feature/wt-fail",
+      });
+      const status = makeStatus(
+        { path: "/tmp/repo-wt-fail", branch: "feature/wt-fail" },
+        { canAutoClean: true }
+      );
+      let deleteLocalBranchCalled = false;
+      const deps = makeDeps({
+        listWorktrees: async () => [worktree],
+        getWorktreeStatuses: async () => [status],
+        removeWorktree: async () => {
+          throw new Error("Worktree remove failed");
+        },
+        deleteLocalBranch: async () => {
+          deleteLocalBranchCalled = true;
+        },
+      });
+
+      await executeClean({ ...defaultArgs, force: true }, deps);
+
+      expect(deleteLocalBranchCalled).toBe(false);
     });
   });
 });
