@@ -53,7 +53,7 @@ function makeDeps(overrides: Partial<CleanDeps> = {}): CleanDeps {
   };
 }
 
-const defaultArgs: CleanArgs = { force: false, all: false, dryRun: false };
+const defaultArgs: CleanArgs = { force: false, all: false, dryRun: false, verbose: false };
 
 // console 出力を抑制
 let consoleWarnSpy: ReturnType<typeof spyOn>;

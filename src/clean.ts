@@ -11,11 +11,13 @@ import {
 } from "./git";
 import { confirm, selectMultiple } from "./prompt";
 import { loadProjectConfig, buildHookCommand, runHook, type ProjectConfig, type HookVars } from "./config";
+import { startSpinner } from "./spinner";
 
 export type CleanArgs = {
   force: boolean;
   all: boolean;
   dryRun: boolean;
+  verbose: boolean;
 };
 
 export type CleanResult = {
@@ -33,7 +35,7 @@ export type CleanDeps = {
   getGitContext: () => Promise<GitContext>;
   loadProjectConfig: (repoRoot: string) => Promise<ProjectConfig | null>;
   buildHookCommand: (template: string, vars: HookVars) => string;
-  runHook: (command: string, cwd: string) => Promise<void>;
+  runHook: (command: string, cwd: string, options?: { verbose?: boolean }) => Promise<void>;
   confirm: (message: string) => Promise<boolean>;
   selectMultiple: (statuses: WorktreeStatus[]) => Promise<WorktreeStatus[]>;
 };
@@ -158,10 +160,13 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
       // preClean hook
       if (config?.preClean && repoRoot) {
         const hookCmd = deps.buildHookCommand(config.preClean, { path: worktree.path });
+        const spinner = args.verbose ? null : startSpinner("preClean hook を実行中...");
         try {
-          await deps.runHook(hookCmd, repoRoot);
+          await deps.runHook(hookCmd, repoRoot, { verbose: args.verbose });
+          spinner?.stop();
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
+          spinner?.fail(`preClean hook failed (continuing): ${message}`);
           console.warn(`  ⚠️  preClean hook failed (continuing): ${message}`);
         }
       }

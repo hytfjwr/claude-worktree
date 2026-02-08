@@ -14,6 +14,7 @@ import { confirm } from "./prompt";
 import { loadProjectConfig, buildHookCommand, runHook } from "./config";
 import { findAvailableSlot } from "./slot";
 import { extractOptions } from "./options";
+import { startSpinner } from "./spinner";
 
 export type { CleanArgs } from "./clean";
 
@@ -27,6 +28,7 @@ export type CreateArgs = {
   draft?: boolean;
   baseBranch?: string;
   pane?: boolean;
+  verbose?: boolean;
 };
 
 export type Command =
@@ -58,12 +60,14 @@ Options:
   --danger         ワークスペース警告をスキップ（--dangerously-skip-permissions を使用）
   --merge          タスク完了後に元ブランチへ自動マージ・クリーンアップ
   --draft          タスク完了後にDraft PRを自動作成（--mergeと併用不可）
+  -v, --verbose    フック実行時のログを表示
   -h, --help       このヘルプを表示
 
 Clean options:
   -f, --force    確認プロンプトをスキップ
   -a, --all      全worktreeを表示して手動選択
   -n, --dry-run  削除せず対象を表示のみ
+  -v, --verbose  フック実行時のログを表示
 
 Examples:
   claude-worktree feature/auth 'Auth実装' '認証機能を実装して'
@@ -93,17 +97,18 @@ export function parseCreateArgs(args: string[]): CreateArgs {
 
   const { booleans, strings, remaining } = extractOptions(args.slice(2), {
     options: {
-      pane:   { type: "boolean", flag: "--pane", alias: "-p" },
-      danger: { type: "boolean", flag: "--danger" },
-      merge:  { type: "boolean", flag: "--merge" },
-      draft:  { type: "boolean", flag: "--draft" },
+      pane:    { type: "boolean", flag: "--pane", alias: "-p" },
+      danger:  { type: "boolean", flag: "--danger" },
+      merge:   { type: "boolean", flag: "--merge" },
+      draft:   { type: "boolean", flag: "--draft" },
+      verbose: { type: "boolean", flag: "--verbose", alias: "-v" },
       baseBranch: { type: "string", flag: "--base", errorMessage: "--base requires a branch name argument" },
       planFile:   { type: "string", flag: "--plan", errorMessage: "--plan requires a file path argument" },
     },
     unknownHandling: "passthrough",
   });
 
-  const { pane, danger, merge, draft } = booleans;
+  const { pane, danger, merge, draft, verbose } = booleans;
   const { baseBranch, planFile } = strings;
 
   // --merge と --draft の排他性チェック
@@ -132,15 +137,17 @@ export function parseCreateArgs(args: string[]): CreateArgs {
     draft,
     baseBranch,
     pane,
+    verbose,
   };
 }
 
 export function parseCleanArgs(args: string[]): CleanArgs {
   const { booleans } = extractOptions(args, {
     options: {
-      force:  { type: "boolean", flag: "--force", alias: "-f" },
-      all:    { type: "boolean", flag: "--all",   alias: "-a" },
-      dryRun: { type: "boolean", flag: "--dry-run", alias: "-n" },
+      force:   { type: "boolean", flag: "--force", alias: "-f" },
+      all:     { type: "boolean", flag: "--all",   alias: "-a" },
+      dryRun:  { type: "boolean", flag: "--dry-run", alias: "-n" },
+      verbose: { type: "boolean", flag: "--verbose", alias: "-v" },
     },
     unknownHandling: "error",
     ignoredFlags: ["-h", "--help"],
@@ -151,6 +158,7 @@ export function parseCleanArgs(args: string[]): CleanArgs {
     force: booleans.force,
     all: booleans.all,
     dryRun: booleans.dryRun,
+    verbose: booleans.verbose,
   };
 }
 
@@ -249,10 +257,13 @@ export async function runCreate(args: CreateArgs): Promise<void> {
     // preClean hook
     if (config?.preClean) {
       const hookCmd = buildHookCommand(config.preClean, { path: existingWorktree.path });
+      const spinner = args.verbose ? null : startSpinner("preClean hook を実行中...");
       try {
-        await runHook(hookCmd, git.repoRoot);
+        await runHook(hookCmd, git.repoRoot, { verbose: args.verbose });
+        spinner?.stop();
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+        spinner?.fail(`preClean hook failed (continuing): ${message}`);
         console.warn(`  ⚠️  preClean hook failed (continuing): ${message}`);
       }
     }
@@ -312,17 +323,20 @@ export async function runCreate(args: CreateArgs): Promise<void> {
       slot = await findAvailableSlot();
     }
     const hookCmd = buildHookCommand(config.postCreate, { path: worktreePath, slot });
+    const spinner = args.verbose ? null : startSpinner("postCreate hook を実行中...");
     try {
-      await runHook(hookCmd, git.repoRoot);
+      await runHook(hookCmd, git.repoRoot, { verbose: args.verbose });
+      spinner?.stop();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      spinner?.fail("postCreate hook failed");
       console.error(`❌ postCreate hook failed: ${message}`);
       console.log("🗑️  Rolling back...");
       // preClean フックでコンテナ等をクリーンアップしてからワークツリーを削除
       if (config?.preClean) {
         const cleanCmd = buildHookCommand(config.preClean, { path: worktreePath });
         try {
-          await runHook(cleanCmd, git.repoRoot);
+          await runHook(cleanCmd, git.repoRoot, { verbose: args.verbose });
         } catch {
           console.warn("  ⚠️  preClean hook failed during rollback");
         }

@@ -36,6 +36,10 @@ export { isPortInUse, findAvailableSlot } from "./slot";
 export { executeClean } from "./clean";
 export type { CleanArgs as CleanCommandArgs, CleanResult } from "./clean";
 
+// Spinner utilities
+export { startSpinner } from "./spinner";
+export type { Spinner } from "./spinner";
+
 // Prompt utilities
 export { confirm, selectMultiple } from "./prompt";
 

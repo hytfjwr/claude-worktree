@@ -54,8 +54,13 @@ export function buildHookCommand(template: string, vars: HookVars): string {
     );
 }
 
-export async function runHook(command: string, cwd: string): Promise<void> {
-  const result = await $`${{ raw: command }}`.cwd(cwd).nothrow();
+export async function runHook(
+  command: string,
+  cwd: string,
+  options?: { verbose?: boolean }
+): Promise<void> {
+  const shell = $`${{ raw: command }}`.cwd(cwd).nothrow();
+  const result = options?.verbose ? await shell : await shell.quiet();
   if (result.exitCode !== 0) {
     throw new Error(
       `Hook command failed with exit code ${result.exitCode}: ${command}`

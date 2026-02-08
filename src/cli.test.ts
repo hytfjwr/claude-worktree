@@ -34,7 +34,7 @@ describe("parseArgs", () => {
       const result = parseArgs(["clean"]);
       expect(result).toEqual({
         type: "clean",
-        args: { force: false, all: false, dryRun: false },
+        args: { force: false, all: false, dryRun: false, verbose: false },
       });
     });
 
@@ -59,6 +59,7 @@ describe("parseArgs", () => {
           draft: false,
           baseBranch: undefined,
           pane: false,
+          verbose: false,
         },
       });
     });
@@ -77,6 +78,7 @@ describe("parseArgs", () => {
           draft: false,
           baseBranch: undefined,
           pane: false,
+          verbose: false,
         },
       });
     });
@@ -96,6 +98,7 @@ describe("parseCreateArgs", () => {
       draft: false,
       baseBranch: undefined,
       pane: false,
+      verbose: false,
     });
   });
 
@@ -111,6 +114,7 @@ describe("parseCreateArgs", () => {
       draft: false,
       baseBranch: undefined,
       pane: false,
+      verbose: false,
     });
   });
 
@@ -126,6 +130,7 @@ describe("parseCreateArgs", () => {
       draft: false,
       baseBranch: undefined,
       pane: false,
+      verbose: false,
     });
   });
 
@@ -141,6 +146,7 @@ describe("parseCreateArgs", () => {
       draft: false,
       baseBranch: undefined,
       pane: false,
+      verbose: false,
     });
   });
 
@@ -156,6 +162,7 @@ describe("parseCreateArgs", () => {
       draft: false,
       baseBranch: undefined,
       pane: false,
+      verbose: false,
     });
   });
 
@@ -171,6 +178,7 @@ describe("parseCreateArgs", () => {
       draft: false,
       baseBranch: undefined,
       pane: false,
+      verbose: false,
     });
   });
 
@@ -186,6 +194,7 @@ describe("parseCreateArgs", () => {
       draft: false,
       baseBranch: undefined,
       pane: false,
+      verbose: false,
     });
   });
 
@@ -201,6 +210,7 @@ describe("parseCreateArgs", () => {
       draft: false,
       baseBranch: undefined,
       pane: false,
+      verbose: false,
     });
   });
 
@@ -216,6 +226,7 @@ describe("parseCreateArgs", () => {
       draft: false,
       baseBranch: undefined,
       pane: false,
+      verbose: false,
     });
   });
 
@@ -231,6 +242,7 @@ describe("parseCreateArgs", () => {
       draft: false,
       baseBranch: "develop",
       pane: false,
+      verbose: false,
     });
   });
 
@@ -246,6 +258,7 @@ describe("parseCreateArgs", () => {
       draft: false,
       baseBranch: "develop",
       pane: false,
+      verbose: false,
     });
   });
 
@@ -261,6 +274,7 @@ describe("parseCreateArgs", () => {
       draft: false,
       baseBranch: "develop",
       pane: false,
+      verbose: false,
     });
   });
 
@@ -276,6 +290,7 @@ describe("parseCreateArgs", () => {
       draft: false,
       baseBranch: "develop",
       pane: false,
+      verbose: false,
     });
   });
 
@@ -291,6 +306,7 @@ describe("parseCreateArgs", () => {
       draft: false,
       baseBranch: "develop",
       pane: false,
+      verbose: false,
     });
   });
 
@@ -306,6 +322,7 @@ describe("parseCreateArgs", () => {
       draft: true,
       baseBranch: undefined,
       pane: false,
+      verbose: false,
     });
   });
 
@@ -321,6 +338,7 @@ describe("parseCreateArgs", () => {
       draft: true,
       baseBranch: undefined,
       pane: false,
+      verbose: false,
     });
   });
 
@@ -336,6 +354,7 @@ describe("parseCreateArgs", () => {
       draft: true,
       baseBranch: "develop",
       pane: false,
+      verbose: false,
     });
   });
 
@@ -351,6 +370,7 @@ describe("parseCreateArgs", () => {
       draft: true,
       baseBranch: undefined,
       pane: false,
+      verbose: false,
     });
   });
 
@@ -366,6 +386,7 @@ describe("parseCreateArgs", () => {
       draft: false,
       baseBranch: undefined,
       pane: true,
+      verbose: false,
     });
   });
 
@@ -381,6 +402,7 @@ describe("parseCreateArgs", () => {
       draft: false,
       baseBranch: undefined,
       pane: true,
+      verbose: false,
     });
   });
 
@@ -396,6 +418,7 @@ describe("parseCreateArgs", () => {
       draft: false,
       baseBranch: undefined,
       pane: true,
+      verbose: false,
     });
   });
 
@@ -411,7 +434,18 @@ describe("parseCreateArgs", () => {
       draft: true,
       baseBranch: "develop",
       pane: true,
+      verbose: false,
     });
+  });
+
+  test("--verbose オプション", () => {
+    const result = parseCreateArgs(["feature/test", "タスク", "プロンプト", "--verbose"]);
+    expect(result.verbose).toBe(true);
+  });
+
+  test("-v オプション", () => {
+    const result = parseCreateArgs(["feature/test", "タスク", "プロンプト", "-v"]);
+    expect(result.verbose).toBe(true);
   });
 
   test("-p はプロンプトの一部にならない", () => {
@@ -468,7 +502,7 @@ describe("parseCreateArgs", () => {
 describe("parseCleanArgs", () => {
   test("基本 - オプションなし", () => {
     const result = parseCleanArgs([]);
-    expect(result).toEqual({ force: false, all: false, dryRun: false });
+    expect(result).toEqual({ force: false, all: false, dryRun: false, verbose: false });
   });
 
   test("--force フラグ", () => {
@@ -503,17 +537,27 @@ describe("parseCleanArgs", () => {
 
   test("複合フラグ - --force --all --dry-run", () => {
     const result = parseCleanArgs(["--force", "--all", "--dry-run"]);
-    expect(result).toEqual({ force: true, all: true, dryRun: true });
+    expect(result).toEqual({ force: true, all: true, dryRun: true, verbose: false });
   });
 
   test("複合フラグ - 短縮形 -f -a -n", () => {
     const result = parseCleanArgs(["-f", "-a", "-n"]);
-    expect(result).toEqual({ force: true, all: true, dryRun: true });
+    expect(result).toEqual({ force: true, all: true, dryRun: true, verbose: false });
   });
 
   test("-h/--help は無視される（例外を投げない）", () => {
     const result = parseCleanArgs(["-h"]);
-    expect(result).toEqual({ force: false, all: false, dryRun: false });
+    expect(result).toEqual({ force: false, all: false, dryRun: false, verbose: false });
+  });
+
+  test("--verbose フラグ", () => {
+    const result = parseCleanArgs(["--verbose"]);
+    expect(result.verbose).toBe(true);
+  });
+
+  test("-v フラグ", () => {
+    const result = parseCleanArgs(["-v"]);
+    expect(result.verbose).toBe(true);
   });
 
   test("エラー: 不明オプション", () => {
