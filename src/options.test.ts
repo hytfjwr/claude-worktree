@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { extractOptions, type OptionSchema } from "./options";
+import { extractOptions } from "./options";
+import type { OptionSchema } from "./types";
 
 describe("extractOptions", () => {
   describe("boolean extraction", () => {

@@ -1,15 +1,6 @@
 import { $ } from "bun";
 import { join } from "path";
-
-export type ProjectConfig = {
-  postCreate?: string;
-  preClean?: string;
-};
-
-export type HookVars = {
-  path: string;
-  slot?: number;
-};
+import type { ProjectConfig, HookVars } from "./types";
 
 export async function loadProjectConfig(
   repoRoot: string

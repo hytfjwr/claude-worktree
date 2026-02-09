@@ -13,9 +13,7 @@ export async function checkWeztermAvailable(): Promise<boolean> {
   }
 }
 
-export type PaneOptions = {
-  keepFocus?: boolean; // If true, restore focus to the original pane after split
-};
+import type { PaneOptions } from "./types";
 
 export async function splitPaneRight(): Promise<string> {
   return (await $`wezterm cli split-pane --right`.text()).trim();

@@ -1,6 +1,6 @@
 import { describe, expect, test, beforeEach, spyOn } from "bun:test";
-import { executeClean, type CleanArgs, type CleanDeps } from "./clean";
-import type { WorktreeInfo, WorktreeStatus } from "./git";
+import { executeClean } from "./clean";
+import type { WorktreeInfo, WorktreeStatus, CleanArgs, CleanDeps } from "./types";
 
 // ============================================================================
 // Helper functions

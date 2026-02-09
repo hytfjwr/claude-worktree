@@ -9,34 +9,14 @@ import {
 } from "./git";
 import { createPane, sendCommand, sendText, checkWeztermAvailable } from "./wezterm";
 import { buildClaudeCommand } from "./claude";
-import { executeClean, type CleanArgs } from "./clean";
-import { executeList, type ListArgs } from "./list";
+import { executeClean } from "./clean";
+import { executeList } from "./list";
 import { confirm } from "./prompt";
 import { loadProjectConfig, buildHookCommand, runHook } from "./config";
 import { findAvailableSlot } from "./slot";
 import { extractOptions } from "./options";
 import { startSpinner, createTailUpdater } from "./spinner";
-
-export type { CleanArgs } from "./clean";
-export type { ListArgs } from "./list";
-
-export type CreateArgs = {
-  branchName: string;
-  prompt: string;
-  planFile?: string;
-  danger?: boolean;
-  merge?: boolean;
-  draft?: boolean;
-  baseBranch?: string;
-  pane?: boolean;
-  verbose?: boolean;
-};
-
-export type Command =
-  | { type: "help" }
-  | { type: "create"; args: CreateArgs }
-  | { type: "clean"; args: CleanArgs }
-  | { type: "list"; args: ListArgs };
+import type { CreateArgs, Command, CleanArgs, ListArgs } from "./types";
 
 export function showHelp(): void {
   console.log(`claude-worktree - CLI for parallel development with WezTerm + git worktree + Claude Code
@@ -219,9 +199,6 @@ export function parseArgs(args: string[]): Command {
 
   return { type: "create", args: parseCreateArgs(args) };
 }
-
-// Re-export for backward compatibility
-export type CliArgs = CreateArgs;
 
 async function readPlanFile(filePath: string): Promise<string> {
   const file = Bun.file(filePath);

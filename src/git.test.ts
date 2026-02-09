@@ -3,8 +3,8 @@ import {
   getWorktreePath,
   buildWorktreeCommand,
   parseWorktreePorcelain,
-  type WorktreeInfo,
 } from "./git";
+import type { WorktreeInfo } from "./types";
 
 // ============================================================================
 // Pure function tests (no mocks needed)

@@ -1,27 +1,6 @@
 import { $ } from "bun";
 import { join, basename } from "path";
-
-export type GitContext = {
-  repoRoot: string;
-  repoName: string;
-  currentBranch: string;
-};
-
-export type WorktreeInfo = {
-  path: string;
-  branch: string | null;
-  isLocked: boolean;
-  isDirty: boolean;
-  isMain: boolean;
-};
-
-export type WorktreeStatus = {
-  worktree: WorktreeInfo;
-  branchMerged: boolean;
-  branchDeletedOnRemote: boolean;
-  canAutoClean: boolean;
-  reason: string;
-};
+import type { GitContext, WorktreeInfo, WorktreeStatus, ParsedWorktree, CommitInfo, AheadBehind } from "./types";
 
 export async function getGitContext(): Promise<GitContext> {
   const repoRoot = (await $`git rev-parse --show-toplevel`.text()).trim();
@@ -82,8 +61,6 @@ export async function getMainBranch(): Promise<string> {
   }
   return "master";
 }
-
-export type ParsedWorktree = Omit<WorktreeInfo, "isDirty">;
 
 /**
  * Pure function to parse git worktree list --porcelain output.
@@ -201,17 +178,6 @@ export async function deleteLocalBranch(branchName: string, force = false): Prom
     throw new Error(`Failed to delete branch ${branchName}: ${stderr}`);
   }
 }
-
-export type CommitInfo = {
-  hash: string;
-  message: string;
-  date: Date;
-};
-
-export type AheadBehind = {
-  ahead: number;
-  behind: number;
-};
 
 export async function getLastCommit(worktreePath: string): Promise<CommitInfo | null> {
   const result = await $`git -C ${worktreePath} log -1 --format=%h%x00%s%x00%aI`.nothrow().quiet();

@@ -8,11 +8,7 @@ const SHIMMER_PAUSE = 6; // extra dark frames between sweeps
 const BASE_COLOR = { r: 120, g: 110, b: 170 };
 const BRIGHT_COLOR = { r: 230, g: 225, b: 255 };
 
-export type Spinner = {
-  stop: (finalMessage?: string) => void;
-  fail: (message: string) => void;
-  updateTail: (lines: string[]) => void;
-};
+import type { Spinner } from "./types";
 
 export function stripAnsi(str: string): string {
   // CSI sequences (including ? for cursor hide/show), OSC sequences, and simple escapes

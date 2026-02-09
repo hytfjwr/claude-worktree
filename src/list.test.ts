@@ -8,11 +8,8 @@ import {
   formatAheadBehind,
   formatSummary,
   formatWorktreeEntry,
-  type ListArgs,
-  type ListDeps,
-  type WorktreeListEntry,
 } from "./list";
-import type { WorktreeInfo, WorktreeStatus, CommitInfo } from "./git";
+import type { WorktreeInfo, WorktreeStatus, CommitInfo, ListArgs, ListDeps, WorktreeListEntry } from "./types";
 
 // ============================================================================
 // Helper functions

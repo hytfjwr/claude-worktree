@@ -5,40 +5,11 @@ import {
   removeWorktree,
   deleteLocalBranch,
   fetchAndPrune,
-  type WorktreeInfo,
-  type WorktreeStatus,
-  type GitContext,
 } from "./git";
 import { confirm, selectMultiple } from "./prompt";
-import { loadProjectConfig, buildHookCommand, runHook, type ProjectConfig, type HookVars } from "./config";
+import { loadProjectConfig, buildHookCommand, runHook } from "./config";
 import { startSpinner, createTailUpdater } from "./spinner";
-
-export type CleanArgs = {
-  force: boolean;
-  all: boolean;
-  dryRun: boolean;
-  verbose: boolean;
-};
-
-export type CleanResult = {
-  deleted: string[];
-  skipped: string[];
-  errors: Array<{ path: string; error: string }>;
-};
-
-export type CleanDeps = {
-  fetchAndPrune: () => Promise<void>;
-  listWorktrees: () => Promise<WorktreeInfo[]>;
-  getWorktreeStatuses: (worktrees: WorktreeInfo[]) => Promise<WorktreeStatus[]>;
-  removeWorktree: (path: string, force?: boolean) => Promise<void>;
-  deleteLocalBranch: (branchName: string, force?: boolean) => Promise<void>;
-  getGitContext: () => Promise<GitContext>;
-  loadProjectConfig: (repoRoot: string) => Promise<ProjectConfig | null>;
-  buildHookCommand: (template: string, vars: HookVars) => string;
-  runHook: (command: string, cwd: string, options?: { verbose?: boolean; onLine?: (line: string) => void }) => Promise<void>;
-  confirm: (message: string) => Promise<boolean>;
-  selectMultiple: (statuses: WorktreeStatus[]) => Promise<WorktreeStatus[]>;
-};
+import type { ProjectConfig, WorktreeStatus, CleanArgs, CleanResult, CleanDeps } from "./types";
 
 const defaultDeps: CleanDeps = {
   fetchAndPrune,

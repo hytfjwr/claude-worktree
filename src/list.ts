@@ -6,38 +6,9 @@ import {
   getLastCommit,
   getAheadBehind,
   getMainBranch,
-  type WorktreeInfo,
-  type WorktreeStatus,
-  type CommitInfo,
-  type AheadBehind,
 } from "./git";
-import { startSpinner, type Spinner } from "./spinner";
-
-export type ListArgs = {
-  json: boolean;
-  verbose: boolean;
-};
-
-export type WorktreeListEntry = {
-  worktree: WorktreeInfo;
-  status: WorktreeStatus;
-  commit: CommitInfo | null;
-  aheadBehind: AheadBehind | null;
-};
-
-export type ListResult = {
-  entries: WorktreeListEntry[];
-};
-
-export type ListDeps = {
-  fetchAndPrune: () => Promise<void>;
-  listWorktrees: () => Promise<WorktreeInfo[]>;
-  getWorktreeStatuses: (worktrees: WorktreeInfo[]) => Promise<WorktreeStatus[]>;
-  getLastCommit: (worktreePath: string) => Promise<CommitInfo | null>;
-  getAheadBehind: (branch: string, baseBranch: string) => Promise<AheadBehind | null>;
-  getMainBranch: () => Promise<string>;
-  startSpinner: (message: string) => Spinner;
-};
+import { startSpinner } from "./spinner";
+import type { WorktreeStatus, AheadBehind, ListArgs, WorktreeListEntry, ListResult, ListDeps } from "./types";
 
 const defaultDeps: ListDeps = {
   fetchAndPrune,

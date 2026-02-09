@@ -1,21 +1,4 @@
-export type MergeInstructions = {
-  baseBranch: string;
-  worktreePath: string;
-};
-
-export type DraftInstructions = {
-  baseBranch: string;
-  branchName: string;
-};
-
-export type ClaudeOptions = {
-  permissionMode?: "plan" | "auto-edit" | "full-auto";
-  prompt: string;
-  promptSuffix?: string;
-  dangerouslySkipPermissions?: boolean;
-  mergeInstructions?: MergeInstructions;
-  draftInstructions?: DraftInstructions;
-};
+import type { MergeInstructions, DraftInstructions, ClaudeOptions } from "./types";
 
 const DEFAULT_PROMPT_SUFFIX = "\n\nIf anything is unclear, always confirm with the user before proceeding.";
 
