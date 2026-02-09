@@ -1,10 +1,16 @@
-import { $ } from "bun";
-import { mkdir, open, rename, unlink } from "node:fs/promises";
+import { mkdir, open, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { setTimeout } from "node:timers/promises";
+import { exec } from "./exec";
 
 export async function isPortInUse(port: number): Promise<boolean> {
-  const result = await $`lsof -iTCP:${port} -sTCP:LISTEN`.nothrow().quiet();
+  const result = await exec("lsof", [
+    `-iTCP:${port}`,
+    "-sTCP:LISTEN",
+  ])
+    .nothrow()
+    .quiet();
   return result.exitCode === 0;
 }
 
@@ -34,13 +40,14 @@ function getLockFile(): string {
 type SlotCache = Record<string, number>;
 
 async function readCache(): Promise<SlotCache> {
-  const file = Bun.file(getCacheFile());
-  if (!(await file.exists())) {
-    return {};
-  }
   try {
-    return (await file.json()) as SlotCache;
-  } catch {
+    const data = await readFile(getCacheFile(), "utf-8");
+    return JSON.parse(data) as SlotCache;
+  } catch (err: unknown) {
+    if (err instanceof Error && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT") {
+      return {};
+    }
+    // Parse errors or other read errors: return empty cache
     return {};
   }
 }
@@ -48,7 +55,7 @@ async function readCache(): Promise<SlotCache> {
 async function writeCache(cache: SlotCache): Promise<void> {
   const cacheFile = getCacheFile();
   const tempFile = `${cacheFile}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
-  await Bun.write(tempFile, JSON.stringify(cache, null, 2));
+  await writeFile(tempFile, JSON.stringify(cache, null, 2), "utf-8");
   await rename(tempFile, cacheFile);
 }
 
@@ -64,7 +71,7 @@ async function withLock<T>(fn: () => Promise<T>): Promise<T> {
       handle = await open(lockFile, "wx");
       break;
     } catch {
-      await Bun.sleep(100);
+      await setTimeout(100);
     }
   }
   if (!handle) {

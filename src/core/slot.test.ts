@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
@@ -59,7 +59,7 @@ describe("slot cache", () => {
     await deleteSlot("/tmp/repo-only");
 
     const cacheFile = join(getCacheDir(), "slots.json");
-    const exists = await Bun.file(cacheFile).exists();
+    const exists = existsSync(cacheFile);
     expect(exists).toBe(false);
   });
 
@@ -68,7 +68,7 @@ describe("slot cache", () => {
     await deleteSlot("/tmp/does-not-exist");
 
     const cacheFile = join(getCacheDir(), "slots.json");
-    const exists = await Bun.file(cacheFile).exists();
+    const exists = existsSync(cacheFile);
     expect(exists).toBe(false);
   });
 
