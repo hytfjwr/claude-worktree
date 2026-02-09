@@ -153,6 +153,21 @@ describe("parseCreateArgs", () => {
     });
   });
 
+  test("-d option (alias for -danger)", () => {
+    const result = parseCreateArgs(["feature/test", "Prompt", "-d"]);
+    expect(result).toEqual({
+      branchName: "feature/test",
+      prompt: "Prompt",
+      planFile: undefined,
+      danger: true,
+      merge: false,
+      draft: false,
+      baseBranch: undefined,
+      pane: false,
+      verbose: false,
+    });
+  });
+
   test("-danger + -plan options", () => {
     const result = parseCreateArgs(["feature/test", "-plan", "plan.md", "-danger"]);
     expect(result).toEqual({
@@ -170,6 +185,21 @@ describe("parseCreateArgs", () => {
 
   test("-merge option", () => {
     const result = parseCreateArgs(["feature/test", "Prompt", "-merge"]);
+    expect(result).toEqual({
+      branchName: "feature/test",
+      prompt: "Prompt",
+      planFile: undefined,
+      danger: false,
+      merge: true,
+      draft: false,
+      baseBranch: undefined,
+      pane: false,
+      verbose: false,
+    });
+  });
+
+  test("-m option (alias for -merge)", () => {
+    const result = parseCreateArgs(["feature/test", "Prompt", "-m"]);
     expect(result).toEqual({
       branchName: "feature/test",
       prompt: "Prompt",
@@ -230,6 +260,21 @@ describe("parseCreateArgs", () => {
 
   test("-base option", () => {
     const result = parseCreateArgs(["feature/test", "Prompt", "-base", "develop"]);
+    expect(result).toEqual({
+      branchName: "feature/test",
+      prompt: "Prompt",
+      planFile: undefined,
+      danger: false,
+      merge: false,
+      draft: false,
+      baseBranch: "develop",
+      pane: false,
+      verbose: false,
+    });
+  });
+
+  test("-b option (alias for -base)", () => {
+    const result = parseCreateArgs(["feature/test", "Prompt", "-b", "develop"]);
     expect(result).toEqual({
       branchName: "feature/test",
       prompt: "Prompt",
@@ -571,6 +616,11 @@ describe("parseListArgs", () => {
 
   test("-json flag", () => {
     const result = parseListArgs(["-json"]);
+    expect(result.json).toBe(true);
+  });
+
+  test("-j flag (alias for -json)", () => {
+    const result = parseListArgs(["-j"]);
     expect(result.json).toBe(true);
   });
 

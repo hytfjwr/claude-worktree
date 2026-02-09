@@ -56,6 +56,27 @@ describe("extractOptions", () => {
       const result = extractOptions([], schema);
       expect(result.strings.output).toBeUndefined();
     });
+
+    test("string alias flag", () => {
+      const aliasSchema: OptionSchema = {
+        options: {
+          output: { type: "string", flag: "-output", alias: "-o", errorMessage: "-output requires a path" },
+        },
+        unknownHandling: "passthrough",
+      };
+      const result = extractOptions(["-o", "dist/"], aliasSchema);
+      expect(result.strings.output).toBe("dist/");
+    });
+
+    test("string alias without value throws", () => {
+      const aliasSchema: OptionSchema = {
+        options: {
+          output: { type: "string", flag: "-output", alias: "-o", errorMessage: "-output requires a path" },
+        },
+        unknownHandling: "passthrough",
+      };
+      expect(() => extractOptions(["-o"], aliasSchema)).toThrow("-output requires a path");
+    });
   });
 
   describe("passthrough mode", () => {
@@ -134,8 +155,8 @@ describe("extractOptions", () => {
     const schema: OptionSchema = {
       options: {
         pane: { type: "boolean", flag: "-pane", alias: "-p" },
-        danger: { type: "boolean", flag: "-danger" },
-        base: { type: "string", flag: "-base", errorMessage: "-base requires a branch name argument" },
+        danger: { type: "boolean", flag: "-danger", alias: "-d" },
+        base: { type: "string", flag: "-base", alias: "-b", errorMessage: "-base requires a branch name argument" },
         plan: { type: "string", flag: "-plan", errorMessage: "-plan requires a file path argument" },
       },
       unknownHandling: "passthrough",
@@ -163,6 +184,13 @@ describe("extractOptions", () => {
       const result = extractOptions(["-p", "word1", "word2"], schema);
       expect(result.booleans.pane).toBe(true);
       expect(result.remaining).toEqual(["word1", "word2"]);
+    });
+
+    test("string alias in combined context", () => {
+      const result = extractOptions(["-d", "-b", "develop", "prompt text"], schema);
+      expect(result.booleans.danger).toBe(true);
+      expect(result.strings.base).toBe("develop");
+      expect(result.remaining).toEqual(["prompt text"]);
     });
   });
 });

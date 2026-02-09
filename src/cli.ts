@@ -59,15 +59,15 @@ Arguments:
 Options:
   -p, -pane       Open in a new WezTerm pane (requires WezTerm; default: run in current terminal)
   -plan <file>    Read prompt from a plan file (cannot be used with inline prompt)
-  -base <branch>  Specify base branch (default: current branch)
-  -danger         Skip workspace warning (uses --dangerously-skip-permissions)
-  -merge          Auto-merge into base branch and cleanup after task completion
+  -b, -base <branch>  Specify base branch (default: current branch)
+  -d, -danger     Skip workspace warning (uses --dangerously-skip-permissions)
+  -m, -merge      Auto-merge into base branch and cleanup after task completion
   -draft          Auto-create Draft PR after task completion (cannot be used with -merge)
   -v, -verbose    Show hook execution logs
   -h, -help       Show this help
 
 List options:
-  -json          Output as JSON
+  -j, -json      Output as JSON
   -v, -verbose   Show full paths and details
 
 Clean options:
@@ -106,11 +106,11 @@ export function parseCreateArgs(args: string[]): CreateArgs {
   const { booleans, strings, remaining } = extractOptions(args.slice(1), {
     options: {
       pane:    { type: "boolean", flag: "-pane", alias: "-p" },
-      danger:  { type: "boolean", flag: "-danger" },
-      merge:   { type: "boolean", flag: "-merge" },
+      danger:  { type: "boolean", flag: "-danger", alias: "-d" },
+      merge:   { type: "boolean", flag: "-merge", alias: "-m" },
       draft:   { type: "boolean", flag: "-draft" },
       verbose: { type: "boolean", flag: "-verbose", alias: "-v" },
-      baseBranch: { type: "string", flag: "-base", errorMessage: "-base requires a branch name argument" },
+      baseBranch: { type: "string", flag: "-base", alias: "-b", errorMessage: "-base requires a branch name argument" },
       planFile:   { type: "string", flag: "-plan", errorMessage: "-plan requires a file path argument" },
     },
     unknownHandling: "error",
@@ -189,7 +189,7 @@ export function parseCleanArgs(args: string[]): CleanArgs {
 export function parseListArgs(args: string[]): ListArgs {
   const { booleans } = extractOptions(args, {
     options: {
-      json:    { type: "boolean", flag: "-json" },
+      json:    { type: "boolean", flag: "-json", alias: "-j" },
       verbose: { type: "boolean", flag: "-verbose", alias: "-v" },
     },
     unknownHandling: "error",

@@ -7,6 +7,7 @@ export type BooleanOptionDef = {
 export type StringOptionDef = {
   type: "string";
   flag: string;
+  alias?: string;
   errorMessage: string;
 };
 
@@ -43,7 +44,7 @@ export function extractOptions(args: string[], schema: OptionSchema): ExtractRes
   const flagMap = new Map<string, { key: string; def: OptionDef }>();
   for (const [key, def] of Object.entries(schema.options)) {
     flagMap.set(def.flag, { key, def });
-    if (def.type === "boolean" && def.alias) {
+    if (def.alias) {
       flagMap.set(def.alias, { key, def });
     }
   }

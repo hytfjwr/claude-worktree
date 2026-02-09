@@ -67,16 +67,16 @@ claude-worktree clean -dry-run
 
 - `-p, -pane` - Open in a new WezTerm pane (default: run in current terminal)
 - `-plan <file>` - Read prompt from a file (cannot be used with inline prompt)
-- `-base <branch>` - Specify base branch (default: current branch)
-- `-danger` - Skip workspace warning (uses --dangerously-skip-permissions)
-- `-merge` - Auto-merge into base branch and cleanup after task completion
+- `-b, -base <branch>` - Specify base branch (default: current branch)
+- `-d, -danger` - Skip workspace warning (uses --dangerously-skip-permissions)
+- `-m, -merge` - Auto-merge into base branch and cleanup after task completion
 - `-draft` - Auto-create Draft PR after task completion (cannot be used with -merge)
 - `-v, -verbose` - Show hook execution logs
 - `-h, -help` - Show help
 
 ### List Options
 
-- `-json` - Output as JSON
+- `-j, -json` - Output as JSON
 - `-v, -verbose` - Show full paths and details
 
 ### Clean Options
