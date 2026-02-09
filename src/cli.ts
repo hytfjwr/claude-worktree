@@ -34,6 +34,7 @@ Options:
 
 List options:
   -j, -json      Output as JSON
+  -s, -status    Show Claude session status (Running/Done)
   -v, -verbose   Show full paths and details
 
 Clean options:
@@ -150,6 +151,7 @@ export function parseListArgs(args: string[]): ListArgs {
   const { booleans } = extractOptions(args, {
     options: {
       json: { type: "boolean", flag: "-json", alias: "-j" },
+      status: { type: "boolean", flag: "-status", alias: "-s" },
       verbose: { type: "boolean", flag: "-verbose", alias: "-v" },
     },
     unknownHandling: "error",
@@ -160,6 +162,7 @@ export function parseListArgs(args: string[]): ListArgs {
   return {
     json: booleans.json,
     verbose: booleans.verbose,
+    status: booleans.status,
   };
 }
 

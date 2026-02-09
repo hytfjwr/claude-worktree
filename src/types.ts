@@ -68,6 +68,32 @@ export type PaneOptions = {
   keepFocus?: boolean; // If true, restore focus to the original pane after split
 };
 
+export type WeztermPane = {
+  pane_id: number;
+  title: string;
+  cwd: string;
+};
+
+// =============================================================================
+// Session types
+// =============================================================================
+
+export type SessionMode = "pane" | "terminal";
+
+export type SessionInfo = {
+  paneId?: number; // pane mode only
+  mode: SessionMode;
+  startedAt: string; // ISO 8601
+  completedAt?: string; // ISO 8601, set when terminal mode completes
+};
+
+export type SessionState = {
+  status: "running" | "done";
+  elapsedMs: number;
+  mode: SessionMode;
+  paneId?: number;
+};
+
 // =============================================================================
 // Config types
 // =============================================================================
@@ -167,6 +193,7 @@ export type CliArgs = CreateArgs;
 export type ListArgs = {
   json: boolean;
   verbose: boolean;
+  status: boolean;
 };
 
 export type WorktreeListEntry = {
@@ -174,6 +201,7 @@ export type WorktreeListEntry = {
   status: WorktreeStatus;
   commit: CommitInfo | null;
   aheadBehind: AheadBehind | null;
+  session?: SessionState;
 };
 
 export type ListResult = {
@@ -188,6 +216,8 @@ export type ListDeps = {
   getAheadBehind: (branch: string, baseBranch: string) => Promise<AheadBehind | null>;
   getMainBranch: () => Promise<string>;
   startSpinner: (message: string) => Spinner;
+  readAllSessions: () => Promise<Record<string, SessionInfo>>;
+  listWeztermPanes: () => Promise<WeztermPane[] | null>;
 };
 
 // =============================================================================
@@ -223,6 +253,7 @@ export type CleanDeps = {
   ) => Promise<void>;
   readSlot: (worktreePath: string) => Promise<number | undefined>;
   deleteSlot: (worktreePath: string) => Promise<void>;
+  deleteSession: (worktreePath: string) => Promise<void>;
   confirm: (message: string) => Promise<boolean>;
   selectMultiple: (statuses: WorktreeStatus[]) => Promise<WorktreeStatus[]>;
 };

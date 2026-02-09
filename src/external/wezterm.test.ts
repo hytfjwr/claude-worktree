@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
 
-import { checkWeztermAvailable, getCurrentPaneId } from "./wezterm";
+import { checkWeztermAvailable, getCurrentPaneId, listWeztermPanes } from "./wezterm";
 
 // ============================================================================
 // Tests for pure functions using environment variables (no mocks needed)
@@ -34,6 +34,41 @@ describe("checkWeztermAvailable", () => {
   test("returns a boolean", async () => {
     const result = await checkWeztermAvailable();
     expect(typeof result).toBe("boolean");
+  });
+});
+
+describe("listWeztermPanes", () => {
+  test("returns an array or null", async () => {
+    const result = await listWeztermPanes();
+    expect(result === null || Array.isArray(result)).toBe(true);
+  });
+
+  test("returns null when WezTerm is not available (mock)", async () => {
+    mock.module("./wezterm", () => ({
+      ...require("./wezterm"),
+      listWeztermPanes: mock(async () => null),
+    }));
+
+    const { listWeztermPanes: mockedList } = await import("./wezterm");
+    const result = await mockedList();
+    expect(result).toBeNull();
+  });
+
+  test("returns parsed panes (mock)", async () => {
+    const mockPanes = [
+      { pane_id: 1, title: "claude", cwd: "/tmp/wt-1" },
+      { pane_id: 2, title: "shell", cwd: "/tmp/wt-2" },
+    ];
+    mock.module("./wezterm", () => ({
+      ...require("./wezterm"),
+      listWeztermPanes: mock(async () => mockPanes),
+    }));
+
+    const { listWeztermPanes: mockedList } = await import("./wezterm");
+    const result = await mockedList();
+    expect(result).toEqual(mockPanes);
+    expect(result?.[0].pane_id).toBe(1);
+    expect(result?.[1].title).toBe("shell");
   });
 });
 

@@ -50,7 +50,7 @@ describe("parseArgs", () => {
       const result = parseArgs(["list"]);
       expect(result).toEqual({
         type: "list",
-        args: { json: false, verbose: false },
+        args: { json: false, verbose: false, status: false },
       });
     });
 
@@ -58,7 +58,7 @@ describe("parseArgs", () => {
       const result = parseArgs(["list", "-json"]);
       expect(result).toEqual({
         type: "list",
-        args: { json: true, verbose: false },
+        args: { json: true, verbose: false, status: false },
       });
     });
 
@@ -66,7 +66,7 @@ describe("parseArgs", () => {
       const result = parseArgs(["list", "-verbose"]);
       expect(result).toEqual({
         type: "list",
-        args: { json: false, verbose: true },
+        args: { json: false, verbose: true, status: false },
       });
     });
 
@@ -74,7 +74,7 @@ describe("parseArgs", () => {
       const result = parseArgs(["list", "-v"]);
       expect(result).toEqual({
         type: "list",
-        args: { json: false, verbose: true },
+        args: { json: false, verbose: true, status: false },
       });
     });
 
@@ -82,7 +82,7 @@ describe("parseArgs", () => {
       const result = parseArgs(["list", "-json", "-verbose"]);
       expect(result).toEqual({
         type: "list",
-        args: { json: true, verbose: true },
+        args: { json: true, verbose: true, status: false },
       });
     });
   });
@@ -623,7 +623,7 @@ describe("parseCleanArgs", () => {
 describe("parseListArgs", () => {
   test("basic - no options", () => {
     const result = parseListArgs([]);
-    expect(result).toEqual({ json: false, verbose: false });
+    expect(result).toEqual({ json: false, verbose: false, status: false });
   });
 
   test("-json flag", () => {
@@ -634,6 +634,16 @@ describe("parseListArgs", () => {
   test("-j flag (alias for -json)", () => {
     const result = parseListArgs(["-j"]);
     expect(result.json).toBe(true);
+  });
+
+  test("-status flag", () => {
+    const result = parseListArgs(["-status"]);
+    expect(result.status).toBe(true);
+  });
+
+  test("-s flag (alias for -status)", () => {
+    const result = parseListArgs(["-s"]);
+    expect(result.status).toBe(true);
   });
 
   test("-verbose flag", () => {
@@ -648,12 +658,22 @@ describe("parseListArgs", () => {
 
   test("-json + -verbose", () => {
     const result = parseListArgs(["-json", "-verbose"]);
-    expect(result).toEqual({ json: true, verbose: true });
+    expect(result).toEqual({ json: true, verbose: true, status: false });
+  });
+
+  test("-status + -json", () => {
+    const result = parseListArgs(["-status", "-json"]);
+    expect(result).toEqual({ json: true, verbose: false, status: true });
+  });
+
+  test("-s + -v", () => {
+    const result = parseListArgs(["-s", "-v"]);
+    expect(result).toEqual({ json: false, verbose: true, status: true });
   });
 
   test("-h/-help is ignored (does not throw)", () => {
     const result = parseListArgs(["-h"]);
-    expect(result).toEqual({ json: false, verbose: false });
+    expect(result).toEqual({ json: false, verbose: false, status: false });
   });
 
   test("error: unknown option", () => {

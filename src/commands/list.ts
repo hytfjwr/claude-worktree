@@ -8,7 +8,17 @@ import {
   getWorktreeStatuses,
   listWorktrees,
 } from "../core/git";
-import type { AheadBehind, ListArgs, ListDeps, ListResult, WorktreeListEntry, WorktreeStatus } from "../types";
+import { determineSessionStatus, formatElapsed, readAllSessions } from "../core/session";
+import { listWeztermPanes } from "../external/wezterm";
+import type {
+  AheadBehind,
+  ListArgs,
+  ListDeps,
+  ListResult,
+  SessionState,
+  WorktreeListEntry,
+  WorktreeStatus,
+} from "../types";
 import { startSpinner } from "../ui/spinner";
 
 const defaultDeps: ListDeps = {
@@ -19,6 +29,8 @@ const defaultDeps: ListDeps = {
   getAheadBehind,
   getMainBranch,
   startSpinner,
+  readAllSessions,
+  listWeztermPanes,
 };
 
 // ANSI color codes
@@ -109,16 +121,26 @@ export function formatAheadBehind(ab: AheadBehind | null): string {
   return parts.join(" ");
 }
 
+export function formatSessionState(session: SessionState): string {
+  const elapsed = formatElapsed(session.elapsedMs);
+  const panePart = session.paneId != null ? `  pane #${session.paneId}` : "";
+  if (session.status === "running") {
+    return `${GREEN}●${RESET} ${GREEN}Running${RESET} ${DIM}(${elapsed})${RESET}${panePart}`;
+  }
+  return `${GREEN}✓${RESET} Done ${DIM}(${elapsed})${RESET}${panePart}`;
+}
+
 export function formatWorktreeEntry(entry: WorktreeListEntry, repoRoot: string, verbose: boolean): string[] {
-  const { worktree, status, commit, aheadBehind } = entry;
+  const { worktree, status, commit, aheadBehind, session } = entry;
   const badge = getStatusBadge(status);
   const branch = worktree.branch || "(detached)";
 
-  // Line 1: icon + branch (bold) + badge (colored) + ahead/behind
+  // Line 1: icon + branch (bold) + badge (colored) + ahead/behind + session state
   const abStr = formatAheadBehind(aheadBehind);
   const badgePart = `${badge.color}${badge.label}${RESET}`;
   const abPart = abStr ? `  ${abStr}` : "";
-  const line1 = `  ${badge.color}${badge.icon}${RESET} ${BOLD}${branch}${RESET}  ${badgePart}${abPart}`;
+  const sessionPart = session ? `       ${formatSessionState(session)}` : "";
+  const line1 = `  ${badge.color}${badge.icon}${RESET} ${BOLD}${branch}${RESET}  ${badgePart}${abPart}${sessionPart}`;
 
   // Line 2: commit hash (dim) + message + relative time (dim)
   let line2: string;
@@ -172,6 +194,10 @@ export async function executeList(args: ListArgs, deps: ListDeps = defaultDeps):
       const statuses = await deps.getWorktreeStatuses(worktrees);
       const mainBranch = await deps.getMainBranch();
 
+      // Fetch panes and sessions once if -status is enabled
+      const panes = args.status ? await deps.listWeztermPanes() : null;
+      const sessions = args.status ? await deps.readAllSessions() : {};
+
       // Build entries
       for (const status of statuses) {
         const commit = await deps.getLastCommit(status.worktree.path);
@@ -181,7 +207,15 @@ export async function executeList(args: ListArgs, deps: ListDeps = defaultDeps):
           aheadBehind = await deps.getAheadBehind(status.worktree.branch, mainBranch);
         }
 
-        result.entries.push({ worktree: status.worktree, status, commit, aheadBehind });
+        let session: SessionState | undefined;
+        if (args.status) {
+          const sessionInfo = sessions[status.worktree.path];
+          if (sessionInfo) {
+            session = determineSessionStatus(sessionInfo, panes);
+          }
+        }
+
+        result.entries.push({ worktree: status.worktree, status, commit, aheadBehind, session });
       }
     }
 
@@ -216,6 +250,14 @@ export async function executeList(args: ListArgs, deps: ListDeps = defaultDeps):
         status: getStatusBadge(e.status).label,
         commit: e.commit ? { hash: e.commit.hash, message: e.commit.message, date: e.commit.date.toISOString() } : null,
         aheadBehind: e.aheadBehind,
+        ...(e.session && {
+          session: {
+            status: e.session.status,
+            elapsedMs: e.session.elapsedMs,
+            mode: e.session.mode,
+            paneId: e.session.paneId,
+          },
+        }),
       })),
     };
     console.log(JSON.stringify(jsonOutput, null, 2));

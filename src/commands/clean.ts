@@ -7,6 +7,7 @@ import {
   listWorktrees,
   removeWorktree,
 } from "../core/git";
+import { deleteSession } from "../core/session";
 import { deleteSlot, readSlot } from "../core/slot";
 import type { CleanArgs, CleanDeps, CleanResult, ProjectConfig, WorktreeStatus } from "../types";
 import { confirm, selectMultiple } from "../ui/prompt";
@@ -24,6 +25,7 @@ const defaultDeps: CleanDeps = {
   runHook,
   readSlot,
   deleteSlot,
+  deleteSession,
   confirm,
   selectMultiple,
 };
@@ -183,8 +185,9 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
         }
       }
 
-      // Delete cached slot
+      // Delete cached slot and session
       await deps.deleteSlot(worktree.path);
+      await deps.deleteSession(worktree.path);
 
       console.log(`  ✓ ${worktree.branch || worktree.path}`);
       result.deleted.push(worktree.path);

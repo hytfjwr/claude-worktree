@@ -50,6 +50,7 @@ function makeDeps(overrides: Partial<CleanDeps> = {}): CleanDeps {
     runHook: async () => {},
     readSlot: async () => undefined,
     deleteSlot: async () => {},
+    deleteSession: async () => {},
     confirm: async () => true,
     selectMultiple: async () => [],
     ...overrides,
@@ -706,6 +707,62 @@ describe("executeClean", () => {
       expect(receivedVars).toHaveLength(2);
       expect(receivedVars[0].slot).toBe(7);
       expect(receivedVars[1].slot).toBe(7);
+    });
+  });
+
+  describe("session cleanup", () => {
+    test("calls deleteSession after successful clean", async () => {
+      const worktree = makeWorktree({ path: "/tmp/repo-session" });
+      const status = makeStatus({ path: "/tmp/repo-session" }, { canAutoClean: true });
+      const deletedSessionPaths: string[] = [];
+      const deps = makeDeps({
+        listWorktrees: async () => [worktree],
+        getWorktreeStatuses: async () => [status],
+        deleteSession: async (path) => {
+          deletedSessionPaths.push(path);
+        },
+      });
+
+      await executeClean({ ...defaultArgs, force: true }, deps);
+
+      expect(deletedSessionPaths).toEqual(["/tmp/repo-session"]);
+    });
+
+    test("does not call deleteSession in dry-run mode", async () => {
+      const worktree = makeWorktree({ path: "/tmp/repo-dry-session" });
+      const status = makeStatus({ path: "/tmp/repo-dry-session" }, { canAutoClean: true });
+      let deleteSessionCalled = false;
+      const deps = makeDeps({
+        listWorktrees: async () => [worktree],
+        getWorktreeStatuses: async () => [status],
+        deleteSession: async () => {
+          deleteSessionCalled = true;
+        },
+      });
+
+      await executeClean({ ...defaultArgs, dryRun: true }, deps);
+
+      expect(deleteSessionCalled).toBe(false);
+    });
+
+    test("does not call deleteSession when removeWorktree fails", async () => {
+      const worktree = makeWorktree({ path: "/tmp/repo-fail-session" });
+      const status = makeStatus({ path: "/tmp/repo-fail-session" }, { canAutoClean: true });
+      let deleteSessionCalled = false;
+      const deps = makeDeps({
+        listWorktrees: async () => [worktree],
+        getWorktreeStatuses: async () => [status],
+        removeWorktree: async () => {
+          throw new Error("Failed");
+        },
+        deleteSession: async () => {
+          deleteSessionCalled = true;
+        },
+      });
+
+      await executeClean({ ...defaultArgs, force: true }, deps);
+
+      expect(deleteSessionCalled).toBe(false);
     });
   });
 

@@ -7,7 +7,7 @@ export { executeClean } from "./commands/clean";
 // Create command
 export { readPlanFile, runCreate } from "./commands/create";
 // List command
-export { executeList } from "./commands/list";
+export { executeList, formatSessionState } from "./commands/list";
 // Config utilities
 export { buildHookCommand, loadProjectConfig, runHook } from "./core/config";
 // Git utilities
@@ -29,12 +29,29 @@ export {
   listWorktrees,
   removeWorktree,
 } from "./core/git";
+// Session utilities
+export {
+  completeSession,
+  deleteSession,
+  determineSessionStatus,
+  formatElapsed,
+  readAllSessions,
+  readSession,
+  saveSession,
+} from "./core/session";
 // Slot utilities
 export { deleteSlot, findAvailableSlot, getCacheDir, isPortInUse, readSlot, saveSlot } from "./core/slot";
 // Claude utilities
 export { buildClaudeCommand } from "./external/claude";
 // WezTerm utilities
-export { checkWeztermAvailable, createPane, sendCommand, sendText, splitPaneRight } from "./external/wezterm";
+export {
+  checkWeztermAvailable,
+  createPane,
+  listWeztermPanes,
+  sendCommand,
+  sendText,
+  splitPaneRight,
+} from "./external/wezterm";
 // Options extraction
 export { extractOptions } from "./options";
 export type {
@@ -70,9 +87,14 @@ export type {
   ParsedWorktree,
   // Config
   ProjectConfig,
+  // Session
+  SessionInfo,
+  SessionMode,
+  SessionState,
   // Spinner
   Spinner,
   StringOptionDef,
+  WeztermPane,
   WorktreeInfo,
   WorktreeListEntry,
   WorktreeStatus,

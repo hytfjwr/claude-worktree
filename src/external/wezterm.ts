@@ -1,5 +1,24 @@
 import { $ } from "bun";
 
+import type { WeztermPane } from "../types";
+
+export async function listWeztermPanes(): Promise<WeztermPane[] | null> {
+  try {
+    const available = await checkWeztermAvailable();
+    if (!available) return null;
+
+    const result = await $`wezterm cli list --format json`.nothrow().quiet();
+    if (result.exitCode !== 0) return null;
+    return JSON.parse(result.text()).map((p: { pane_id: number; title: string; cwd: string }) => ({
+      pane_id: p.pane_id,
+      title: p.title,
+      cwd: p.cwd,
+    }));
+  } catch {
+    return null;
+  }
+}
+
 export async function checkWeztermAvailable(): Promise<boolean> {
   try {
     const proc = Bun.spawn(["which", "wezterm"], {

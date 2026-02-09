@@ -9,6 +9,7 @@ import {
   listWorktrees,
   removeWorktree,
 } from "../core/git";
+import { completeSession, deleteSession, saveSession } from "../core/session";
 import { deleteSlot, findAvailableSlot, readSlot, saveSlot } from "../core/slot";
 import { buildClaudeCommand } from "../external/claude";
 import { checkWeztermAvailable, createPane, sendCommand, sendText } from "../external/wezterm";
@@ -191,8 +192,9 @@ export async function runCreate(args: CreateArgs): Promise<void> {
       }
     }
 
-    // Delete cached slot for existing worktree
+    // Delete cached slot and session for existing worktree
     await deleteSlot(existingWorktree.path);
+    await deleteSession(existingWorktree.path);
 
     console.log("");
   }
@@ -321,16 +323,24 @@ export async function runCreate(args: CreateArgs): Promise<void> {
 
   if (pane) {
     // Create WezTerm pane and send command
-    const paneId = await createPane({ keepFocus: true });
+    const paneIdStr = await createPane({ keepFocus: true });
+    const paneId = Number.parseInt(paneIdStr, 10);
     console.log(`🪟 Created pane: ${paneId}`);
 
     const commands = [`cd "${worktreePath}"`, buildClaudeCommand(claudeOptions)].join(" && ");
 
-    await sendCommand(paneId, commands);
+    await sendCommand(paneIdStr, commands);
+
+    // Save session metadata
+    await saveSession(worktreePath, {
+      paneId,
+      mode: "pane",
+      startedAt: new Date().toISOString(),
+    });
 
     // Send Enter to confirm the prompt after Claude starts
     await Bun.sleep(2000);
-    await sendText(paneId, "\n");
+    await sendText(paneIdStr, "\n");
 
     console.log("✅ Worktree created and Claude started in new pane");
   } else {
@@ -339,10 +349,19 @@ export async function runCreate(args: CreateArgs): Promise<void> {
 
     const commands = [`cd "${worktreePath}"`, buildClaudeCommand(claudeOptions)].join(" && ");
 
+    // Save session metadata before launching
+    await saveSession(worktreePath, {
+      mode: "terminal",
+      startedAt: new Date().toISOString(),
+    });
+
     const proc = Bun.spawn(["sh", "-c", commands], {
       stdio: ["inherit", "inherit", "inherit"],
     });
 
     await proc.exited;
+
+    // Mark session as completed after process exits
+    await completeSession(worktreePath);
   }
 }

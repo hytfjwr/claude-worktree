@@ -58,6 +58,7 @@ claude-worktree feature/auth 'Implement authentication feature' -draft
 claude-worktree feature/auth 'Implement authentication feature' -draft -base main
 claude-worktree list
 claude-worktree list -json
+claude-worktree list -status
 claude-worktree list -v
 claude-worktree clean
 claude-worktree clean -dry-run
@@ -77,6 +78,7 @@ claude-worktree clean -dry-run
 ### List Options
 
 - `-j, -json` - Output as JSON
+- `-s, -status` - Show Claude session status (Running/Done)
 - `-v, -verbose` - Show full paths and details
 
 ### Clean Options
@@ -99,6 +101,8 @@ src/
     git.test.ts
     config.ts          # Project config (.claude-worktree.json) & hook execution
     config.test.ts
+    session.ts         # Session metadata (save/read/complete/delete) & status detection
+    session.test.ts
     slot.ts            # Port-scan based slot auto-assignment & slot cache
     slot.test.ts
   commands/            # Command implementations
@@ -130,8 +134,8 @@ src/
 3. Load project config from `.claude-worktree.json` (if exists)
 4. Create worktree directly via `git worktree add`
 5. Run `postCreate` hook (if configured) — rollback worktree on failure
-6. If `-pane`: Split a new pane to the right in WezTerm → cd into worktree → launch Claude Code
-7. Otherwise: cd into worktree → launch Claude Code in current terminal
+6. If `-pane`: Split a new pane to the right in WezTerm → cd into worktree → launch Claude Code → save session metadata
+7. Otherwise: cd into worktree → launch Claude Code in current terminal → mark session as completed on exit
 
 **Hook Configuration (`.claude-worktree.json`):**
 ```json
@@ -149,6 +153,13 @@ src/
 - `maxWorktrees` — maximum number of concurrent worktrees (excludes main). If set, blocks creation when the limit is reached.
 - `{path}` — worktree path
 - `{slot}` — auto-assigned slot (1-9) based on port availability (8881-8889), persisted to `~/.cache/claude-worktree/slots.json`
+
+**Session Tracking (`~/.cache/claude-worktree/sessions.json`):**
+- Worktree 作成時にセッションメタデータ (pane ID, mode, startedAt) を保存
+- `list -status` で各 worktree の Claude セッション状態 (Running/Done) を表示
+- pane モード: WezTerm pane の存在で Running/Done を判定
+- terminal モード: プロセス終了時に `completedAt` を設定して Done 判定
+- `clean` 実行時にセッションデータも自動削除
 - `hookTimeout` — global default timeout in seconds (default: 600)
 - `postCreateTimeout` / `preCleanTimeout` / `postCleanTimeout` — per-hook timeout override
 - Priority: hook-specific value > `hookTimeout` > default (600s)

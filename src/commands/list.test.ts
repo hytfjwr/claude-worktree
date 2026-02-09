@@ -1,10 +1,19 @@
 import { beforeEach, describe, expect, spyOn, test } from "bun:test";
 
-import type { CommitInfo, ListArgs, ListDeps, WorktreeInfo, WorktreeListEntry, WorktreeStatus } from "../types";
+import type {
+  CommitInfo,
+  ListArgs,
+  ListDeps,
+  SessionState,
+  WorktreeInfo,
+  WorktreeListEntry,
+  WorktreeStatus,
+} from "../types";
 import {
   executeList,
   formatAheadBehind,
   formatRelativeTime,
+  formatSessionState,
   formatSummary,
   formatWorktreeEntry,
   getStatusBadge,
@@ -76,11 +85,13 @@ function makeListDeps(overrides: Partial<ListDeps> = {}): ListDeps {
     getAheadBehind: async () => null,
     getMainBranch: async () => "main",
     startSpinner: noopSpinner,
+    readAllSessions: async () => ({}),
+    listWeztermPanes: async () => null,
     ...overrides,
   };
 }
 
-const defaultArgs: ListArgs = { json: false, verbose: false };
+const defaultArgs: ListArgs = { json: false, verbose: false, status: false };
 
 // Suppress console output
 beforeEach(() => {
@@ -400,7 +411,7 @@ describe("executeList", () => {
       getLastCommit: async () => makeCommitInfo(),
     });
 
-    const result = await executeList({ json: true, verbose: false }, deps);
+    const result = await executeList({ json: true, verbose: false, status: false }, deps);
 
     expect(result.entries).toHaveLength(1);
     const parsed = JSON.parse(jsonOutput);
@@ -478,7 +489,7 @@ describe("executeList", () => {
       getLastCommit: async () => null,
     });
 
-    await executeList({ json: true, verbose: false }, deps);
+    await executeList({ json: true, verbose: false, status: false }, deps);
 
     const parsed = JSON.parse(jsonOutput);
     expect(parsed.worktrees[0].commit).toBeNull();
@@ -494,7 +505,7 @@ describe("executeList", () => {
       listWorktrees: async () => [],
     });
 
-    await executeList({ json: true, verbose: false }, deps);
+    await executeList({ json: true, verbose: false, status: false }, deps);
 
     const parsed = JSON.parse(jsonOutput);
     expect(parsed.worktrees).toEqual([]);
@@ -509,7 +520,7 @@ describe("executeList", () => {
       },
     });
 
-    await executeList({ json: true, verbose: false }, deps);
+    await executeList({ json: true, verbose: false, status: false }, deps);
 
     expect(spinnerStarted).toBe(false);
   });
@@ -555,5 +566,176 @@ describe("executeList", () => {
     await expect(executeList(defaultArgs, deps)).rejects.toThrow("git error");
 
     expect(failMessage).toBe("Failed to fetch worktree information");
+  });
+
+  test("sessions are not fetched when status flag is false", async () => {
+    const mainWt = makeWorktree({ isMain: true, branch: "main", path: "/repo" });
+    const mainStatus = makeStatus({ isMain: true, branch: "main", path: "/repo" });
+
+    let readAllSessionsCalled = false;
+    const deps = makeListDeps({
+      listWorktrees: async () => [mainWt],
+      getWorktreeStatuses: async () => [mainStatus],
+      getLastCommit: async () => makeCommitInfo(),
+      readAllSessions: async () => {
+        readAllSessionsCalled = true;
+        return {};
+      },
+    });
+
+    await executeList(defaultArgs, deps);
+
+    expect(readAllSessionsCalled).toBe(false);
+  });
+
+  test("session status is fetched when status flag is true", async () => {
+    const featureWt = makeWorktree({ branch: "feature/auth", path: "/repo-feature-auth" });
+    const featureStatus = makeStatus({ branch: "feature/auth", path: "/repo-feature-auth" });
+
+    let readAllSessionsCalled = false;
+    const deps = makeListDeps({
+      listWorktrees: async () => [featureWt],
+      getWorktreeStatuses: async () => [featureStatus],
+      getLastCommit: async () => makeCommitInfo(),
+      readAllSessions: async () => {
+        readAllSessionsCalled = true;
+        return {
+          "/repo-feature-auth": {
+            mode: "pane" as const,
+            paneId: 42,
+            startedAt: new Date(Date.now() - 15 * 60_000).toISOString(),
+          },
+        };
+      },
+      listWeztermPanes: async () => [{ pane_id: 42, title: "claude", cwd: "/tmp" }],
+    });
+
+    const result = await executeList({ json: false, verbose: false, status: true }, deps);
+
+    expect(readAllSessionsCalled).toBe(true);
+    expect(result.entries[0].session).toBeDefined();
+    expect(result.entries[0].session?.status).toBe("running");
+  });
+
+  test("session is undefined when no session exists for worktree", async () => {
+    const featureWt = makeWorktree({ branch: "feature/x", path: "/repo-feature-x" });
+    const featureStatus = makeStatus({ branch: "feature/x", path: "/repo-feature-x" });
+
+    const deps = makeListDeps({
+      listWorktrees: async () => [featureWt],
+      getWorktreeStatuses: async () => [featureStatus],
+      getLastCommit: async () => makeCommitInfo(),
+      readAllSessions: async () => ({}),
+    });
+
+    const result = await executeList({ json: false, verbose: false, status: true }, deps);
+
+    expect(result.entries[0].session).toBeUndefined();
+  });
+
+  test("JSON output includes session when status flag is true", async () => {
+    const featureWt = makeWorktree({ branch: "feature/auth", path: "/repo-feature-auth" });
+    const featureStatus = makeStatus({ branch: "feature/auth", path: "/repo-feature-auth" });
+
+    let jsonOutput = "";
+    spyOn(console, "log").mockImplementation((msg: string) => {
+      jsonOutput += msg;
+    });
+
+    const deps = makeListDeps({
+      listWorktrees: async () => [featureWt],
+      getWorktreeStatuses: async () => [featureStatus],
+      getLastCommit: async () => makeCommitInfo(),
+      readAllSessions: async () => ({
+        "/repo-feature-auth": {
+          mode: "terminal" as const,
+          startedAt: new Date(Date.now() - 8 * 60_000).toISOString(),
+          completedAt: new Date().toISOString(),
+        },
+      }),
+    });
+
+    await executeList({ json: true, verbose: false, status: true }, deps);
+
+    const parsed = JSON.parse(jsonOutput);
+    expect(parsed.worktrees[0].session).toBeDefined();
+    expect(parsed.worktrees[0].session.status).toBe("done");
+    expect(parsed.worktrees[0].session.mode).toBe("terminal");
+  });
+
+  test("listWeztermPanes is not called when status flag is false", async () => {
+    const mainWt = makeWorktree({ isMain: true, branch: "main", path: "/repo" });
+    const mainStatus = makeStatus({ isMain: true, branch: "main", path: "/repo" });
+
+    let panesCalled = false;
+    const deps = makeListDeps({
+      listWorktrees: async () => [mainWt],
+      getWorktreeStatuses: async () => [mainStatus],
+      getLastCommit: async () => makeCommitInfo(),
+      listWeztermPanes: async () => {
+        panesCalled = true;
+        return null;
+      },
+    });
+
+    await executeList(defaultArgs, deps);
+
+    expect(panesCalled).toBe(false);
+  });
+});
+
+// ============================================================================
+// formatSessionState tests
+// ============================================================================
+
+describe("formatSessionState", () => {
+  test("running session with pane", () => {
+    const session: SessionState = {
+      status: "running",
+      elapsedMs: 15 * 60_000,
+      mode: "pane",
+      paneId: 3,
+    };
+    const result = formatSessionState(session);
+    expect(result).toContain("Running");
+    expect(result).toContain("15m");
+    expect(result).toContain("pane #3");
+  });
+
+  test("done session with pane", () => {
+    const session: SessionState = {
+      status: "done",
+      elapsedMs: 8 * 60_000,
+      mode: "pane",
+      paneId: 5,
+    };
+    const result = formatSessionState(session);
+    expect(result).toContain("Done");
+    expect(result).toContain("8m");
+    expect(result).toContain("pane #5");
+  });
+
+  test("running session without pane (terminal mode)", () => {
+    const session: SessionState = {
+      status: "running",
+      elapsedMs: 30 * 60_000,
+      mode: "terminal",
+    };
+    const result = formatSessionState(session);
+    expect(result).toContain("Running");
+    expect(result).toContain("30m");
+    expect(result).not.toContain("pane");
+  });
+
+  test("done session without pane (terminal mode)", () => {
+    const session: SessionState = {
+      status: "done",
+      elapsedMs: 60 * 60_000,
+      mode: "terminal",
+    };
+    const result = formatSessionState(session);
+    expect(result).toContain("Done");
+    expect(result).toContain("1h");
+    expect(result).not.toContain("pane");
   });
 });
