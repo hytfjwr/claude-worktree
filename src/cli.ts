@@ -71,13 +71,15 @@ Examples:
   claude-worktree clean -dry-run`);
 }
 
+const CREATE_USAGE = "claude-worktree <branch-name> <prompt>\n" + "  claude-worktree <branch-name> -plan <file-path>";
+
 export function parseCreateArgs(args: string[]): CreateArgs {
   if (args.length < 1) {
     throw new Error(
-      "Usage: claude-worktree <branch-name> <prompt>\n" +
-        "       claude-worktree <branch-name> -plan <file-path>\n" +
-        "Example: claude-worktree feature/auth 'Implement authentication feature'\n" +
-        "         claude-worktree feature/auth -plan ./plan.md",
+      `Usage:\n  ${CREATE_USAGE}\n\n` +
+        "Example:\n" +
+        "  claude-worktree feature/auth 'Implement authentication feature'\n" +
+        "  claude-worktree feature/auth -plan ./plan.md",
     );
   }
 
@@ -121,11 +123,7 @@ export function parseCreateArgs(args: string[]): CreateArgs {
 
   // Require either inline prompt or -plan
   if (!inlinePrompt && !planFile) {
-    throw new Error(
-      "A prompt or -plan option is required.\n" +
-        "Usage: claude-worktree <branch-name> <prompt>\n" +
-        "       claude-worktree <branch-name> -plan <file-path>",
-    );
+    throw new Error(`A prompt or -plan option is required.\n\nUsage:\n  ${CREATE_USAGE}`);
   }
 
   return {
@@ -191,6 +189,15 @@ export function parseArgs(args: string[]): Command {
 
   if (args[0] === "clean") {
     return { type: "clean", args: parseCleanArgs(args.slice(1)) };
+  }
+
+  // Single non-flag argument that isn't a known command → unknown command error
+  if (args.length === 1 && !args[0].startsWith("-")) {
+    throw new Error(
+      `Unknown command: ${args[0]}\n\n` +
+        `Available commands: list, clean\n\n` +
+        `To create a worktree:\n  ${CREATE_USAGE}`,
+    );
   }
 
   return { type: "create", args: parseCreateArgs(args) };

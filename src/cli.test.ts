@@ -106,6 +106,29 @@ describe("parseArgs", () => {
       });
     });
   });
+
+  describe("unknown command", () => {
+    test.each(["ABC", "status", "hotfix"])('single word "%s" - throws unknown command error', (input) => {
+      expect(() => parseArgs([input])).toThrow(`Unknown command: ${input}`);
+    });
+
+    test.each([
+      "Available commands: list, clean",
+      "claude-worktree <branch-name> <prompt>",
+    ])('error message includes "%s"', (substring) => {
+      expect(() => parseArgs(["ABC"])).toThrow(substring);
+    });
+
+    test("branch with prompt - does not throw unknown command", () => {
+      const result = parseArgs(["hotfix", "Fix the bug"]);
+      expect(result.type).toBe("create");
+    });
+
+    test("branch with -plan - does not throw unknown command", () => {
+      const result = parseArgs(["hotfix", "-plan", "plan.md"]);
+      expect(result.type).toBe("create");
+    });
+  });
 });
 
 describe("parseCreateArgs", () => {
