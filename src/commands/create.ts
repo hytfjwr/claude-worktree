@@ -1,3 +1,7 @@
+import { spawn } from "node:child_process";
+import { readFile } from "node:fs/promises";
+import { setTimeout } from "node:timers/promises";
+
 import { buildHookCommand, loadProjectConfig, resolveHookTimeout, runHook } from "../core/config";
 import {
   branchExists,
@@ -18,14 +22,17 @@ import { confirm } from "../ui/prompt";
 import { createTailUpdater, startSpinner } from "../ui/spinner";
 
 export async function readPlanFile(filePath: string): Promise<string> {
-  const file = Bun.file(filePath);
-  const exists = await file.exists();
-
-  if (!exists) {
-    throw new Error(`Plan file not found: ${filePath}`);
+  let content: string;
+  try {
+    content = await readFile(filePath, "utf-8");
+  } catch (err) {
+    const error = err as NodeJS.ErrnoException;
+    if (error.code === "ENOENT") {
+      throw new Error(`Plan file not found: ${filePath}`);
+    }
+    throw new Error(`Failed to read plan file ${filePath}: ${error.message}`);
   }
 
-  const content = await file.text();
   const trimmed = content.trim();
 
   if (!trimmed) {
@@ -339,7 +346,7 @@ export async function runCreate(args: CreateArgs): Promise<void> {
     });
 
     // Send Enter to confirm the prompt after Claude starts
-    await Bun.sleep(2000);
+    await setTimeout(2000);
     await sendText(paneIdStr, "\n");
 
     console.log("✅ Worktree created and Claude started in new pane");
@@ -355,11 +362,13 @@ export async function runCreate(args: CreateArgs): Promise<void> {
       startedAt: new Date().toISOString(),
     });
 
-    const proc = Bun.spawn(["sh", "-c", commands], {
-      stdio: ["inherit", "inherit", "inherit"],
+    await new Promise<void>((resolve, reject) => {
+      const proc = spawn("sh", ["-c", commands], {
+        stdio: ["inherit", "inherit", "inherit"],
+      });
+      proc.on("error", reject);
+      proc.on("close", () => resolve());
     });
-
-    await proc.exited;
 
     // Mark session as completed after process exits
     await completeSession(worktreePath);

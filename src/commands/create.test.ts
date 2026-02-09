@@ -1,7 +1,44 @@
-import { describe, expect, test } from "vitest";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterAll, describe, expect, test } from "vitest";
 
 import type { ProjectConfig } from "../types";
-import { checkWorktreeLimit } from "./create";
+import { checkWorktreeLimit, readPlanFile } from "./create";
+
+describe("readPlanFile", () => {
+  const tmpDir = mkdtempSync(join(tmpdir(), "create-test-"));
+
+  test("reads and trims plan file content", async () => {
+    const filePath = join(tmpDir, "plan.md");
+    writeFileSync(filePath, "  Hello World  \n");
+    const result = await readPlanFile(filePath);
+    expect(result).toBe("Hello World");
+  });
+
+  test("throws when file does not exist", async () => {
+    const filePath = join(tmpDir, "nonexistent.md");
+    await expect(readPlanFile(filePath)).rejects.toThrow(`Plan file not found: ${filePath}`);
+  });
+
+  test("throws when file is empty", async () => {
+    const filePath = join(tmpDir, "empty.md");
+    writeFileSync(filePath, "   \n  ");
+    await expect(readPlanFile(filePath)).rejects.toThrow(`Plan file is empty: ${filePath}`);
+  });
+
+  test("throws with access error for permission denied", async () => {
+    const filePath = join(tmpDir, "noperm.md");
+    writeFileSync(filePath, "content");
+    chmodSync(filePath, 0o000);
+    await expect(readPlanFile(filePath)).rejects.toThrow(`Failed to read plan file ${filePath}`);
+    chmodSync(filePath, 0o644); // restore for cleanup
+  });
+
+  afterAll(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+});
 
 describe("checkWorktreeLimit", () => {
   test("returns null when config is null", () => {
