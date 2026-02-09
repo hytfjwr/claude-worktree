@@ -9,7 +9,7 @@ help:
 	@echo "  make reinstall  - Reinstall"
 	@echo "  make setup      - Install dependencies only"
 	@echo "  make dev        - Run in development mode (no args)"
-	@echo "  make test       - Run Bun tests"
+	@echo "  make test       - Run tests"
 	@echo "  make typecheck  - TypeScript type check"
 	@echo "  make clean      - Remove node_modules etc."
 	@echo "  make check      - Check dependencies"
@@ -50,7 +50,7 @@ reinstall: uninstall install
 
 # Test
 test:
-	@bun test
+	@pnpm exec vitest run
 
 # Run in development mode
 dev:

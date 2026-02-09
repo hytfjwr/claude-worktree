@@ -22,9 +22,9 @@ make typecheck   # or bun run typecheck
 bun run lint
 
 # Test
-bun test              # Run all tests
-bun test --watch      # Watch mode
-bun test --coverage   # With coverage
+pnpm test              # Run all tests
+pnpm test:watch        # Watch mode
+pnpm test:coverage     # With coverage
 
 # Check dependencies (bun, git, wezterm, claude)
 make check
@@ -171,7 +171,7 @@ src/
 
 ## Testing
 
-Uses Bun test. Test files are co-located with source files in the same directory.
+Uses Vitest. Test files are co-located with source files in the same directory.
 
 - **Pure functions**: Tested without mocks (buildClaudeCommand, getWorktreePath, etc.)
 - **Shell commands**: Tested using the actual git repository
