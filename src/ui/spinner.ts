@@ -88,6 +88,7 @@ export function startSpinner(message: string): Spinner {
     extraLines = tailLines.length;
   };
 
+  process.stdout.write("\x1b[?25l"); // Hide cursor
   writeFrame();
   const timer = setInterval(() => {
     frameIndex = (frameIndex + 1) % FRAMES.length;
@@ -102,7 +103,7 @@ export function startSpinner(message: string): Spinner {
     if (extraLines > 0) {
       process.stdout.write(`\x1b[${extraLines}A`);
     }
-    process.stdout.write(`\r\x1b[J${text}\n`);
+    process.stdout.write(`\r\x1b[J${text}\n\x1b[?25h`); // Show cursor
   };
 
   return {

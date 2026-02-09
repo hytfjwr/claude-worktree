@@ -41,6 +41,16 @@ describe("startSpinner", () => {
     spinner.stop();
   });
 
+  test("hides cursor on start", () => {
+    const writeSpy = spyOn(process.stdout, "write");
+    const spinner = startSpinner("Processing...");
+
+    const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+    expect(output).toContain("\x1b[?25l");
+    spinner.stop();
+    writeSpy.mockRestore();
+  });
+
   test("stop() clears tail lines and outputs clear sequence", () => {
     const writeSpy = spyOn(process.stdout, "write");
     const spinner = startSpinner("Processing...");
@@ -56,6 +66,8 @@ describe("startSpinner", () => {
     expect(output).toContain("\x1b[J");
     // Should NOT contain dimmed tail content
     expect(output).not.toContain("\x1b[90m");
+    // Should show cursor
+    expect(output).toContain("\x1b[?25h");
     writeSpy.mockRestore();
   });
 
@@ -74,6 +86,8 @@ describe("startSpinner", () => {
     expect(output).toContain("\x1b[J");
     // Should NOT contain dimmed tail content
     expect(output).not.toContain("\x1b[90m");
+    // Should show cursor
+    expect(output).toContain("\x1b[?25h");
     writeSpy.mockRestore();
   });
 });
