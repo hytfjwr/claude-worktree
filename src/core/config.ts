@@ -1,18 +1,26 @@
-import { $ } from "bun";
+import { spawn } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { TextDecoder } from "node:util";
 
 import type { HookVars, ProjectConfig } from "../types";
+import { exec } from "./exec";
 
 export async function loadProjectConfig(repoRoot: string): Promise<ProjectConfig | null> {
   const configPath = join(repoRoot, ".claude-worktree.json");
-  const file = Bun.file(configPath);
 
-  if (!(await file.exists())) {
-    return null;
+  let content: string;
+  try {
+    content = await readFile(configPath, "utf-8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") {
+      return null;
+    }
+    throw error;
   }
 
   try {
-    return (await file.json()) as ProjectConfig;
+    return JSON.parse(content) as ProjectConfig;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.warn(`⚠️  Failed to parse .claude-worktree.json: ${message}`);
@@ -57,7 +65,7 @@ export function resolveHookTimeout(
   return config?.hookTimeout ?? DEFAULT_HOOK_TIMEOUT;
 }
 
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, command: string): Promise<T> {
+function withTimeout<T>(promise: PromiseLike<T>, timeoutMs: number, command: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeoutPromise = new Promise<never>((_, reject) => {
     timer = setTimeout(
@@ -79,7 +87,7 @@ export async function runHook(
   const timeoutMs = options?.timeout !== undefined ? options.timeout * 1000 : undefined;
 
   if (options?.verbose) {
-    const resultPromise = $`${{ raw: command }}`.cwd(cwd).nothrow();
+    const resultPromise = exec("sh", ["-c", command]).cwd(cwd).nothrow();
     const result = timeoutMs !== undefined ? await withTimeout(resultPromise, timeoutMs, command) : await resultPromise;
     if (result.exitCode !== 0) {
       throw new Error(`Hook command failed with exit code ${result.exitCode}: ${command}`);
@@ -88,46 +96,61 @@ export async function runHook(
   }
 
   if (options?.onLine) {
-    const proc = Bun.spawn(["sh", "-c", command], {
+    const proc = spawn("sh", ["-c", command], {
       cwd,
-      stdout: "pipe",
-      stderr: "pipe",
+      stdio: ["ignore", "pipe", "pipe"],
     });
 
-    const readStream = async (stream: ReadableStream<Uint8Array>) => {
-      const reader = stream.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
+    const readStream = (stream: NodeJS.ReadableStream) => {
+      return new Promise<void>((resolve, reject) => {
+        const decoder = new TextDecoder();
+        let buffer = "";
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        stream.on("data", (chunk: Buffer) => {
+          buffer += decoder.decode(chunk, { stream: true });
+          const lines = buffer.split(/\r?\n/);
+          buffer = lines.pop() || "";
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (line.trim()) {
-            options.onLine?.(line);
+          for (const line of lines) {
+            if (line.trim()) {
+              options.onLine?.(line);
+            }
           }
-        }
-      }
+        });
 
-      // Flush remaining multibyte characters from the decoder
-      const remaining = decoder.decode();
-      if (remaining) {
-        buffer += remaining;
-      }
+        stream.on("error", reject);
 
-      if (buffer.trim()) {
-        options.onLine?.(buffer);
-      }
+        stream.on("end", () => {
+          // Flush remaining multibyte characters from the decoder
+          const remaining = decoder.decode();
+          if (remaining) {
+            buffer += remaining;
+          }
+
+          if (buffer.trim()) {
+            options.onLine?.(buffer);
+          }
+          resolve();
+        });
+      });
     };
 
     const streamAndExit = async () => {
-      await Promise.all([readStream(proc.stdout), readStream(proc.stderr)]);
-      const exitCode = await proc.exited;
+      const exitPromise = new Promise<number>((resolve, reject) => {
+        proc.on("error", reject);
+        proc.on("close", (code) => resolve(code ?? 1));
+      });
+
+      const readPromises: Promise<void>[] = [];
+      if (proc.stdout) {
+        readPromises.push(readStream(proc.stdout));
+      }
+      if (proc.stderr) {
+        readPromises.push(readStream(proc.stderr));
+      }
+
+      const results = await Promise.all([exitPromise, ...readPromises]);
+      const exitCode = results[0];
       if (exitCode !== 0) {
         throw new Error(`Hook command failed with exit code ${exitCode}: ${command}`);
       }
@@ -154,7 +177,7 @@ export async function runHook(
     return;
   }
 
-  const resultPromise = $`${{ raw: command }}`.cwd(cwd).nothrow().quiet();
+  const resultPromise = exec("sh", ["-c", command]).cwd(cwd).nothrow().quiet();
   const result = timeoutMs !== undefined ? await withTimeout(resultPromise, timeoutMs, command) : await resultPromise;
   if (result.exitCode !== 0) {
     throw new Error(`Hook command failed with exit code ${result.exitCode}: ${command}`);

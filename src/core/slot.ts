@@ -2,13 +2,11 @@ import { mkdir, open, readFile, rename, unlink, writeFile } from "node:fs/promis
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { setTimeout } from "node:timers/promises";
+
 import { exec } from "./exec";
 
 export async function isPortInUse(port: number): Promise<boolean> {
-  const result = await exec("lsof", [
-    `-iTCP:${port}`,
-    "-sTCP:LISTEN",
-  ])
+  const result = await exec("lsof", [`-iTCP:${port}`, "-sTCP:LISTEN"])
     .nothrow()
     .quiet();
   return result.exitCode === 0;

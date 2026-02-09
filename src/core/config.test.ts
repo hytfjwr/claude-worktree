@@ -133,7 +133,7 @@ describe("resolveHookTimeout", () => {
 });
 
 describe("runHook timeout", () => {
-  const sleepCmd = "bun -e 'await Bun.sleep(10000)'";
+  const sleepCmd = 'node -e "setTimeout(() => {}, 10000)"';
 
   test("throws timeout error when command exceeds timeout", async () => {
     await expect(runHook(sleepCmd, testCwd, { timeout: 1 })).rejects.toThrow(
