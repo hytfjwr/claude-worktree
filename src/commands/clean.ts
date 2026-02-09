@@ -1,4 +1,4 @@
-import { buildHookCommand, loadProjectConfig, runHook } from "../core/config";
+import { buildHookCommand, loadProjectConfig, resolveHookTimeout, runHook } from "../core/config";
 import {
   deleteLocalBranch,
   fetchAndPrune,
@@ -132,6 +132,7 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
           await deps.runHook(hookCmd, repoRoot, {
             verbose: args.verbose,
             onLine: spinner ? createTailUpdater(spinner) : undefined,
+            timeout: resolveHookTimeout("preClean", config),
           });
           spinner?.stop();
         } catch (error) {

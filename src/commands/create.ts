@@ -1,4 +1,4 @@
-import { buildHookCommand, loadProjectConfig, runHook } from "../core/config";
+import { buildHookCommand, loadProjectConfig, resolveHookTimeout, runHook } from "../core/config";
 import {
   branchExists,
   createWorktree,
@@ -106,6 +106,7 @@ export async function runCreate(args: CreateArgs): Promise<void> {
         await runHook(hookCmd, git.repoRoot, {
           verbose: args.verbose,
           onLine: spinner ? createTailUpdater(spinner) : undefined,
+          timeout: resolveHookTimeout("preClean", config),
         });
         spinner?.stop();
       } catch (error) {
@@ -173,6 +174,7 @@ export async function runCreate(args: CreateArgs): Promise<void> {
       await runHook(hookCmd, git.repoRoot, {
         verbose: args.verbose,
         onLine: spinner ? createTailUpdater(spinner) : undefined,
+        timeout: resolveHookTimeout("postCreate", config),
       });
       spinner?.stop();
     } catch (error) {
@@ -184,7 +186,10 @@ export async function runCreate(args: CreateArgs): Promise<void> {
       if (config?.preClean) {
         const cleanCmd = buildHookCommand(config.preClean, { path: worktreePath });
         try {
-          await runHook(cleanCmd, git.repoRoot, { verbose: args.verbose });
+          await runHook(cleanCmd, git.repoRoot, {
+            verbose: args.verbose,
+            timeout: resolveHookTimeout("preClean", config),
+          });
         } catch {
           console.warn("  ⚠️  preClean hook failed during rollback");
         }

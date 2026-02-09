@@ -73,8 +73,11 @@ export type PaneOptions = {
 // =============================================================================
 
 export type ProjectConfig = {
+  hookTimeout?: number; // Timeout in seconds for all hooks (default: 600)
   postCreate?: string;
+  postCreateTimeout?: number; // Timeout in seconds for the postCreate hook
   preClean?: string;
+  preCleanTimeout?: number; // Timeout in seconds for the preClean hook
 };
 
 export type HookVars = {
@@ -208,7 +211,7 @@ export type CleanDeps = {
   runHook: (
     command: string,
     cwd: string,
-    options?: { verbose?: boolean; onLine?: (line: string) => void },
+    options?: { verbose?: boolean; onLine?: (line: string) => void; timeout?: number },
   ) => Promise<void>;
   confirm: (message: string) => Promise<boolean>;
   selectMultiple: (statuses: WorktreeStatus[]) => Promise<WorktreeStatus[]>;

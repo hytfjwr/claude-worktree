@@ -135,12 +135,18 @@ src/
 **Hook Configuration (`.claude-worktree.json`):**
 ```json
 {
+  "hookTimeout": 600,
   "postCreate": "cd {path} && docker-compose -p app-{slot} up -d",
-  "preClean": "cd {path} && docker-compose down"
+  "postCreateTimeout": 300,
+  "preClean": "cd {path} && docker-compose down",
+  "preCleanTimeout": 120
 }
 ```
 - `{path}` — worktree path
 - `{slot}` — auto-assigned slot (1-9) based on port availability (8881-8889)
+- `hookTimeout` — global default timeout in seconds (default: 600)
+- `postCreateTimeout` / `preCleanTimeout` — per-hook timeout override
+- Priority: hook-specific value > `hookTimeout` > default (600s)
 
 **External Tool Dependencies:** bun, git, wezterm CLI, claude CLI
 

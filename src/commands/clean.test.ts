@@ -411,6 +411,48 @@ describe("executeClean", () => {
       expect(hookCalled).toBe(false);
     });
 
+    test("passes timeout option to runHook", async () => {
+      const worktree = makeWorktree({ path: "/tmp/repo-timeout" });
+      const status = makeStatus({ path: "/tmp/repo-timeout" }, { canAutoClean: true });
+      let receivedTimeout: number | undefined;
+      const deps = makeDeps({
+        listWorktrees: async () => [worktree],
+        getWorktreeStatuses: async () => [status],
+        loadProjectConfig: async () => ({
+          preClean: "cd {path} && docker-compose down",
+          preCleanTimeout: 120,
+        }),
+        runHook: async (_cmd, _cwd, options) => {
+          receivedTimeout = options?.timeout;
+        },
+      });
+
+      await executeClean({ ...defaultArgs, force: true }, deps);
+
+      expect(receivedTimeout).toBe(120);
+    });
+
+    test("passes global hookTimeout when hook-specific timeout is not set", async () => {
+      const worktree = makeWorktree({ path: "/tmp/repo-global-timeout" });
+      const status = makeStatus({ path: "/tmp/repo-global-timeout" }, { canAutoClean: true });
+      let receivedTimeout: number | undefined;
+      const deps = makeDeps({
+        listWorktrees: async () => [worktree],
+        getWorktreeStatuses: async () => [status],
+        loadProjectConfig: async () => ({
+          preClean: "cd {path} && docker-compose down",
+          hookTimeout: 300,
+        }),
+        runHook: async (_cmd, _cwd, options) => {
+          receivedTimeout = options?.timeout;
+        },
+      });
+
+      await executeClean({ ...defaultArgs, force: true }, deps);
+
+      expect(receivedTimeout).toBe(300);
+    });
+
     test("skips hook when getGitContext fails", async () => {
       const worktree = makeWorktree();
       const status = makeStatus({}, { canAutoClean: true });

@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { tmpdir } from "node:os";
 
-import type { HookVars } from "../types";
+import type { HookVars, ProjectConfig } from "../types";
+import { DEFAULT_HOOK_TIMEOUT, resolveHookTimeout, runHook } from "./config";
+
+const testCwd = tmpdir();
 
 // ============================================================================
 // Pure function tests (no mocks needed)
@@ -88,5 +92,55 @@ describe("buildHookCommand", () => {
       path: "/home/user/my-project_v2/work.tree",
     });
     expect(result).toBe("cd /home/user/my-project_v2/work.tree");
+  });
+});
+
+describe("resolveHookTimeout", () => {
+  test("returns hook-specific timeout when set (postCreate)", () => {
+    const config: ProjectConfig = { postCreateTimeout: 300, hookTimeout: 120 };
+    expect(resolveHookTimeout("postCreate", config)).toBe(300);
+  });
+
+  test("returns hook-specific timeout when set (preClean)", () => {
+    const config: ProjectConfig = { preCleanTimeout: 60, hookTimeout: 120 };
+    expect(resolveHookTimeout("preClean", config)).toBe(60);
+  });
+
+  test("falls back to hookTimeout when hook-specific value is not set", () => {
+    const config: ProjectConfig = { hookTimeout: 120 };
+    expect(resolveHookTimeout("postCreate", config)).toBe(120);
+    expect(resolveHookTimeout("preClean", config)).toBe(120);
+  });
+
+  test("returns DEFAULT_HOOK_TIMEOUT when nothing is configured", () => {
+    const config: ProjectConfig = {};
+    expect(resolveHookTimeout("postCreate", config)).toBe(DEFAULT_HOOK_TIMEOUT);
+    expect(resolveHookTimeout("preClean", config)).toBe(DEFAULT_HOOK_TIMEOUT);
+  });
+
+  test("returns DEFAULT_HOOK_TIMEOUT when config is null", () => {
+    expect(resolveHookTimeout("postCreate", null)).toBe(DEFAULT_HOOK_TIMEOUT);
+    expect(resolveHookTimeout("preClean", null)).toBe(DEFAULT_HOOK_TIMEOUT);
+  });
+});
+
+describe("runHook timeout", () => {
+  const sleepCmd = "bun -e 'await Bun.sleep(10000)'";
+
+  test("throws timeout error when command exceeds timeout", async () => {
+    await expect(runHook(sleepCmd, testCwd, { timeout: 1 })).rejects.toThrow(
+      `Hook command timed out after 1s: ${sleepCmd}`,
+    );
+  });
+
+  test("completes successfully within timeout", async () => {
+    await expect(runHook("echo ok", testCwd, { timeout: 10 })).resolves.toBeUndefined();
+  });
+
+  test("throws timeout error with onLine mode", async () => {
+    const lines: string[] = [];
+    await expect(runHook(sleepCmd, testCwd, { timeout: 1, onLine: (line) => lines.push(line) })).rejects.toThrow(
+      `Hook command timed out after 1s: ${sleepCmd}`,
+    );
   });
 });

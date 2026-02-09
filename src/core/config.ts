@@ -39,13 +39,42 @@ export function buildHookCommand(template: string, vars: HookVars): string {
     .replace(/\{slot\}/g, vars.slot !== undefined ? String(vars.slot) : "");
 }
 
+export const DEFAULT_HOOK_TIMEOUT = 600;
+
+export function resolveHookTimeout(hookName: "postCreate" | "preClean", config: ProjectConfig | null): number {
+  if (hookName === "postCreate" && config?.postCreateTimeout !== undefined) {
+    return config.postCreateTimeout;
+  }
+  if (hookName === "preClean" && config?.preCleanTimeout !== undefined) {
+    return config.preCleanTimeout;
+  }
+  return config?.hookTimeout ?? DEFAULT_HOOK_TIMEOUT;
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, command: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`Hook command timed out after ${timeoutMs / 1000}s: ${command}`)),
+      timeoutMs,
+    );
+  });
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timer !== undefined) clearTimeout(timer);
+  });
+}
+
 export async function runHook(
   command: string,
   cwd: string,
-  options?: { verbose?: boolean; onLine?: (line: string) => void },
+  options?: { verbose?: boolean; onLine?: (line: string) => void; timeout?: number },
 ): Promise<void> {
+  const timeoutMs = options?.timeout !== undefined ? options.timeout * 1000 : undefined;
+
   if (options?.verbose) {
-    const result = await $`${{ raw: command }}`.cwd(cwd).nothrow();
+    const resultPromise = $`${{ raw: command }}`.cwd(cwd).nothrow();
+    const result = timeoutMs !== undefined ? await withTimeout(resultPromise, timeoutMs, command) : await resultPromise;
     if (result.exitCode !== 0) {
       throw new Error(`Hook command failed with exit code ${result.exitCode}: ${command}`);
     }
@@ -90,16 +119,37 @@ export async function runHook(
       }
     };
 
-    await Promise.all([readStream(proc.stdout), readStream(proc.stderr)]);
+    const streamAndExit = async () => {
+      await Promise.all([readStream(proc.stdout), readStream(proc.stderr)]);
+      const exitCode = await proc.exited;
+      if (exitCode !== 0) {
+        throw new Error(`Hook command failed with exit code ${exitCode}: ${command}`);
+      }
+    };
 
-    const exitCode = await proc.exited;
-    if (exitCode !== 0) {
-      throw new Error(`Hook command failed with exit code ${exitCode}: ${command}`);
+    if (timeoutMs !== undefined) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          streamAndExit(),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(() => {
+              proc.kill();
+              reject(new Error(`Hook command timed out after ${timeoutMs / 1000}s: ${command}`));
+            }, timeoutMs);
+          }),
+        ]);
+      } finally {
+        if (timer !== undefined) clearTimeout(timer);
+      }
+    } else {
+      await streamAndExit();
     }
     return;
   }
 
-  const result = await $`${{ raw: command }}`.cwd(cwd).nothrow().quiet();
+  const resultPromise = $`${{ raw: command }}`.cwd(cwd).nothrow().quiet();
+  const result = timeoutMs !== undefined ? await withTimeout(resultPromise, timeoutMs, command) : await resultPromise;
   if (result.exitCode !== 0) {
     throw new Error(`Hook command failed with exit code ${result.exitCode}: ${command}`);
   }
