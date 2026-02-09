@@ -110,7 +110,7 @@ export async function runCreate(args: CreateArgs): Promise<void> {
           onLine: spinner ? createTailUpdater(spinner) : undefined,
           timeout: resolveHookTimeout("preClean", config),
         });
-        spinner?.stop();
+        spinner?.stop("✓ preClean hook done");
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         spinner?.fail(`preClean hook failed (continuing): ${message}`);
@@ -180,7 +180,7 @@ export async function runCreate(args: CreateArgs): Promise<void> {
         onLine: spinner ? createTailUpdater(spinner) : undefined,
         timeout: resolveHookTimeout("postCreate", config),
       });
-      spinner?.stop();
+      spinner?.stop("✓ postCreate hook done");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       spinner?.fail("postCreate hook failed");

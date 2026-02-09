@@ -136,7 +136,7 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
             onLine: spinner ? createTailUpdater(spinner) : undefined,
             timeout: resolveHookTimeout("preClean", config),
           });
-          spinner?.stop();
+          spinner?.stop("✓ preClean hook done");
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           spinner?.fail(`preClean hook failed (continuing): ${message}`);
