@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -229,7 +230,6 @@ describe("session file I/O", () => {
     await saveSession("/tmp/wt-only", session);
     await deleteSession("/tmp/wt-only");
 
-    const file = Bun.file(join(tempDir, "sessions.json"));
-    expect(await file.exists()).toBe(false);
+    expect(existsSync(join(tempDir, "sessions.json"))).toBe(false);
   });
 });

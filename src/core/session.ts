@@ -1,5 +1,6 @@
-import { mkdir, open, rename, unlink } from "node:fs/promises";
+import { mkdir, open, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { setTimeout } from "node:timers/promises";
 
 import type { SessionInfo, SessionState, WeztermPane } from "../types";
 import { getCacheDir } from "./slot";
@@ -15,21 +16,21 @@ function getLockFile(): string {
 }
 
 async function readCache(): Promise<SessionCache> {
-  const file = Bun.file(getSessionFile());
-  if (!(await file.exists())) {
-    return {};
-  }
   try {
-    return (await file.json()) as SessionCache;
-  } catch {
-    return {};
+    const data = await readFile(getSessionFile(), "utf-8");
+    return JSON.parse(data) as SessionCache;
+  } catch (err: unknown) {
+    if (err instanceof Error && "code" in err && err.code === "ENOENT") {
+      return {};
+    }
+    throw err;
   }
 }
 
 async function writeCache(cache: SessionCache): Promise<void> {
   const sessionFile = getSessionFile();
   const tempFile = `${sessionFile}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
-  await Bun.write(tempFile, JSON.stringify(cache, null, 2));
+  await writeFile(tempFile, JSON.stringify(cache, null, 2), "utf-8");
   await rename(tempFile, sessionFile);
 }
 
@@ -44,7 +45,7 @@ async function withLock<T>(fn: () => Promise<T>): Promise<T> {
       handle = await open(lockFile, "wx");
       break;
     } catch {
-      await Bun.sleep(100);
+      await setTimeout(100);
     }
   }
   if (!handle) {
