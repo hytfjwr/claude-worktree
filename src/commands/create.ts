@@ -6,12 +6,13 @@ import {
   findWorktreeByBranch,
   getGitContext,
   getWorktreePath,
+  listWorktrees,
   removeWorktree,
 } from "../core/git";
 import { findAvailableSlot } from "../core/slot";
 import { buildClaudeCommand } from "../external/claude";
 import { checkWeztermAvailable, createPane, sendCommand, sendText } from "../external/wezterm";
-import type { CreateArgs } from "../types";
+import type { CreateArgs, ProjectConfig } from "../types";
 import { confirm } from "../ui/prompt";
 import { createTailUpdater, startSpinner } from "../ui/spinner";
 
@@ -31,6 +32,29 @@ export async function readPlanFile(filePath: string): Promise<string> {
   }
 
   return trimmed;
+}
+
+/**
+ * Check if the worktree limit has been reached.
+ * Returns an error message string if blocked, or null if OK.
+ */
+export function checkWorktreeLimit(
+  config: ProjectConfig | null,
+  currentCount: number,
+  isReplace: boolean,
+): string | null {
+  const maxWorktrees = config?.maxWorktrees;
+  if (maxWorktrees == null) {
+    return null;
+  }
+  if (!Number.isInteger(maxWorktrees) || maxWorktrees < 0) {
+    return `Invalid maxWorktrees value: ${maxWorktrees}. Must be a non-negative integer.`;
+  }
+  const effective = isReplace ? currentCount - 1 : currentCount;
+  if (effective >= maxWorktrees) {
+    return `⚠ Worktree limit reached (${effective}/${maxWorktrees}). Run \`claude-worktree clean\` to remove unused worktrees.`;
+  }
+  return null;
 }
 
 export async function runCreate(args: CreateArgs): Promise<void> {
@@ -62,6 +86,19 @@ export async function runCreate(args: CreateArgs): Promise<void> {
   const effectiveBaseBranch = baseBranch ?? git.currentBranch;
 
   const config = await loadProjectConfig(git.repoRoot);
+
+  // Check worktree limit
+  if (config?.maxWorktrees != null) {
+    const worktrees = await listWorktrees();
+    const nonMainCount = worktrees.filter((w) => !w.isMain).length;
+    const existingWorktree = worktrees.find((w) => w.branch === branchName) ?? null;
+    const limitError = checkWorktreeLimit(config, nonMainCount, existingWorktree !== null);
+    if (limitError) {
+      console.log(limitError);
+      process.exitCode = 1;
+      return;
+    }
+  }
 
   console.log(`📍 Current branch: ${git.currentBranch}`);
   if (baseBranch) {

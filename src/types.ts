@@ -73,6 +73,7 @@ export type PaneOptions = {
 // =============================================================================
 
 export type ProjectConfig = {
+  maxWorktrees?: number; // Maximum number of concurrent worktrees (excludes main)
   hookTimeout?: number; // Timeout in seconds for all hooks (default: 600)
   postCreate?: string;
   postCreateTimeout?: number; // Timeout in seconds for the postCreate hook

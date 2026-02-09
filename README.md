@@ -124,6 +124,7 @@ You can define project-specific hooks in `.claude-worktree.json` at the reposito
 
 ```json
 {
+  "maxWorktrees": 5,
   "hookTimeout": 600,
   "postCreate": "cd {path} && docker-compose -p app-{slot} up -d",
   "postCreateTimeout": 300,
@@ -133,6 +134,10 @@ You can define project-specific hooks in `.claude-worktree.json` at the reposito
   "postCleanTimeout": 60
 }
 ```
+
+### Worktree Limit
+
+- `maxWorktrees` — Maximum number of concurrent worktrees (excludes main). If set, blocks creation when the limit is reached.
 
 ### Template Variables
 

@@ -135,6 +135,7 @@ src/
 **Hook Configuration (`.claude-worktree.json`):**
 ```json
 {
+  "maxWorktrees": 5,
   "hookTimeout": 600,
   "postCreate": "cd {path} && docker-compose -p app-{slot} up -d",
   "postCreateTimeout": 300,
@@ -144,6 +145,7 @@ src/
   "postCleanTimeout": 60
 }
 ```
+- `maxWorktrees` — maximum number of concurrent worktrees (excludes main). If set, blocks creation when the limit is reached.
 - `{path}` — worktree path
 - `{slot}` — auto-assigned slot (1-9) based on port availability (8881-8889)
 - `hookTimeout` — global default timeout in seconds (default: 600)
