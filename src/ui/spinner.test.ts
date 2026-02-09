@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
 import {
   createTailUpdater,
@@ -11,6 +11,8 @@ import {
   startSpinner,
   stripAnsi,
 } from "./spinner";
+
+afterEach(() => vi.restoreAllMocks());
 
 describe("startSpinner", () => {
   test("returns a Spinner object", () => {
@@ -64,7 +66,6 @@ describe("startSpinner", () => {
     const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
     expect(output).toContain("\x1b[?25l");
     spinner.stop();
-    writeSpy.mockRestore();
   });
 
   test("stop() clears tail lines and outputs clear sequence", () => {
@@ -84,7 +85,6 @@ describe("startSpinner", () => {
     expect(output).not.toContain("\x1b[90m");
     // Should show cursor
     expect(output).toContain("\x1b[?25h");
-    writeSpy.mockRestore();
   });
 
   test("fail() clears tail lines and outputs clear sequence", () => {
@@ -104,7 +104,6 @@ describe("startSpinner", () => {
     expect(output).not.toContain("\x1b[90m");
     // Should show cursor
     expect(output).toContain("\x1b[?25h");
-    writeSpy.mockRestore();
   });
 
   test("renders info line when timeout is specified", () => {
@@ -119,7 +118,6 @@ describe("startSpinner", () => {
     expect(output).toContain("..+2 more lines");
     expect(output).toContain("timeout 10m");
     spinner.stop();
-    writeSpy.mockRestore();
   });
 
   test("shows Ctrl+O expand hint when hidden lines exist", () => {
@@ -132,7 +130,6 @@ describe("startSpinner", () => {
     const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
     expect(output).toContain("Ctrl+O to expand");
     spinner.stop();
-    writeSpy.mockRestore();
   });
 
   test("does not show Ctrl+O expand hint when all lines visible", () => {
@@ -145,7 +142,6 @@ describe("startSpinner", () => {
     const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
     expect(output).not.toContain("Ctrl+O");
     spinner.stop();
-    writeSpy.mockRestore();
   });
 
   test("renders info line without hidden count when all lines visible", () => {
@@ -160,7 +156,6 @@ describe("startSpinner", () => {
     expect(output).toContain("timeout 1m");
     expect(output).not.toContain("more lines");
     spinner.stop();
-    writeSpy.mockRestore();
   });
 
   test("does not render info line when no timeout", () => {
@@ -174,7 +169,6 @@ describe("startSpinner", () => {
     expect(output).not.toContain("timeout");
     expect(output).not.toContain("more lines");
     spinner.stop();
-    writeSpy.mockRestore();
   });
 });
 
@@ -285,7 +279,6 @@ describe("keyboard handling", () => {
       expect(output).toContain("c");
 
       spinner.stop();
-      writeSpy.mockRestore();
     });
   });
 
@@ -306,7 +299,6 @@ describe("keyboard handling", () => {
       expect(output).not.toContain("Ctrl+O to collapse");
 
       spinner.stop();
-      writeSpy.mockRestore();
     });
   });
 
@@ -333,7 +325,6 @@ describe("keyboard handling", () => {
       expect(output).toContain("Ctrl+O to collapse");
 
       spinner.stop();
-      writeSpy.mockRestore();
     });
   });
 
@@ -360,18 +351,15 @@ describe("keyboard handling", () => {
       expect(output).toContain("Ctrl+O to expand");
 
       spinner.stop();
-      writeSpy.mockRestore();
     });
   });
 
   test("stop() cleans up keyboard listener", () => {
     withTTYStdin((_emitKey) => {
-      const writeSpy = vi.spyOn(process.stdout, "write");
       const spinner = startSpinner("Processing...", { timeoutSec: 600 });
 
       // stop() should not throw even with keyboard listener active
       expect(() => spinner.stop()).not.toThrow();
-      writeSpy.mockRestore();
     });
   });
 });
