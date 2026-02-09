@@ -1,15 +1,15 @@
-import { $ } from "bun";
 import { basename, join } from "node:path";
 
 import type { AheadBehind, CommitInfo, GitContext, ParsedWorktree, WorktreeInfo, WorktreeStatus } from "../types";
+import { exec } from "./exec";
 
 export async function getGitContext(): Promise<GitContext> {
-  const repoRoot = (await $`git rev-parse --show-toplevel`.text()).trim();
+  const repoRoot = (await exec("git", ["rev-parse", "--show-toplevel"]).text()).trim();
   if (!repoRoot) {
     throw new Error("Not in a git repository");
   }
 
-  const currentBranch = (await $`git branch --show-current`.text()).trim();
+  const currentBranch = (await exec("git", ["branch", "--show-current"]).text()).trim();
   if (!currentBranch) {
     throw new Error("Could not determine current branch");
   }
@@ -30,7 +30,7 @@ export function buildWorktreeCommand(branchName: string, worktreePath: string, b
 }
 
 export async function createWorktree(branchName: string, worktreePath: string, baseBranch: string): Promise<void> {
-  const result = await $`git worktree add -b ${branchName} ${worktreePath} ${baseBranch}`.nothrow().quiet();
+  const result = await exec("git", ["worktree", "add", "-b", branchName, worktreePath, baseBranch]).nothrow().quiet();
   if (result.exitCode !== 0) {
     const stderr = result.stderr.toString().trim();
     throw new Error(`Failed to create worktree: ${stderr}`);
@@ -39,7 +39,7 @@ export async function createWorktree(branchName: string, worktreePath: string, b
 
 export async function getMainBranch(): Promise<string> {
   // Try to detect the main branch name
-  const result = await $`git symbolic-ref refs/remotes/origin/HEAD`.nothrow().quiet();
+  const result = await exec("git", ["symbolic-ref", "refs/remotes/origin/HEAD"]).nothrow().quiet();
   if (result.exitCode === 0) {
     const ref = result.text().trim();
     // refs/remotes/origin/main -> main
@@ -47,7 +47,7 @@ export async function getMainBranch(): Promise<string> {
   }
 
   // Fallback: check if main or master exists
-  const branchResult = await $`git branch -a`.nothrow().quiet();
+  const branchResult = await exec("git", ["branch", "-a"]).nothrow().quiet();
   if (branchResult.exitCode !== 0) {
     return "main"; // Default fallback
   }
@@ -102,7 +102,7 @@ export function parseWorktreePorcelain(output: string, mainBranch: string): Pars
 }
 
 export async function listWorktrees(): Promise<WorktreeInfo[]> {
-  const result = await $`git worktree list --porcelain`.nothrow().quiet();
+  const result = await exec("git", ["worktree", "list", "--porcelain"]).nothrow().quiet();
   if (result.exitCode !== 0) {
     throw new Error("Failed to list worktrees. Are you in a git repository?");
   }
@@ -124,7 +124,7 @@ export async function listWorktrees(): Promise<WorktreeInfo[]> {
 }
 
 export async function isWorktreeDirty(worktreePath: string): Promise<boolean> {
-  const result = await $`git -C ${worktreePath} status --porcelain`.nothrow().quiet();
+  const result = await exec("git", ["-C", worktreePath, "status", "--porcelain"]).nothrow().quiet();
   if (result.exitCode !== 0) {
     return true; // Treat as dirty if we can't check
   }
@@ -135,7 +135,7 @@ export async function isBranchMerged(branch: string, baseBranch?: string): Promi
   const base = baseBranch || (await getMainBranch());
 
   // Check if branch is merged into base
-  const result = await $`git branch --merged ${base}`.nothrow().quiet();
+  const result = await exec("git", ["branch", "--merged", base]).nothrow().quiet();
   if (result.exitCode !== 0) {
     return false;
   }
@@ -150,7 +150,7 @@ export async function isBranchMerged(branch: string, baseBranch?: string): Promi
 
 export async function isRemoteBranchDeleted(branch: string): Promise<boolean> {
   // Check if remote branch exists
-  const result = await $`git ls-remote --heads origin ${branch}`.nothrow().quiet();
+  const result = await exec("git", ["ls-remote", "--heads", "origin", branch]).nothrow().quiet();
   if (result.exitCode !== 0) {
     return true; // Assume deleted if we can't check
   }
@@ -159,9 +159,9 @@ export async function isRemoteBranchDeleted(branch: string): Promise<boolean> {
 
 export async function removeWorktree(worktreePath: string, force = false): Promise<void> {
   if (force) {
-    await $`git worktree remove --force ${worktreePath}`;
+    await exec("git", ["worktree", "remove", "--force", worktreePath]);
   } else {
-    await $`git worktree remove ${worktreePath}`;
+    await exec("git", ["worktree", "remove", worktreePath]);
   }
 }
 
@@ -172,7 +172,7 @@ export async function findWorktreeByBranch(branchName: string): Promise<Worktree
 
 export async function deleteLocalBranch(branchName: string, force = false): Promise<void> {
   const flag = force ? "-D" : "-d";
-  const result = await $`git branch ${flag} ${branchName}`.nothrow().quiet();
+  const result = await exec("git", ["branch", flag, branchName]).nothrow().quiet();
   if (result.exitCode !== 0) {
     const stderr = result.stderr.toString().trim();
     throw new Error(`Failed to delete branch ${branchName}: ${stderr}`);
@@ -180,7 +180,7 @@ export async function deleteLocalBranch(branchName: string, force = false): Prom
 }
 
 export async function getLastCommit(worktreePath: string): Promise<CommitInfo | null> {
-  const result = await $`git -C ${worktreePath} log -1 --format=%h%x00%s%x00%aI`.nothrow().quiet();
+  const result = await exec("git", ["-C", worktreePath, "log", "-1", "--format=%h%x00%s%x00%aI"]).nothrow().quiet();
   if (result.exitCode !== 0) {
     return null;
   }
@@ -196,7 +196,9 @@ export async function getLastCommit(worktreePath: string): Promise<CommitInfo | 
 }
 
 export async function getAheadBehind(branch: string, baseBranch: string): Promise<AheadBehind | null> {
-  const result = await $`git rev-list --left-right --count ${branch}...${baseBranch}`.nothrow().quiet();
+  const result = await exec("git", ["rev-list", "--left-right", "--count", `${branch}...${baseBranch}`])
+    .nothrow()
+    .quiet();
   if (result.exitCode !== 0) {
     return null;
   }
@@ -214,11 +216,13 @@ export async function getAheadBehind(branch: string, baseBranch: string): Promis
 }
 
 export async function fetchAndPrune(): Promise<void> {
-  await $`git fetch --prune`.quiet();
+  await exec("git", ["fetch", "--prune"]).quiet();
 }
 
 export async function branchExists(branchName: string): Promise<boolean> {
-  const result = await $`git show-ref --verify --quiet refs/heads/${branchName}`.nothrow().quiet();
+  const result = await exec("git", ["show-ref", "--verify", "--quiet", `refs/heads/${branchName}`])
+    .nothrow()
+    .quiet();
   return result.exitCode === 0;
 }
 

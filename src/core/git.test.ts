@@ -1,7 +1,59 @@
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { WorktreeInfo } from "../types";
+import type { ExecResult } from "./exec";
 import { buildWorktreeCommand, getWorktreePath, parseWorktreePorcelain } from "./git";
+
+// Hoisted mock for ./exec — default passthrough, overridable per-test via mockExecImpl
+const { mockExecImpl } = vi.hoisted(() => ({
+  mockExecImpl: { current: null as ((cmd: string, args: string[]) => unknown) | null },
+}));
+
+vi.mock("./exec", async (importOriginal) => {
+  const original = (await importOriginal()) as { exec: (cmd: string, args: string[]) => unknown };
+  return {
+    ...original,
+    exec: (cmd: string, args: string[]) => {
+      if (mockExecImpl.current) {
+        return mockExecImpl.current(cmd, args);
+      }
+      return original.exec(cmd, args);
+    },
+  };
+});
+
+/**
+ * Create a fake ExecBuilder that mirrors the real exec() return type contract.
+ * - Awaiting returns ExecResult (with sync .text())
+ * - .text() on builder returns Promise<string>
+ * - .nothrow() / .quiet() are chainable no-ops
+ * Throws for unhandled commands to catch regressions early.
+ */
+function createExecStub(handler: (cmd: string, args: string[]) => { stdout: string; exitCode?: number }) {
+  return (cmd: string, args: string[]) => {
+    const { stdout, exitCode = 0 } = handler(cmd, args);
+    const result: ExecResult = {
+      exitCode,
+      stdout: Buffer.from(stdout),
+      stderr: Buffer.alloc(0),
+      text: () => stdout,
+    };
+    const builder = {
+      nothrow() {
+        return this;
+      },
+      quiet() {
+        return this;
+      },
+      text: () => Promise.resolve(stdout),
+      // biome-ignore lint/suspicious/noThenProperty: intentional PromiseLike implementation for exec stub
+      then(resolve?: ((value: ExecResult) => unknown) | null, reject?: ((reason: unknown) => unknown) | null) {
+        return Promise.resolve(result).then(resolve, reject);
+      },
+    };
+    return builder;
+  };
+}
 
 // ============================================================================
 // Pure function tests (no mocks needed)
@@ -438,7 +490,14 @@ describe("branchExists (mock)", () => {
 // ============================================================================
 
 describe("getWorktreeStatuses", () => {
-  beforeEach(() => vi.resetModules());
+  beforeEach(() => {
+    vi.resetModules();
+    mockExecImpl.current = null;
+  });
+
+  afterEach(() => {
+    mockExecImpl.current = null;
+  });
 
   function createWorktree(overrides: Partial<WorktreeInfo> = {}): WorktreeInfo {
     return {
@@ -451,14 +510,25 @@ describe("getWorktreeStatuses", () => {
     };
   }
 
+  // Helper to set exec mock for controlling isBranchMerged/isRemoteBranchDeleted behavior.
+  // vi.doMock("./git") cannot intercept intra-module calls in Vitest, so we mock exec instead.
+  function setExecMockForStatuses(config: { branchMerged: boolean; remoteBranchDeleted: boolean }) {
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("symbolic-ref")) {
+        return { stdout: "refs/remotes/origin/main\n" };
+      }
+      if (args.includes("--merged")) {
+        return { stdout: config.branchMerged ? "  main\n  feature/test\n" : "  main\n" };
+      }
+      if (args.includes("ls-remote")) {
+        return { stdout: config.remoteBranchDeleted ? "" : "abc123\trefs/heads/feature/test\n" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+  }
+
   test("main worktree has canAutoClean: false", async () => {
-    // getWorktreeStatuses internally calls isBranchMerged and isRemoteBranchDeleted
-    // so we need to mock those
-    vi.doMock("./git", async () => ({
-      ...(await vi.importActual("./git")),
-      isBranchMerged: vi.fn(async () => false),
-      isRemoteBranchDeleted: vi.fn(async () => false),
-    }));
+    setExecMockForStatuses({ branchMerged: false, remoteBranchDeleted: false });
 
     const { getWorktreeStatuses } = await import("./git");
     const worktree = createWorktree({ isMain: true, branch: "main" });
@@ -469,11 +539,7 @@ describe("getWorktreeStatuses", () => {
   });
 
   test("locked worktree has canAutoClean: false", async () => {
-    vi.doMock("./git", async () => ({
-      ...(await vi.importActual("./git")),
-      isBranchMerged: vi.fn(async () => false),
-      isRemoteBranchDeleted: vi.fn(async () => false),
-    }));
+    setExecMockForStatuses({ branchMerged: false, remoteBranchDeleted: false });
 
     const { getWorktreeStatuses } = await import("./git");
     const worktree = createWorktree({ isLocked: true });
@@ -484,11 +550,7 @@ describe("getWorktreeStatuses", () => {
   });
 
   test("dirty worktree has canAutoClean: false", async () => {
-    vi.doMock("./git", async () => ({
-      ...(await vi.importActual("./git")),
-      isBranchMerged: vi.fn(async () => false),
-      isRemoteBranchDeleted: vi.fn(async () => false),
-    }));
+    setExecMockForStatuses({ branchMerged: false, remoteBranchDeleted: false });
 
     const { getWorktreeStatuses } = await import("./git");
     const worktree = createWorktree({ isDirty: true });
@@ -499,11 +561,7 @@ describe("getWorktreeStatuses", () => {
   });
 
   test("condition priority: isMain > isLocked > isDirty", async () => {
-    vi.doMock("./git", async () => ({
-      ...(await vi.importActual("./git")),
-      isBranchMerged: vi.fn(async () => false),
-      isRemoteBranchDeleted: vi.fn(async () => false),
-    }));
+    setExecMockForStatuses({ branchMerged: false, remoteBranchDeleted: false });
 
     const { getWorktreeStatuses } = await import("./git");
 
@@ -519,11 +577,7 @@ describe("getWorktreeStatuses", () => {
   });
 
   test("null branch does not cause error", async () => {
-    vi.doMock("./git", async () => ({
-      ...(await vi.importActual("./git")),
-      isBranchMerged: vi.fn(async () => false),
-      isRemoteBranchDeleted: vi.fn(async () => false),
-    }));
+    setExecMockForStatuses({ branchMerged: false, remoteBranchDeleted: false });
 
     const { getWorktreeStatuses } = await import("./git");
     const worktree = createWorktree({ branch: null });
@@ -535,11 +589,7 @@ describe("getWorktreeStatuses", () => {
   });
 
   test("merged branch has canAutoClean: true", async () => {
-    vi.doMock("./git", async () => ({
-      ...(await vi.importActual("./git")),
-      isBranchMerged: vi.fn(async () => true),
-      isRemoteBranchDeleted: vi.fn(async () => false),
-    }));
+    setExecMockForStatuses({ branchMerged: true, remoteBranchDeleted: false });
 
     const { getWorktreeStatuses } = await import("./git");
     const worktree = createWorktree();
@@ -550,11 +600,7 @@ describe("getWorktreeStatuses", () => {
   });
 
   test("remote deleted branch has canAutoClean: true", async () => {
-    vi.doMock("./git", async () => ({
-      ...(await vi.importActual("./git")),
-      isBranchMerged: vi.fn(async () => false),
-      isRemoteBranchDeleted: vi.fn(async () => true),
-    }));
+    setExecMockForStatuses({ branchMerged: false, remoteBranchDeleted: true });
 
     const { getWorktreeStatuses } = await import("./git");
     const worktree = createWorktree();
@@ -565,11 +611,7 @@ describe("getWorktreeStatuses", () => {
   });
 
   test("merged & remote deleted", async () => {
-    vi.doMock("./git", async () => ({
-      ...(await vi.importActual("./git")),
-      isBranchMerged: vi.fn(async () => true),
-      isRemoteBranchDeleted: vi.fn(async () => true),
-    }));
+    setExecMockForStatuses({ branchMerged: true, remoteBranchDeleted: true });
 
     const { getWorktreeStatuses } = await import("./git");
     const worktree = createWorktree();
@@ -580,11 +622,7 @@ describe("getWorktreeStatuses", () => {
   });
 
   test("active branch has canAutoClean: false", async () => {
-    vi.doMock("./git", async () => ({
-      ...(await vi.importActual("./git")),
-      isBranchMerged: vi.fn(async () => false),
-      isRemoteBranchDeleted: vi.fn(async () => false),
-    }));
+    setExecMockForStatuses({ branchMerged: false, remoteBranchDeleted: false });
 
     const { getWorktreeStatuses } = await import("./git");
     const worktree = createWorktree();
