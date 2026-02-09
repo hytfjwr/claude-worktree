@@ -1,6 +1,16 @@
 import { describe, expect, spyOn, test } from "bun:test";
 
-import { createTailUpdater, formatTailLine, lerp, shimmerText, smoothstep, startSpinner, stripAnsi } from "./spinner";
+import {
+  createTailUpdater,
+  formatDuration,
+  formatInfoLine,
+  formatTailLine,
+  lerp,
+  shimmerText,
+  smoothstep,
+  startSpinner,
+  stripAnsi,
+} from "./spinner";
 
 describe("startSpinner", () => {
   test("returns a Spinner object", () => {
@@ -31,13 +41,13 @@ describe("startSpinner", () => {
 
   test("updateTail() can be called normally", () => {
     const spinner = startSpinner("Processing...");
-    expect(() => spinner.updateTail(["line 1", "line 2"])).not.toThrow();
+    expect(() => spinner.updateTail(["line 1", "line 2"], 2)).not.toThrow();
     spinner.stop();
   });
 
   test("updateTail() with empty array", () => {
     const spinner = startSpinner("Processing...");
-    expect(() => spinner.updateTail([])).not.toThrow();
+    expect(() => spinner.updateTail([], 0)).not.toThrow();
     spinner.stop();
   });
 
@@ -54,7 +64,7 @@ describe("startSpinner", () => {
   test("stop() clears tail lines and outputs clear sequence", () => {
     const writeSpy = spyOn(process.stdout, "write");
     const spinner = startSpinner("Processing...");
-    spinner.updateTail(["line 1", "line 2", "line 3"]);
+    spinner.updateTail(["line 1", "line 2", "line 3"], 3);
     writeSpy.mockClear();
 
     spinner.stop();
@@ -74,7 +84,7 @@ describe("startSpinner", () => {
   test("fail() clears tail lines and outputs clear sequence", () => {
     const writeSpy = spyOn(process.stdout, "write");
     const spinner = startSpinner("Processing...");
-    spinner.updateTail(["line 1", "line 2"]);
+    spinner.updateTail(["line 1", "line 2"], 2);
     writeSpy.mockClear();
 
     spinner.fail("Error occurred");
@@ -90,16 +100,60 @@ describe("startSpinner", () => {
     expect(output).toContain("\x1b[?25h");
     writeSpy.mockRestore();
   });
+
+  test("renders info line when timeout is specified", () => {
+    const writeSpy = spyOn(process.stdout, "write");
+    const spinner = startSpinner("Processing...", { timeoutSec: 600 });
+    writeSpy.mockClear();
+
+    spinner.updateTail(["line 3", "line 4", "line 5"], 5);
+
+    const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+    // Should contain the info line with hidden count and timeout
+    expect(output).toContain("..+2 more lines");
+    expect(output).toContain("timeout 10m");
+    spinner.stop();
+    writeSpy.mockRestore();
+  });
+
+  test("renders info line without hidden count when all lines visible", () => {
+    const writeSpy = spyOn(process.stdout, "write");
+    const spinner = startSpinner("Processing...", { timeoutSec: 60 });
+    writeSpy.mockClear();
+
+    spinner.updateTail(["only line"], 1);
+
+    const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+    // Should contain time info without hidden count
+    expect(output).toContain("timeout 1m");
+    expect(output).not.toContain("more lines");
+    spinner.stop();
+    writeSpy.mockRestore();
+  });
+
+  test("does not render info line when no timeout", () => {
+    const writeSpy = spyOn(process.stdout, "write");
+    const spinner = startSpinner("Processing...");
+    writeSpy.mockClear();
+
+    spinner.updateTail(["line"], 1);
+
+    const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+    expect(output).not.toContain("timeout");
+    expect(output).not.toContain("more lines");
+    spinner.stop();
+    writeSpy.mockRestore();
+  });
 });
 
 describe("createTailUpdater", () => {
-  test("feeds lines to spinner.updateTail", () => {
-    const calls: string[][] = [];
+  test("feeds lines to spinner.updateTail with totalCount", () => {
+    const calls: { lines: string[]; totalCount: number }[] = [];
     const mockSpinner = {
       stop: () => {},
       fail: () => {},
-      updateTail: (lines: string[]) => {
-        calls.push([...lines]);
+      updateTail: (lines: string[], totalCount: number) => {
+        calls.push({ lines: [...lines], totalCount });
       },
     };
 
@@ -107,17 +161,20 @@ describe("createTailUpdater", () => {
     onLine("line 1");
     onLine("line 2");
 
-    expect(calls).toEqual([["line 1"], ["line 1", "line 2"]]);
+    expect(calls).toEqual([
+      { lines: ["line 1"], totalCount: 1 },
+      { lines: ["line 1", "line 2"], totalCount: 2 },
+    ]);
   });
 
   test("keeps only last 3 lines", () => {
-    const lastCall: string[] = [];
+    const lastCall = { lines: [] as string[], totalCount: 0 };
     const mockSpinner = {
       stop: () => {},
       fail: () => {},
-      updateTail: (lines: string[]) => {
-        lastCall.length = 0;
-        lastCall.push(...lines);
+      updateTail: (lines: string[], totalCount: number) => {
+        lastCall.lines = [...lines];
+        lastCall.totalCount = totalCount;
       },
     };
 
@@ -126,8 +183,10 @@ describe("createTailUpdater", () => {
     onLine("b");
     onLine("c");
     onLine("d");
+    onLine("e");
 
-    expect(lastCall).toEqual(["b", "c", "d"]);
+    expect(lastCall.lines).toEqual(["c", "d", "e"]);
+    expect(lastCall.totalCount).toBe(5);
   });
 });
 
@@ -238,6 +297,47 @@ describe("smoothstep", () => {
   test("returns value greater than t for 0.5 < t < 1 (ease-out)", () => {
     const t = 0.75;
     expect(smoothstep(t)).toBeGreaterThan(t);
+  });
+});
+
+describe("formatDuration", () => {
+  test("formats seconds under 60 as Xs", () => {
+    expect(formatDuration(0)).toBe("0s");
+    expect(formatDuration(5)).toBe("5s");
+    expect(formatDuration(59)).toBe("59s");
+  });
+
+  test("formats 60+ seconds as Xm", () => {
+    expect(formatDuration(60)).toBe("1m");
+    expect(formatDuration(120)).toBe("2m");
+    expect(formatDuration(600)).toBe("10m");
+  });
+
+  test("floors minutes for non-exact values", () => {
+    expect(formatDuration(90)).toBe("1m");
+    expect(formatDuration(119)).toBe("1m");
+  });
+});
+
+describe("formatInfoLine", () => {
+  test("shows hidden count when > 0", () => {
+    expect(formatInfoLine(4, 10, 600)).toBe("..+4 more lines (10s · timeout 10m)");
+  });
+
+  test("omits hidden count when 0", () => {
+    expect(formatInfoLine(0, 5, 600)).toBe("(5s · timeout 10m)");
+  });
+
+  test("omits timeout when undefined", () => {
+    expect(formatInfoLine(3, 10)).toBe("..+3 more lines (10s)");
+  });
+
+  test("omits both hidden count and timeout", () => {
+    expect(formatInfoLine(0, 30)).toBe("(30s)");
+  });
+
+  test("formats minutes correctly", () => {
+    expect(formatInfoLine(10, 120, 600)).toBe("..+10 more lines (2m · timeout 10m)");
   });
 });
 

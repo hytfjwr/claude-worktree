@@ -54,22 +54,40 @@ export function shimmerText(text: string, shimmerPos: number): string {
 
 const TAIL_LINE_COUNT = 3;
 
+export function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  return `${Math.floor(seconds / 60)}m`;
+}
+
+export function formatInfoLine(hiddenCount: number, elapsedSec: number, timeoutSec?: number): string {
+  const timeoutPart = timeoutSec != null ? ` · timeout ${formatDuration(timeoutSec)}` : "";
+  if (hiddenCount > 0) {
+    return `..+${hiddenCount} more lines (${formatDuration(elapsedSec)}${timeoutPart})`;
+  }
+  return `(${formatDuration(elapsedSec)}${timeoutPart})`;
+}
+
 export function createTailUpdater(spinner: Spinner): (line: string) => void {
   const lines: string[] = [];
+  let totalCount = 0;
   return (line: string) => {
     lines.push(line);
+    totalCount++;
     if (lines.length > TAIL_LINE_COUNT) lines.shift();
-    spinner.updateTail(lines);
+    spinner.updateTail(lines, totalCount);
   };
 }
 
-export function startSpinner(message: string): Spinner {
+export function startSpinner(message: string, options?: { timeoutSec?: number }): Spinner {
   let frameIndex = 0;
   let shimmerPos = -SHIMMER_WIDTH;
   const chars = [...message];
   const shimmerEnd = chars.length + SHIMMER_WIDTH;
   let extraLines = 0;
   let tailLines: string[] = [];
+  let totalLineCount = 0;
+  const startTime = Date.now();
+  const timeoutSec = options?.timeoutSec;
 
   const writeFrame = () => {
     if (extraLines > 0) {
@@ -77,15 +95,22 @@ export function startSpinner(message: string): Spinner {
     }
     const frame = FRAMES[frameIndex];
     let output = `\r\x1b[J${frame} ${shimmerText(message, shimmerPos)}`;
+    const maxWidth = (process.stdout.columns || 80) - 6;
     if (tailLines.length > 0) {
-      const maxWidth = (process.stdout.columns || 80) - 6;
       for (const line of tailLines) {
         const formatted = formatTailLine(line, maxWidth);
         output += `\n\x1b[38;5;245m    ${formatted}\x1b[0m`;
       }
     }
+    if (timeoutSec != null) {
+      const elapsedSec = Math.floor((Date.now() - startTime) / 1000);
+      const hiddenCount = Math.max(0, totalLineCount - tailLines.length);
+      const infoText = formatInfoLine(hiddenCount, elapsedSec, timeoutSec);
+      const formattedInfo = formatTailLine(infoText, maxWidth);
+      output += `\n\x1b[38;5;245m    ${formattedInfo}\x1b[0m`;
+    }
     process.stdout.write(output);
-    extraLines = tailLines.length;
+    extraLines = tailLines.length + (timeoutSec != null ? 1 : 0);
   };
 
   process.stdout.write("\x1b[?25l"); // Hide cursor
@@ -115,8 +140,9 @@ export function startSpinner(message: string): Spinner {
       clearInterval(timer);
       clearAndWrite(`✗ ${errorMessage}`);
     },
-    updateTail(lines: string[]) {
+    updateTail(lines: string[], totalCount: number) {
       tailLines = [...lines];
+      totalLineCount = totalCount;
       writeFrame();
     },
   };

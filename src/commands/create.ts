@@ -101,7 +101,9 @@ export async function runCreate(args: CreateArgs): Promise<void> {
     // preClean hook
     if (config?.preClean) {
       const hookCmd = buildHookCommand(config.preClean, { path: existingWorktree.path });
-      const spinner = args.verbose ? null : startSpinner("Running preClean hook...");
+      const spinner = args.verbose
+        ? null
+        : startSpinner("Running preClean hook...", { timeoutSec: resolveHookTimeout("preClean", config) });
       try {
         await runHook(hookCmd, git.repoRoot, {
           verbose: args.verbose,
@@ -169,7 +171,9 @@ export async function runCreate(args: CreateArgs): Promise<void> {
       slot = await findAvailableSlot();
     }
     const hookCmd = buildHookCommand(config.postCreate, { path: worktreePath, slot });
-    const spinner = args.verbose ? null : startSpinner("Running postCreate hook...");
+    const spinner = args.verbose
+      ? null
+      : startSpinner("Running postCreate hook...", { timeoutSec: resolveHookTimeout("postCreate", config) });
     try {
       await runHook(hookCmd, git.repoRoot, {
         verbose: args.verbose,

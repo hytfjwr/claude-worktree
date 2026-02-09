@@ -127,7 +127,9 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
       // preClean hook
       if (config?.preClean && repoRoot) {
         const hookCmd = deps.buildHookCommand(config.preClean, { path: worktree.path });
-        const spinner = args.verbose ? null : startSpinner("Running preClean hook...");
+        const spinner = args.verbose
+          ? null
+          : startSpinner("Running preClean hook...", { timeoutSec: resolveHookTimeout("preClean", config) });
         try {
           await deps.runHook(hookCmd, repoRoot, {
             verbose: args.verbose,
