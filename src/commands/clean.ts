@@ -175,7 +175,7 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
             onLine: spinner ? createTailUpdater(spinner) : undefined,
             timeout: postCleanTimeoutSec,
           });
-          spinner?.stop();
+          spinner?.stop("✓ postClean hook done");
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           spinner?.fail(`postClean hook failed (continuing): ${message}`);
