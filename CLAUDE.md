@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A CLI tool for parallel development using WezTerm + git worktree + Claude Code. It creates a git worktree and launches Claude Code. With the `--pane` option, it opens in a new WezTerm pane for parallel development.
+A CLI tool for parallel development using WezTerm + git worktree + Claude Code. It creates a git worktree and launches Claude Code. With the `-pane` option, it opens in a new WezTerm pane for parallel development.
 
 ## Commands
 
@@ -35,7 +35,7 @@ make check
 ```bash
 # Create command
 claude-worktree <branch-name> <prompt>
-claude-worktree <branch-name> --plan <file-path>
+claude-worktree <branch-name> -plan <file-path>
 
 # List command
 claude-worktree list [options]
@@ -44,47 +44,47 @@ claude-worktree list [options]
 claude-worktree clean [options]
 
 # Help
-claude-worktree -h / --help
+claude-worktree -h / -help
 
 # Examples
 claude-worktree feature/auth 'Implement authentication feature'
-claude-worktree feature/auth 'Implement authentication feature' --pane
+claude-worktree feature/auth 'Implement authentication feature' -pane
 claude-worktree fix/bug-123 'Fix login bug' -p
-claude-worktree feature/api --plan ./plan.md
-claude-worktree feature/auth 'Implement authentication feature' --base develop
-claude-worktree feature/auth 'Implement authentication feature' --danger
-claude-worktree feature/auth 'Implement authentication feature' --merge
-claude-worktree feature/auth 'Implement authentication feature' --draft
-claude-worktree feature/auth 'Implement authentication feature' --draft --base main
+claude-worktree feature/api -plan ./plan.md
+claude-worktree feature/auth 'Implement authentication feature' -base develop
+claude-worktree feature/auth 'Implement authentication feature' -danger
+claude-worktree feature/auth 'Implement authentication feature' -merge
+claude-worktree feature/auth 'Implement authentication feature' -draft
+claude-worktree feature/auth 'Implement authentication feature' -draft -base main
 claude-worktree list
-claude-worktree list --json
+claude-worktree list -json
 claude-worktree list -v
 claude-worktree clean
-claude-worktree clean --dry-run
+claude-worktree clean -dry-run
 ```
 
 ### Options
 
-- `-p, --pane` - Open in a new WezTerm pane (default: run in current terminal)
-- `--plan <file>` - Read prompt from a file (cannot be used with inline prompt)
-- `--base <branch>` - Specify base branch (default: current branch)
-- `--danger` - Skip workspace warning (uses --dangerously-skip-permissions)
-- `--merge` - Auto-merge into base branch and cleanup after task completion
-- `--draft` - Auto-create Draft PR after task completion (cannot be used with --merge)
-- `-v, --verbose` - Show hook execution logs
-- `-h, --help` - Show help
+- `-p, -pane` - Open in a new WezTerm pane (default: run in current terminal)
+- `-plan <file>` - Read prompt from a file (cannot be used with inline prompt)
+- `-base <branch>` - Specify base branch (default: current branch)
+- `-danger` - Skip workspace warning (uses --dangerously-skip-permissions)
+- `-merge` - Auto-merge into base branch and cleanup after task completion
+- `-draft` - Auto-create Draft PR after task completion (cannot be used with -merge)
+- `-v, -verbose` - Show hook execution logs
+- `-h, -help` - Show help
 
 ### List Options
 
-- `--json` - Output as JSON
-- `-v, --verbose` - Show full paths and details
+- `-json` - Output as JSON
+- `-v, -verbose` - Show full paths and details
 
 ### Clean Options
 
-- `-f, --force` - Skip confirmation prompt
-- `-a, --all` - Show all worktrees for manual selection
-- `-n, --dry-run` - Preview targets without deleting
-- `-v, --verbose` - Show hook execution logs
+- `-f, -force` - Skip confirmation prompt
+- `-a, -all` - Show all worktrees for manual selection
+- `-n, -dry-run` - Preview targets without deleting
+- `-v, -verbose` - Show hook execution logs
 
 ## Architecture
 
@@ -125,7 +125,7 @@ src/
 3. Load project config from `.claude-worktree.json` (if exists)
 4. Create worktree directly via `git worktree add`
 5. Run `postCreate` hook (if configured) — rollback worktree on failure
-6. If `--pane`: Split a new pane to the right in WezTerm → cd into worktree → launch Claude Code
+6. If `-pane`: Split a new pane to the right in WezTerm → cd into worktree → launch Claude Code
 7. Otherwise: cd into worktree → launch Claude Code in current terminal
 
 **Hook Configuration (`.claude-worktree.json`):**

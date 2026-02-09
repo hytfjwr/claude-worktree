@@ -43,7 +43,7 @@ export function showHelp(): void {
 
 Usage:
   claude-worktree <branch-name> <prompt>
-  claude-worktree <branch-name> --plan <file-path>
+  claude-worktree <branch-name> -plan <file-path>
   claude-worktree list [options]
   claude-worktree clean [options]
 
@@ -57,47 +57,47 @@ Arguments:
   <prompt>       Prompt to pass to Claude Code
 
 Options:
-  -p, --pane       Open in a new WezTerm pane (requires WezTerm; default: run in current terminal)
-  --plan <file>    Read prompt from a plan file (cannot be used with inline prompt)
-  --base <branch>  Specify base branch (default: current branch)
-  --danger         Skip workspace warning (uses --dangerously-skip-permissions)
-  --merge          Auto-merge into base branch and cleanup after task completion
-  --draft          Auto-create Draft PR after task completion (cannot be used with --merge)
-  -v, --verbose    Show hook execution logs
-  -h, --help       Show this help
+  -p, -pane       Open in a new WezTerm pane (requires WezTerm; default: run in current terminal)
+  -plan <file>    Read prompt from a plan file (cannot be used with inline prompt)
+  -base <branch>  Specify base branch (default: current branch)
+  -danger         Skip workspace warning (uses --dangerously-skip-permissions)
+  -merge          Auto-merge into base branch and cleanup after task completion
+  -draft          Auto-create Draft PR after task completion (cannot be used with -merge)
+  -v, -verbose    Show hook execution logs
+  -h, -help       Show this help
 
 List options:
-  --json         Output as JSON
-  -v, --verbose  Show full paths and details
+  -json          Output as JSON
+  -v, -verbose   Show full paths and details
 
 Clean options:
-  -f, --force    Skip confirmation prompt
-  -a, --all      Show all worktrees for manual selection
-  -n, --dry-run  Preview targets without deleting
-  -v, --verbose  Show hook execution logs
+  -f, -force     Skip confirmation prompt
+  -a, -all       Show all worktrees for manual selection
+  -n, -dry-run   Preview targets without deleting
+  -v, -verbose   Show hook execution logs
 
 Examples:
   claude-worktree feature/auth 'Implement authentication feature'
   claude-worktree feature/auth 'Implement authentication feature' -p
-  claude-worktree fix/bug-123 'Fix login bug' --pane
-  claude-worktree feature/api --plan ./plan.md
-  claude-worktree feature/auth 'Implement authentication feature' --danger
-  claude-worktree feature/auth 'Implement authentication feature' --merge
-  claude-worktree feature/auth 'Implement authentication feature' --draft
-  claude-worktree feature/auth 'Implement authentication feature' --draft --base main
+  claude-worktree fix/bug-123 'Fix login bug' -pane
+  claude-worktree feature/api -plan ./plan.md
+  claude-worktree feature/auth 'Implement authentication feature' -danger
+  claude-worktree feature/auth 'Implement authentication feature' -merge
+  claude-worktree feature/auth 'Implement authentication feature' -draft
+  claude-worktree feature/auth 'Implement authentication feature' -draft -base main
   claude-worktree list
-  claude-worktree list --json
+  claude-worktree list -json
   claude-worktree clean
-  claude-worktree clean --dry-run`);
+  claude-worktree clean -dry-run`);
 }
 
 export function parseCreateArgs(args: string[]): CreateArgs {
   if (args.length < 1) {
     throw new Error(
       "Usage: claude-worktree <branch-name> <prompt>\n" +
-        "       claude-worktree <branch-name> --plan <file-path>\n" +
+        "       claude-worktree <branch-name> -plan <file-path>\n" +
         "Example: claude-worktree feature/auth 'Implement authentication feature'\n" +
-        "         claude-worktree feature/auth --plan ./plan.md"
+        "         claude-worktree feature/auth -plan ./plan.md"
     );
   }
 
@@ -105,16 +105,16 @@ export function parseCreateArgs(args: string[]): CreateArgs {
 
   const { booleans, strings, remaining } = extractOptions(args.slice(1), {
     options: {
-      pane:    { type: "boolean", flag: "--pane", alias: "-p" },
-      danger:  { type: "boolean", flag: "--danger" },
-      merge:   { type: "boolean", flag: "--merge" },
-      draft:   { type: "boolean", flag: "--draft" },
-      verbose: { type: "boolean", flag: "--verbose", alias: "-v" },
-      baseBranch: { type: "string", flag: "--base", errorMessage: "--base requires a branch name argument" },
-      planFile:   { type: "string", flag: "--plan", errorMessage: "--plan requires a file path argument" },
+      pane:    { type: "boolean", flag: "-pane", alias: "-p" },
+      danger:  { type: "boolean", flag: "-danger" },
+      merge:   { type: "boolean", flag: "-merge" },
+      draft:   { type: "boolean", flag: "-draft" },
+      verbose: { type: "boolean", flag: "-verbose", alias: "-v" },
+      baseBranch: { type: "string", flag: "-base", errorMessage: "-base requires a branch name argument" },
+      planFile:   { type: "string", flag: "-plan", errorMessage: "-plan requires a file path argument" },
     },
     unknownHandling: "error",
-    ignoredFlags: ["-h", "--help"],
+    ignoredFlags: ["-h", "-help"],
     unknownErrorPrefix: "Unknown option",
   });
 
@@ -127,28 +127,28 @@ export function parseCreateArgs(args: string[]): CreateArgs {
     throw new Error(`Unknown option: ${unknownFlag}`);
   }
 
-  // Mutual exclusivity check for --merge and --draft
+  // Mutual exclusivity check for -merge and -draft
   if (merge && draft) {
     throw new Error(
-      "Cannot use both --merge and --draft options. Please use one or the other."
+      "Cannot use both -merge and -draft options. Please use one or the other."
     );
   }
 
   const inlinePrompt = remaining.join(" ");
 
-  // Mutual exclusivity check: cannot specify both --plan and inline prompt
+  // Mutual exclusivity check: cannot specify both -plan and inline prompt
   if (planFile && inlinePrompt) {
     throw new Error(
-      "Cannot use both --plan and inline prompt. Please use one or the other."
+      "Cannot use both -plan and inline prompt. Please use one or the other."
     );
   }
 
-  // Require either inline prompt or --plan
+  // Require either inline prompt or -plan
   if (!inlinePrompt && !planFile) {
     throw new Error(
-      "A prompt or --plan option is required.\n" +
+      "A prompt or -plan option is required.\n" +
         "Usage: claude-worktree <branch-name> <prompt>\n" +
-        "       claude-worktree <branch-name> --plan <file-path>"
+        "       claude-worktree <branch-name> -plan <file-path>"
     );
   }
 
@@ -168,13 +168,13 @@ export function parseCreateArgs(args: string[]): CreateArgs {
 export function parseCleanArgs(args: string[]): CleanArgs {
   const { booleans } = extractOptions(args, {
     options: {
-      force:   { type: "boolean", flag: "--force", alias: "-f" },
-      all:     { type: "boolean", flag: "--all",   alias: "-a" },
-      dryRun:  { type: "boolean", flag: "--dry-run", alias: "-n" },
-      verbose: { type: "boolean", flag: "--verbose", alias: "-v" },
+      force:   { type: "boolean", flag: "-force", alias: "-f" },
+      all:     { type: "boolean", flag: "-all",   alias: "-a" },
+      dryRun:  { type: "boolean", flag: "-dry-run", alias: "-n" },
+      verbose: { type: "boolean", flag: "-verbose", alias: "-v" },
     },
     unknownHandling: "error",
-    ignoredFlags: ["-h", "--help"],
+    ignoredFlags: ["-h", "-help"],
     unknownErrorPrefix: "Unknown option for clean command",
   });
 
@@ -189,11 +189,11 @@ export function parseCleanArgs(args: string[]): CleanArgs {
 export function parseListArgs(args: string[]): ListArgs {
   const { booleans } = extractOptions(args, {
     options: {
-      json:    { type: "boolean", flag: "--json" },
-      verbose: { type: "boolean", flag: "--verbose", alias: "-v" },
+      json:    { type: "boolean", flag: "-json" },
+      verbose: { type: "boolean", flag: "-verbose", alias: "-v" },
     },
     unknownHandling: "error",
-    ignoredFlags: ["-h", "--help"],
+    ignoredFlags: ["-h", "-help"],
     unknownErrorPrefix: "Unknown option for list command",
   });
 
@@ -205,7 +205,7 @@ export function parseListArgs(args: string[]): ListArgs {
 
 export function parseArgs(args: string[]): Command {
   // Check for help flags
-  if (args.length === 0 || args.includes("-h") || args.includes("--help")) {
+  if (args.length === 0 || args.includes("-h") || args.includes("-help")) {
     return { type: "help" };
   }
 
@@ -245,14 +245,14 @@ export async function runCreate(args: CreateArgs): Promise<void> {
   const { branchName, planFile, danger, merge, draft, baseBranch, pane } = args;
   let { prompt } = args;
 
-  // Check WezTerm availability when --pane is specified
+  // Check WezTerm availability when -pane is specified
   if (pane) {
     const available = await checkWeztermAvailable();
     if (!available) {
       throw new Error(
-        "WezTerm CLI is not installed. The --pane option requires WezTerm.\n" +
+        "WezTerm CLI is not installed. The -pane option requires WezTerm.\n" +
           "Install WezTerm: https://wezfurlong.org/wezterm/installation.html\n" +
-          "Or run without --pane to use the current terminal."
+          "Or run without -pane to use the current terminal."
       );
     }
   }
