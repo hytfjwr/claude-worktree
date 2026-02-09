@@ -139,13 +139,15 @@ src/
   "postCreate": "cd {path} && docker-compose -p app-{slot} up -d",
   "postCreateTimeout": 300,
   "preClean": "cd {path} && docker-compose down",
-  "preCleanTimeout": 120
+  "preCleanTimeout": 120,
+  "postClean": "docker volume rm app-{path}-data || true",
+  "postCleanTimeout": 60
 }
 ```
 - `{path}` — worktree path
 - `{slot}` — auto-assigned slot (1-9) based on port availability (8881-8889)
 - `hookTimeout` — global default timeout in seconds (default: 600)
-- `postCreateTimeout` / `preCleanTimeout` — per-hook timeout override
+- `postCreateTimeout` / `preCleanTimeout` / `postCleanTimeout` — per-hook timeout override
 - Priority: hook-specific value > `hookTimeout` > default (600s)
 
 **External Tool Dependencies:** bun, git, wezterm CLI, claude CLI

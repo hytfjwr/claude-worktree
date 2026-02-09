@@ -41,12 +41,18 @@ export function buildHookCommand(template: string, vars: HookVars): string {
 
 export const DEFAULT_HOOK_TIMEOUT = 600;
 
-export function resolveHookTimeout(hookName: "postCreate" | "preClean", config: ProjectConfig | null): number {
+export function resolveHookTimeout(
+  hookName: "postCreate" | "preClean" | "postClean",
+  config: ProjectConfig | null,
+): number {
   if (hookName === "postCreate" && config?.postCreateTimeout !== undefined) {
     return config.postCreateTimeout;
   }
   if (hookName === "preClean" && config?.preCleanTimeout !== undefined) {
     return config.preCleanTimeout;
+  }
+  if (hookName === "postClean" && config?.postCleanTimeout !== undefined) {
+    return config.postCleanTimeout;
   }
   return config?.hookTimeout ?? DEFAULT_HOOK_TIMEOUT;
 }

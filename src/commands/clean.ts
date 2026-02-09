@@ -156,6 +156,27 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
         }
       }
 
+      // postClean hook
+      if (config?.postClean && repoRoot) {
+        const hookCmd = deps.buildHookCommand(config.postClean, { path: worktree.path });
+        const postCleanTimeoutSec = resolveHookTimeout("postClean", config);
+        const spinner = args.verbose
+          ? null
+          : startSpinner("Running postClean hook...", { timeoutSec: postCleanTimeoutSec });
+        try {
+          await deps.runHook(hookCmd, repoRoot, {
+            verbose: args.verbose,
+            onLine: spinner ? createTailUpdater(spinner) : undefined,
+            timeout: postCleanTimeoutSec,
+          });
+          spinner?.stop();
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          spinner?.fail(`postClean hook failed (continuing): ${message}`);
+          console.warn(`  ⚠️  postClean hook failed (continuing): ${message}`);
+        }
+      }
+
       console.log(`  ✓ ${worktree.branch || worktree.path}`);
       result.deleted.push(worktree.path);
     } catch (error) {

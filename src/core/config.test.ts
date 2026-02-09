@@ -106,21 +106,29 @@ describe("resolveHookTimeout", () => {
     expect(resolveHookTimeout("preClean", config)).toBe(60);
   });
 
+  test("returns hook-specific timeout when set (postClean)", () => {
+    const config: ProjectConfig = { postCleanTimeout: 90, hookTimeout: 120 };
+    expect(resolveHookTimeout("postClean", config)).toBe(90);
+  });
+
   test("falls back to hookTimeout when hook-specific value is not set", () => {
     const config: ProjectConfig = { hookTimeout: 120 };
     expect(resolveHookTimeout("postCreate", config)).toBe(120);
     expect(resolveHookTimeout("preClean", config)).toBe(120);
+    expect(resolveHookTimeout("postClean", config)).toBe(120);
   });
 
   test("returns DEFAULT_HOOK_TIMEOUT when nothing is configured", () => {
     const config: ProjectConfig = {};
     expect(resolveHookTimeout("postCreate", config)).toBe(DEFAULT_HOOK_TIMEOUT);
     expect(resolveHookTimeout("preClean", config)).toBe(DEFAULT_HOOK_TIMEOUT);
+    expect(resolveHookTimeout("postClean", config)).toBe(DEFAULT_HOOK_TIMEOUT);
   });
 
   test("returns DEFAULT_HOOK_TIMEOUT when config is null", () => {
     expect(resolveHookTimeout("postCreate", null)).toBe(DEFAULT_HOOK_TIMEOUT);
     expect(resolveHookTimeout("preClean", null)).toBe(DEFAULT_HOOK_TIMEOUT);
+    expect(resolveHookTimeout("postClean", null)).toBe(DEFAULT_HOOK_TIMEOUT);
   });
 });
 

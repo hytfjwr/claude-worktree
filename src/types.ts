@@ -78,6 +78,8 @@ export type ProjectConfig = {
   postCreateTimeout?: number; // Timeout in seconds for the postCreate hook
   preClean?: string;
   preCleanTimeout?: number; // Timeout in seconds for the preClean hook
+  postClean?: string;
+  postCleanTimeout?: number; // Timeout in seconds for the postClean hook
 };
 
 export type HookVars = {

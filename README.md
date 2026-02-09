@@ -128,7 +128,9 @@ You can define project-specific hooks in `.claude-worktree.json` at the reposito
   "postCreate": "cd {path} && docker-compose -p app-{slot} up -d",
   "postCreateTimeout": 300,
   "preClean": "cd {path} && docker-compose down",
-  "preCleanTimeout": 120
+  "preCleanTimeout": 120,
+  "postClean": "docker volume rm app-{path}-data || true",
+  "postCleanTimeout": 60
 }
 ```
 
@@ -141,12 +143,14 @@ You can define project-specific hooks in `.claude-worktree.json` at the reposito
 
 - **postCreate** — Runs after worktree creation (e.g., start Docker containers). If the hook fails, the worktree is automatically rolled back.
 - **preClean** — Runs before worktree deletion (e.g., stop Docker containers). If the hook fails, deletion continues with a warning.
+- **postClean** — Runs after worktree and branch deletion (e.g., Docker volume removal, DNS cleanup). If the hook fails, the operation continues with a warning.
 
 ### Timeout
 
 - `hookTimeout` — Global default timeout in seconds (default: `600`)
 - `postCreateTimeout` — Override timeout for postCreate hook
 - `preCleanTimeout` — Override timeout for preClean hook
+- `postCleanTimeout` — Override timeout for postClean hook
 
 Priority: hook-specific value > `hookTimeout` > default (600s)
 

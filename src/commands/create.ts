@@ -131,6 +131,26 @@ export async function runCreate(args: CreateArgs): Promise<void> {
       console.log(`  ⚠️  Branch not found (skipping): ${branchName}`);
     }
 
+    // postClean hook
+    if (config?.postClean) {
+      const hookCmd = buildHookCommand(config.postClean, { path: existingWorktree.path });
+      const spinner = args.verbose
+        ? null
+        : startSpinner("Running postClean hook...", { timeoutSec: resolveHookTimeout("postClean", config) });
+      try {
+        await runHook(hookCmd, git.repoRoot, {
+          verbose: args.verbose,
+          onLine: spinner ? createTailUpdater(spinner) : undefined,
+          timeout: resolveHookTimeout("postClean", config),
+        });
+        spinner?.stop();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        spinner?.fail(`postClean hook failed (continuing): ${message}`);
+        console.warn(`  ⚠️  postClean hook failed (continuing): ${message}`);
+      }
+    }
+
     console.log("");
   }
 
@@ -202,6 +222,27 @@ export async function runCreate(args: CreateArgs): Promise<void> {
         await removeWorktree(worktreePath);
       } catch {
         console.warn("  ⚠️  Failed to rollback worktree");
+      }
+      // postClean hook after rollback
+      if (config?.postClean) {
+        const postCleanCmd = buildHookCommand(config.postClean, { path: worktreePath });
+        const rollbackSpinner = args.verbose
+          ? null
+          : startSpinner("Running postClean hook (rollback)...", {
+              timeoutSec: resolveHookTimeout("postClean", config),
+            });
+        try {
+          await runHook(postCleanCmd, git.repoRoot, {
+            verbose: args.verbose,
+            onLine: rollbackSpinner ? createTailUpdater(rollbackSpinner) : undefined,
+            timeout: resolveHookTimeout("postClean", config),
+          });
+          rollbackSpinner?.stop();
+        } catch (error) {
+          const postCleanMessage = error instanceof Error ? error.message : String(error);
+          rollbackSpinner?.fail(`postClean hook failed during rollback: ${postCleanMessage}`);
+          console.warn(`  ⚠️  postClean hook failed during rollback: ${postCleanMessage}`);
+        }
       }
       return;
     }

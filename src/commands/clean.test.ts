@@ -478,6 +478,123 @@ describe("executeClean", () => {
     });
   });
 
+  describe("postClean hook", () => {
+    test("executes hook after worktree and branch deletion", async () => {
+      const worktree = makeWorktree({ path: "/tmp/repo-post-hook", branch: "feature/post-hook" });
+      const status = makeStatus({ path: "/tmp/repo-post-hook", branch: "feature/post-hook" }, { canAutoClean: true });
+      const callOrder: string[] = [];
+      let hookCommand = "";
+      let hookCwd = "";
+      const deps = makeDeps({
+        listWorktrees: async () => [worktree],
+        getWorktreeStatuses: async () => [status],
+        loadProjectConfig: async () => ({
+          postClean: "docker volume rm {path}-data || true",
+        }),
+        buildHookCommand: (template, vars) => {
+          return template.replace(/\{path\}/g, vars.path);
+        },
+        removeWorktree: async () => {
+          callOrder.push("removeWorktree");
+        },
+        deleteLocalBranch: async () => {
+          callOrder.push("deleteLocalBranch");
+        },
+        runHook: async (cmd, cwd) => {
+          callOrder.push("runHook:postClean");
+          hookCommand = cmd;
+          hookCwd = cwd;
+        },
+      });
+
+      await executeClean({ ...defaultArgs, force: true }, deps);
+
+      expect(callOrder).toEqual(["removeWorktree", "deleteLocalBranch", "runHook:postClean"]);
+      expect(hookCommand).toBe("docker volume rm /tmp/repo-post-hook-data || true");
+      expect(hookCwd).toBe("/repo");
+    });
+
+    test("continues even when postClean hook fails", async () => {
+      const worktree = makeWorktree({ path: "/tmp/repo-post-fail" });
+      const status = makeStatus({ path: "/tmp/repo-post-fail" }, { canAutoClean: true });
+      const deps = makeDeps({
+        listWorktrees: async () => [worktree],
+        getWorktreeStatuses: async () => [status],
+        loadProjectConfig: async () => ({
+          postClean: "false",
+        }),
+        runHook: async () => {
+          throw new Error("postClean hook failed");
+        },
+      });
+
+      const result = await executeClean({ ...defaultArgs, force: true }, deps);
+
+      expect(result.deleted).toEqual(["/tmp/repo-post-fail"]);
+      expect(consoleWarnSpy).toHaveBeenCalled();
+    });
+
+    test("does not execute hook when config is null", async () => {
+      const worktree = makeWorktree();
+      const status = makeStatus({}, { canAutoClean: true });
+      let hookCalled = false;
+      const deps = makeDeps({
+        listWorktrees: async () => [worktree],
+        getWorktreeStatuses: async () => [status],
+        loadProjectConfig: async () => null,
+        runHook: async () => {
+          hookCalled = true;
+        },
+      });
+
+      await executeClean({ ...defaultArgs, force: true }, deps);
+
+      expect(hookCalled).toBe(false);
+    });
+
+    test("passes timeout option to runHook", async () => {
+      const worktree = makeWorktree({ path: "/tmp/repo-post-timeout" });
+      const status = makeStatus({ path: "/tmp/repo-post-timeout" }, { canAutoClean: true });
+      let receivedTimeout: number | undefined;
+      const deps = makeDeps({
+        listWorktrees: async () => [worktree],
+        getWorktreeStatuses: async () => [status],
+        loadProjectConfig: async () => ({
+          postClean: "echo done",
+          postCleanTimeout: 60,
+        }),
+        runHook: async (_cmd, _cwd, options) => {
+          receivedTimeout = options?.timeout;
+        },
+      });
+
+      await executeClean({ ...defaultArgs, force: true }, deps);
+
+      expect(receivedTimeout).toBe(60);
+    });
+
+    test("runs both preClean and postClean hooks in order", async () => {
+      const worktree = makeWorktree({ path: "/tmp/repo-both-hooks" });
+      const status = makeStatus({ path: "/tmp/repo-both-hooks" }, { canAutoClean: true });
+      const hookOrder: string[] = [];
+      const deps = makeDeps({
+        listWorktrees: async () => [worktree],
+        getWorktreeStatuses: async () => [status],
+        loadProjectConfig: async () => ({
+          preClean: "echo pre",
+          postClean: "echo post",
+        }),
+        runHook: async (cmd) => {
+          hookOrder.push(cmd);
+        },
+      });
+
+      await executeClean({ ...defaultArgs, force: true }, deps);
+
+      expect(hookOrder).toEqual(["echo pre", "echo post"]);
+    });
+  });
+
   describe("when branch is null (detached HEAD)", () => {
     test("uses path as fallback", async () => {
       const worktree = makeWorktree({
