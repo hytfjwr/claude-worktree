@@ -1,4 +1,4 @@
-import type { ClaudeOptions, DraftInstructions, MergeInstructions } from "./types";
+import type { ClaudeOptions, DraftInstructions, MergeInstructions } from "../types";
 
 const DEFAULT_PROMPT_SUFFIX = "\n\nIf anything is unclear, always confirm with the user before proceeding.";
 

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, spyOn, test } from "bun:test";
 
+import type { CommitInfo, ListArgs, ListDeps, WorktreeInfo, WorktreeListEntry, WorktreeStatus } from "../types";
 import {
   executeList,
   formatAheadBehind,
@@ -10,7 +11,6 @@ import {
   shortenPath,
   truncate,
 } from "./list";
-import type { CommitInfo, ListArgs, ListDeps, WorktreeInfo, WorktreeListEntry, WorktreeStatus } from "./types";
 
 // ============================================================================
 // Helper functions

@@ -1,4 +1,4 @@
-import { buildHookCommand, loadProjectConfig, runHook } from "./config";
+import { buildHookCommand, loadProjectConfig, runHook } from "../core/config";
 import {
   deleteLocalBranch,
   fetchAndPrune,
@@ -6,10 +6,10 @@ import {
   getWorktreeStatuses,
   listWorktrees,
   removeWorktree,
-} from "./git";
-import { confirm, selectMultiple } from "./prompt";
-import { createTailUpdater, startSpinner } from "./spinner";
-import type { CleanArgs, CleanDeps, CleanResult, ProjectConfig, WorktreeStatus } from "./types";
+} from "../core/git";
+import type { CleanArgs, CleanDeps, CleanResult, ProjectConfig, WorktreeStatus } from "../types";
+import { confirm, selectMultiple } from "../ui/prompt";
+import { createTailUpdater, startSpinner } from "../ui/spinner";
 
 const defaultDeps: CleanDeps = {
   fetchAndPrune,

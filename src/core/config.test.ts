@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import type { HookVars } from "./types";
+import type { HookVars } from "../types";
 
 // ============================================================================
 // Pure function tests (no mocks needed)

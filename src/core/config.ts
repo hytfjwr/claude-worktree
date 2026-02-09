@@ -1,7 +1,7 @@
 import { $ } from "bun";
 import { join } from "node:path";
 
-import type { HookVars, ProjectConfig } from "./types";
+import type { HookVars, ProjectConfig } from "../types";
 
 export async function loadProjectConfig(repoRoot: string): Promise<ProjectConfig | null> {
   const configPath = join(repoRoot, ".claude-worktree.json");

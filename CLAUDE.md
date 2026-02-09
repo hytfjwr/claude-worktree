@@ -94,29 +94,33 @@ A TypeScript CLI tool running on the Bun runtime with zero external npm dependen
 bin/
   claude-worktree.ts   # Entry point
 src/
-  cli.ts               # Argument parsing & orchestration
-  git.ts               # Git operations (repo info, worktree creation)
-  wezterm.ts           # WezTerm pane operations (split, send text)
-  claude.ts            # Claude Code command generation
-  list.ts              # Worktree listing with rich display
-  clean.ts             # Worktree cleanup orchestration
-  config.ts            # Project config (.claude-worktree.json) & hook execution
-  slot.ts              # Port-scan based slot auto-assignment
-  prompt.ts            # Interactive user prompts
+  core/                # Core domain logic
+    git.ts             # Git operations (repo info, worktree creation)
+    git.test.ts
+    config.ts          # Project config (.claude-worktree.json) & hook execution
+    config.test.ts
+    slot.ts            # Port-scan based slot auto-assignment
+  commands/            # Command implementations
+    create.ts          # Create command orchestration
+    list.ts            # Worktree listing with rich display
+    list.test.ts
+    clean.ts           # Worktree cleanup orchestration
+    clean.test.ts
+  external/            # External tool integrations
+    claude.ts          # Claude Code command generation
+    claude.test.ts
+    wezterm.ts         # WezTerm pane operations (split, send text)
+    wezterm.test.ts
+  ui/                  # Terminal UI utilities
+    spinner.ts         # Terminal spinner with shimmer effect
+    spinner.test.ts
+    prompt.ts          # Interactive user prompts
+  cli.ts               # Argument parsing & routing
+  cli.test.ts
   options.ts           # CLI option extraction utility
-  spinner.ts           # Terminal spinner with shimmer effect
+  options.test.ts
+  types.ts             # Shared type definitions
   index.ts             # Public API (barrel exports)
-
-  # Test files (co-located)
-  claude.test.ts       # Tests for claude.ts
-  git.test.ts          # Tests for git.ts
-  cli.test.ts          # Tests for cli.ts
-  wezterm.test.ts      # Tests for wezterm.ts
-  list.test.ts         # Tests for list.ts
-  clean.test.ts        # Tests for clean.ts
-  config.test.ts       # Tests for config.ts
-  options.test.ts      # Tests for options.ts
-  spinner.test.ts      # Tests for spinner.ts
 ```
 
 **Processing Flow:**

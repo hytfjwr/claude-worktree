@@ -1,7 +1,7 @@
 import { $ } from "bun";
 import { basename, join } from "node:path";
 
-import type { AheadBehind, CommitInfo, GitContext, ParsedWorktree, WorktreeInfo, WorktreeStatus } from "./types";
+import type { AheadBehind, CommitInfo, GitContext, ParsedWorktree, WorktreeInfo, WorktreeStatus } from "../types";
 
 export async function getGitContext(): Promise<GitContext> {
   const repoRoot = (await $`git rev-parse --show-toplevel`.text()).trim();

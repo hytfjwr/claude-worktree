@@ -1,6 +1,6 @@
 import * as readline from "node:readline";
 
-import type { WorktreeStatus } from "./types";
+import type { WorktreeStatus } from "../types";
 
 function createReadlineInterface(): readline.Interface {
   return readline.createInterface({

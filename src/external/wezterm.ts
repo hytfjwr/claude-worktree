@@ -13,7 +13,7 @@ export async function checkWeztermAvailable(): Promise<boolean> {
   }
 }
 
-import type { PaneOptions } from "./types";
+import type { PaneOptions } from "../types";
 
 export async function splitPaneRight(): Promise<string> {
   return (await $`wezterm cli split-pane --right`.text()).trim();

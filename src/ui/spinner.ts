@@ -1,4 +1,4 @@
-import type { Spinner } from "./types";
+import type { Spinner } from "../types";
 
 const FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const INTERVAL = 80; // ms

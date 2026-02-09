@@ -1,13 +1,15 @@
 // Types (centralized)
 
-// Claude utilities
-export { buildClaudeCommand } from "./claude";
-// Clean command
-export { executeClean } from "./clean";
 // CLI
-export { parseArgs, parseListArgs, run, runCreate, showHelp } from "./cli";
+export { parseArgs, parseListArgs, run, showHelp } from "./cli";
+// Clean command
+export { executeClean } from "./commands/clean";
+// Create command
+export { readPlanFile, runCreate } from "./commands/create";
+// List command
+export { executeList } from "./commands/list";
 // Config utilities
-export { buildHookCommand, loadProjectConfig, runHook } from "./config";
+export { buildHookCommand, loadProjectConfig, runHook } from "./core/config";
 // Git utilities
 export {
   buildWorktreeCommand,
@@ -26,17 +28,15 @@ export {
   isWorktreeDirty,
   listWorktrees,
   removeWorktree,
-} from "./git";
-// List command
-export { executeList } from "./list";
+} from "./core/git";
+// Slot utilities
+export { findAvailableSlot, isPortInUse } from "./core/slot";
+// Claude utilities
+export { buildClaudeCommand } from "./external/claude";
+// WezTerm utilities
+export { checkWeztermAvailable, createPane, sendCommand, sendText, splitPaneRight } from "./external/wezterm";
 // Options extraction
 export { extractOptions } from "./options";
-// Prompt utilities
-export { confirm, selectMultiple } from "./prompt";
-// Slot utilities
-export { findAvailableSlot, isPortInUse } from "./slot";
-// Spinner utilities
-export { startSpinner } from "./spinner";
 export type {
   AheadBehind,
   // Options
@@ -77,5 +77,7 @@ export type {
   WorktreeListEntry,
   WorktreeStatus,
 } from "./types";
-// WezTerm utilities
-export { checkWeztermAvailable, createPane, sendCommand, sendText, splitPaneRight } from "./wezterm";
+// Prompt utilities
+export { confirm, selectMultiple } from "./ui/prompt";
+// Spinner utilities
+export { startSpinner } from "./ui/spinner";

@@ -1,8 +1,15 @@
 import { relative } from "node:path";
 
-import { fetchAndPrune, getAheadBehind, getLastCommit, getMainBranch, getWorktreeStatuses, listWorktrees } from "./git";
-import { startSpinner } from "./spinner";
-import type { AheadBehind, ListArgs, ListDeps, ListResult, WorktreeListEntry, WorktreeStatus } from "./types";
+import {
+  fetchAndPrune,
+  getAheadBehind,
+  getLastCommit,
+  getMainBranch,
+  getWorktreeStatuses,
+  listWorktrees,
+} from "../core/git";
+import type { AheadBehind, ListArgs, ListDeps, ListResult, WorktreeListEntry, WorktreeStatus } from "../types";
+import { startSpinner } from "../ui/spinner";
 
 const defaultDeps: ListDeps = {
   fetchAndPrune,

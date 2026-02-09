@@ -1,0 +1,245 @@
+import { buildHookCommand, loadProjectConfig, runHook } from "../core/config";
+import {
+  branchExists,
+  createWorktree,
+  deleteLocalBranch,
+  findWorktreeByBranch,
+  getGitContext,
+  getWorktreePath,
+  removeWorktree,
+} from "../core/git";
+import { findAvailableSlot } from "../core/slot";
+import { buildClaudeCommand } from "../external/claude";
+import { checkWeztermAvailable, createPane, sendCommand, sendText } from "../external/wezterm";
+import type { CreateArgs } from "../types";
+import { confirm } from "../ui/prompt";
+import { createTailUpdater, startSpinner } from "../ui/spinner";
+
+export async function readPlanFile(filePath: string): Promise<string> {
+  const file = Bun.file(filePath);
+  const exists = await file.exists();
+
+  if (!exists) {
+    throw new Error(`Plan file not found: ${filePath}`);
+  }
+
+  const content = await file.text();
+  const trimmed = content.trim();
+
+  if (!trimmed) {
+    throw new Error(`Plan file is empty: ${filePath}`);
+  }
+
+  return trimmed;
+}
+
+export async function runCreate(args: CreateArgs): Promise<void> {
+  const { branchName, planFile, danger, merge, draft, baseBranch, pane } = args;
+  let { prompt } = args;
+
+  // Check WezTerm availability when -pane is specified
+  if (pane) {
+    const available = await checkWeztermAvailable();
+    if (!available) {
+      throw new Error(
+        "WezTerm CLI is not installed. The -pane option requires WezTerm.\n" +
+          "Install WezTerm: https://wezfurlong.org/wezterm/installation.html\n" +
+          "Or run without -pane to use the current terminal.",
+      );
+    }
+  }
+
+  // Read prompt from plan file
+  if (planFile) {
+    prompt = await readPlanFile(planFile);
+  }
+
+  // Get git info
+  const git = await getGitContext();
+  const worktreePath = getWorktreePath(git.repoRoot, git.repoName, branchName);
+
+  // Use baseBranch if specified, otherwise use current branch
+  const effectiveBaseBranch = baseBranch ?? git.currentBranch;
+
+  const config = await loadProjectConfig(git.repoRoot);
+
+  console.log(`📍 Current branch: ${git.currentBranch}`);
+  if (baseBranch) {
+    console.log(`🌳 Base branch: ${baseBranch}`);
+  }
+  console.log(`🌿 New branch: ${branchName}`);
+  console.log(`📂 Worktree path: ${worktreePath}`);
+  if (planFile) {
+    console.log(`📋 Plan file: ${planFile}`);
+  }
+  if (merge) {
+    console.log(`🔀 Auto-merge to: ${git.currentBranch}`);
+  }
+  if (draft) {
+    console.log(`📝 Draft PR to: ${effectiveBaseBranch}`);
+  }
+
+  // Check for duplicate existing worktree
+  const existingWorktree = await findWorktreeByBranch(branchName);
+
+  if (existingWorktree) {
+    console.log(`\n⚠️  Worktree already exists: ${existingWorktree.path}`);
+
+    let confirmed: boolean;
+    if (existingWorktree.isDirty) {
+      console.log("⚠️  Warning: there are uncommitted changes");
+      confirmed = await confirm("Discard changes and delete the worktree?");
+    } else {
+      confirmed = await confirm("Delete the existing worktree and start a new session?");
+    }
+
+    if (!confirmed) {
+      console.log("Cancelled.");
+      return;
+    }
+
+    // preClean hook
+    if (config?.preClean) {
+      const hookCmd = buildHookCommand(config.preClean, { path: existingWorktree.path });
+      const spinner = args.verbose ? null : startSpinner("Running preClean hook...");
+      try {
+        await runHook(hookCmd, git.repoRoot, {
+          verbose: args.verbose,
+          onLine: spinner ? createTailUpdater(spinner) : undefined,
+        });
+        spinner?.stop();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        spinner?.fail(`preClean hook failed (continuing): ${message}`);
+        console.warn(`  ⚠️  preClean hook failed (continuing): ${message}`);
+      }
+    }
+
+    // Delete existing worktree and branch
+    console.log("🗑️  Deleting existing worktree...");
+    await removeWorktree(existingWorktree.path, existingWorktree.isDirty);
+    console.log(`  ✓ Worktree deleted: ${existingWorktree.path}`);
+
+    try {
+      await deleteLocalBranch(branchName, true);
+      console.log(`  ✓ Branch deleted: ${branchName}`);
+    } catch {
+      // Ignore if branch does not exist
+      console.log(`  ⚠️  Branch not found (skipping): ${branchName}`);
+    }
+
+    console.log("");
+  }
+
+  // Check if branch exists without a worktree
+  if (!existingWorktree) {
+    const branchAlreadyExists = await branchExists(branchName);
+
+    if (branchAlreadyExists) {
+      console.log(`\n⚠️  Branch already exists: ${branchName}`);
+
+      const confirmed = await confirm("Delete the branch and create a new one?");
+
+      if (!confirmed) {
+        console.log("Cancelled.");
+        return;
+      }
+
+      console.log("🗑️  Deleting existing branch...");
+      try {
+        await deleteLocalBranch(branchName, true);
+        console.log(`  ✓ Branch deleted: ${branchName}`);
+      } catch (e) {
+        const errorMessage = e instanceof Error ? e.message : String(e);
+        console.log(`  ❌ Failed to delete branch: ${errorMessage}`);
+        return;
+      }
+      console.log("");
+    }
+  }
+
+  // Create worktree directly
+  await createWorktree(branchName, worktreePath, effectiveBaseBranch);
+
+  // postCreate hook
+  if (config?.postCreate) {
+    let slot: number | undefined;
+    if (config.postCreate.includes("{slot}")) {
+      slot = await findAvailableSlot();
+    }
+    const hookCmd = buildHookCommand(config.postCreate, { path: worktreePath, slot });
+    const spinner = args.verbose ? null : startSpinner("Running postCreate hook...");
+    try {
+      await runHook(hookCmd, git.repoRoot, {
+        verbose: args.verbose,
+        onLine: spinner ? createTailUpdater(spinner) : undefined,
+      });
+      spinner?.stop();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      spinner?.fail("postCreate hook failed");
+      console.error(`❌ postCreate hook failed: ${message}`);
+      console.log("🗑️  Rolling back...");
+      // Run preClean hook to clean up containers etc. before removing worktree
+      if (config?.preClean) {
+        const cleanCmd = buildHookCommand(config.preClean, { path: worktreePath });
+        try {
+          await runHook(cleanCmd, git.repoRoot, { verbose: args.verbose });
+        } catch {
+          console.warn("  ⚠️  preClean hook failed during rollback");
+        }
+      }
+      try {
+        await removeWorktree(worktreePath);
+      } catch {
+        console.warn("  ⚠️  Failed to rollback worktree");
+      }
+      return;
+    }
+  }
+
+  // Build execution command
+  const claudeOptions = {
+    prompt,
+    dangerouslySkipPermissions: danger,
+    ...(merge && {
+      mergeInstructions: {
+        baseBranch: git.currentBranch,
+        worktreePath,
+      },
+    }),
+    ...(draft && {
+      draftInstructions: {
+        baseBranch: effectiveBaseBranch,
+        branchName,
+      },
+    }),
+  };
+
+  if (pane) {
+    // Create WezTerm pane and send command
+    const paneId = await createPane({ keepFocus: true });
+    console.log(`🪟 Created pane: ${paneId}`);
+
+    const commands = [`cd "${worktreePath}"`, buildClaudeCommand(claudeOptions)].join(" && ");
+
+    await sendCommand(paneId, commands);
+
+    // Send Enter to confirm the prompt after Claude starts
+    await Bun.sleep(2000);
+    await sendText(paneId, "\n");
+
+    console.log("✅ Worktree created and Claude started in new pane");
+  } else {
+    // Launch Claude Code in current terminal
+    console.log("✅ Worktree created. Starting Claude Code...");
+
+    const commands = [`cd "${worktreePath}"`, buildClaudeCommand(claudeOptions)].join(" && ");
+
+    const proc = Bun.spawn(["sh", "-c", commands], {
+      stdio: ["inherit", "inherit", "inherit"],
+    });
+
+    await proc.exited;
+  }
+}

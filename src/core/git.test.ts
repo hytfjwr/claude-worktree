@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 
+import type { WorktreeInfo } from "../types";
 import { buildWorktreeCommand, getWorktreePath, parseWorktreePorcelain } from "./git";
-import type { WorktreeInfo } from "./types";
 
 // ============================================================================
 // Pure function tests (no mocks needed)
