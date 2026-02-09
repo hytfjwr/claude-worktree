@@ -15,7 +15,7 @@ import { confirm } from "./prompt";
 import { loadProjectConfig, buildHookCommand, runHook } from "./config";
 import { findAvailableSlot } from "./slot";
 import { extractOptions } from "./options";
-import { startSpinner } from "./spinner";
+import { startSpinner, createTailUpdater } from "./spinner";
 
 export type { CleanArgs } from "./clean";
 export type { ListArgs } from "./list";
@@ -315,7 +315,10 @@ export async function runCreate(args: CreateArgs): Promise<void> {
       const hookCmd = buildHookCommand(config.preClean, { path: existingWorktree.path });
       const spinner = args.verbose ? null : startSpinner("Running preClean hook...");
       try {
-        await runHook(hookCmd, git.repoRoot, { verbose: args.verbose });
+        await runHook(hookCmd, git.repoRoot, {
+          verbose: args.verbose,
+          onLine: spinner ? createTailUpdater(spinner) : undefined,
+        });
         spinner?.stop();
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -381,7 +384,10 @@ export async function runCreate(args: CreateArgs): Promise<void> {
     const hookCmd = buildHookCommand(config.postCreate, { path: worktreePath, slot });
     const spinner = args.verbose ? null : startSpinner("Running postCreate hook...");
     try {
-      await runHook(hookCmd, git.repoRoot, { verbose: args.verbose });
+      await runHook(hookCmd, git.repoRoot, {
+        verbose: args.verbose,
+        onLine: spinner ? createTailUpdater(spinner) : undefined,
+      });
       spinner?.stop();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

@@ -66,6 +66,7 @@ function makeListEntry(overrides: Partial<WorktreeListEntry> = {}): WorktreeList
 const noopSpinner = (_message: string) => ({
   stop: (_finalMessage?: string) => {},
   fail: (_message: string) => {},
+  updateTail: (_lines: string[]) => {},
 });
 
 function makeListDeps(overrides: Partial<ListDeps> = {}): ListDeps {
@@ -514,7 +515,7 @@ describe("executeList", () => {
     const deps = makeListDeps({
       startSpinner: (_message: string) => {
         spinnerStarted = true;
-        return { stop: () => {}, fail: (_msg: string) => {} };
+        return { stop: () => {}, fail: (_msg: string) => {}, updateTail: (_lines: string[]) => {} };
       },
     });
 
@@ -537,6 +538,7 @@ describe("executeList", () => {
           stopped = true;
         },
         fail: (_msg: string) => {},
+        updateTail: (_lines: string[]) => {},
       }),
     });
 
@@ -556,6 +558,7 @@ describe("executeList", () => {
         fail: (msg: string) => {
           failMessage = msg;
         },
+        updateTail: (_lines: string[]) => {},
       }),
     });
 

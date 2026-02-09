@@ -11,7 +11,25 @@ const BRIGHT_COLOR = { r: 230, g: 225, b: 255 };
 export type Spinner = {
   stop: (finalMessage?: string) => void;
   fail: (message: string) => void;
+  updateTail: (lines: string[]) => void;
 };
+
+export function stripAnsi(str: string): string {
+  // CSI sequences (including ? for cursor hide/show), OSC sequences, and simple escapes
+  return str.replace(/\x1b(?:\[[0-9;?]*[a-zA-Z]|\][^\x07]*(?:\x07|\x1b\\)|\[[0-9;]*m)/g, "");
+}
+
+export function formatTailLine(line: string, maxWidth: number): string {
+  const stripped = stripAnsi(line);
+  const safeWidth = Math.max(1, maxWidth);
+  if (stripped.length > safeWidth) {
+    if (safeWidth <= 1) {
+      return "…";
+    }
+    return stripped.substring(0, safeWidth - 1) + "…";
+  }
+  return stripped;
+}
 
 export function lerp(a: number, b: number, t: number): number {
   return Math.round(a + (b - a) * t);
@@ -37,38 +55,71 @@ export function shimmerText(text: string, shimmerPos: number): string {
   return result;
 }
 
+const TAIL_LINE_COUNT = 3;
+
+export function createTailUpdater(spinner: Spinner): (line: string) => void {
+  const lines: string[] = [];
+  return (line: string) => {
+    lines.push(line);
+    if (lines.length > TAIL_LINE_COUNT) lines.shift();
+    spinner.updateTail(lines);
+  };
+}
+
 export function startSpinner(message: string): Spinner {
   let frameIndex = 0;
   let shimmerPos = -SHIMMER_WIDTH;
   const chars = [...message];
   const shimmerEnd = chars.length + SHIMMER_WIDTH;
+  let extraLines = 0;
+  let tailLines: string[] = [];
 
-  const write = (text: string) => {
-    process.stdout.write(`\r\x1b[K${text}`);
+  const writeFrame = () => {
+    if (extraLines > 0) {
+      process.stdout.write(`\x1b[${extraLines}A`);
+    }
+    const frame = FRAMES[frameIndex];
+    let output = `\r\x1b[J${frame} ${shimmerText(message, shimmerPos)}`;
+    if (tailLines.length > 0) {
+      const maxWidth = (process.stdout.columns || 80) - 6;
+      for (const line of tailLines) {
+        const formatted = formatTailLine(line, maxWidth);
+        output += `\n\x1b[90m    ${formatted}\x1b[0m`;
+      }
+    }
+    process.stdout.write(output);
+    extraLines = tailLines.length;
   };
 
-  write(`${FRAMES[0]} ${shimmerText(message, shimmerPos)}`);
+  writeFrame();
   const timer = setInterval(() => {
     frameIndex = (frameIndex + 1) % FRAMES.length;
     shimmerPos += SHIMMER_SPEED;
     if (shimmerPos > shimmerEnd + SHIMMER_PAUSE * SHIMMER_SPEED) {
       shimmerPos = -SHIMMER_WIDTH;
     }
-    write(`${FRAMES[frameIndex]} ${shimmerText(message, shimmerPos)}`);
+    writeFrame();
   }, INTERVAL);
+
+  const clearAndWrite = (text: string) => {
+    if (extraLines > 0) {
+      process.stdout.write(`\x1b[${extraLines}A`);
+    }
+    process.stdout.write(`\r\x1b[J${text}\n`);
+  };
 
   return {
     stop(finalMessage?: string) {
       clearInterval(timer);
-      if (finalMessage) {
-        write(`${finalMessage}\n`);
-      } else {
-        write(`✓ ${message}\n`);
-      }
+      clearAndWrite(finalMessage || `✓ ${message}`);
     },
     fail(errorMessage: string) {
       clearInterval(timer);
-      write(`✗ ${errorMessage}\n`);
+      clearAndWrite(`✗ ${errorMessage}`);
+    },
+    updateTail(lines: string[]) {
+      tailLines = [...lines];
+      writeFrame();
     },
   };
 }

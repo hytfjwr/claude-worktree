@@ -57,10 +57,71 @@ export function buildHookCommand(template: string, vars: HookVars): string {
 export async function runHook(
   command: string,
   cwd: string,
-  options?: { verbose?: boolean }
+  options?: { verbose?: boolean; onLine?: (line: string) => void }
 ): Promise<void> {
-  const shell = $`${{ raw: command }}`.cwd(cwd).nothrow();
-  const result = options?.verbose ? await shell : await shell.quiet();
+  if (options?.verbose) {
+    const result = await $`${{ raw: command }}`.cwd(cwd).nothrow();
+    if (result.exitCode !== 0) {
+      throw new Error(
+        `Hook command failed with exit code ${result.exitCode}: ${command}`
+      );
+    }
+    return;
+  }
+
+  if (options?.onLine) {
+    const proc = Bun.spawn(["sh", "-c", command], {
+      cwd,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+
+    const readStream = async (stream: ReadableStream<Uint8Array>) => {
+      const reader = stream.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (line.trim()) {
+            options.onLine!(line);
+          }
+        }
+      }
+
+      // Flush remaining multibyte characters from the decoder
+      const remaining = decoder.decode();
+      if (remaining) {
+        buffer += remaining;
+      }
+
+      if (buffer.trim()) {
+        options.onLine!(buffer);
+      }
+    };
+
+    await Promise.all([
+      readStream(proc.stdout),
+      readStream(proc.stderr),
+    ]);
+
+    const exitCode = await proc.exited;
+    if (exitCode !== 0) {
+      throw new Error(
+        `Hook command failed with exit code ${exitCode}: ${command}`
+      );
+    }
+    return;
+  }
+
+  const result = await $`${{ raw: command }}`.cwd(cwd).nothrow().quiet();
   if (result.exitCode !== 0) {
     throw new Error(
       `Hook command failed with exit code ${result.exitCode}: ${command}`

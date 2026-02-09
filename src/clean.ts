@@ -11,7 +11,7 @@ import {
 } from "./git";
 import { confirm, selectMultiple } from "./prompt";
 import { loadProjectConfig, buildHookCommand, runHook, type ProjectConfig, type HookVars } from "./config";
-import { startSpinner } from "./spinner";
+import { startSpinner, createTailUpdater } from "./spinner";
 
 export type CleanArgs = {
   force: boolean;
@@ -35,7 +35,7 @@ export type CleanDeps = {
   getGitContext: () => Promise<GitContext>;
   loadProjectConfig: (repoRoot: string) => Promise<ProjectConfig | null>;
   buildHookCommand: (template: string, vars: HookVars) => string;
-  runHook: (command: string, cwd: string, options?: { verbose?: boolean }) => Promise<void>;
+  runHook: (command: string, cwd: string, options?: { verbose?: boolean; onLine?: (line: string) => void }) => Promise<void>;
   confirm: (message: string) => Promise<boolean>;
   selectMultiple: (statuses: WorktreeStatus[]) => Promise<WorktreeStatus[]>;
 };
@@ -162,7 +162,10 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
         const hookCmd = deps.buildHookCommand(config.preClean, { path: worktree.path });
         const spinner = args.verbose ? null : startSpinner("Running preClean hook...");
         try {
-          await deps.runHook(hookCmd, repoRoot, { verbose: args.verbose });
+          await deps.runHook(hookCmd, repoRoot, {
+            verbose: args.verbose,
+            onLine: spinner ? createTailUpdater(spinner) : undefined,
+          });
           spinner?.stop();
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
