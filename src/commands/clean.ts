@@ -7,6 +7,7 @@ import {
   listWorktrees,
   removeWorktree,
 } from "../core/git";
+import { deleteSlot, readSlot } from "../core/slot";
 import type { CleanArgs, CleanDeps, CleanResult, ProjectConfig, WorktreeStatus } from "../types";
 import { confirm, selectMultiple } from "../ui/prompt";
 import { createTailUpdater, startSpinner } from "../ui/spinner";
@@ -21,6 +22,8 @@ const defaultDeps: CleanDeps = {
   loadProjectConfig,
   buildHookCommand,
   runHook,
+  readSlot,
+  deleteSlot,
   confirm,
   selectMultiple,
 };
@@ -124,9 +127,12 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
   for (const status of toDelete) {
     const { worktree } = status;
     try {
+      // Read cached slot for this worktree
+      const slot = await deps.readSlot(worktree.path);
+
       // preClean hook
       if (config?.preClean && repoRoot) {
-        const hookCmd = deps.buildHookCommand(config.preClean, { path: worktree.path });
+        const hookCmd = deps.buildHookCommand(config.preClean, { path: worktree.path, slot });
         const spinner = args.verbose
           ? null
           : startSpinner("Running preClean hook...", { timeoutSec: resolveHookTimeout("preClean", config) });
@@ -158,7 +164,7 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
 
       // postClean hook
       if (config?.postClean && repoRoot) {
-        const hookCmd = deps.buildHookCommand(config.postClean, { path: worktree.path });
+        const hookCmd = deps.buildHookCommand(config.postClean, { path: worktree.path, slot });
         const postCleanTimeoutSec = resolveHookTimeout("postClean", config);
         const spinner = args.verbose
           ? null
@@ -176,6 +182,9 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
           console.warn(`  ⚠️  postClean hook failed (continuing): ${message}`);
         }
       }
+
+      // Delete cached slot
+      await deps.deleteSlot(worktree.path);
 
       console.log(`  ✓ ${worktree.branch || worktree.path}`);
       result.deleted.push(worktree.path);

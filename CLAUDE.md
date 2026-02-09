@@ -99,7 +99,8 @@ src/
     git.test.ts
     config.ts          # Project config (.claude-worktree.json) & hook execution
     config.test.ts
-    slot.ts            # Port-scan based slot auto-assignment
+    slot.ts            # Port-scan based slot auto-assignment & slot cache
+    slot.test.ts
   commands/            # Command implementations
     create.ts          # Create command orchestration
     list.ts            # Worktree listing with rich display
@@ -147,10 +148,13 @@ src/
 ```
 - `maxWorktrees` — maximum number of concurrent worktrees (excludes main). If set, blocks creation when the limit is reached.
 - `{path}` — worktree path
-- `{slot}` — auto-assigned slot (1-9) based on port availability (8881-8889)
+- `{slot}` — auto-assigned slot (1-9) based on port availability (8881-8889), persisted to `~/.cache/claude-worktree/slots.json`
 - `hookTimeout` — global default timeout in seconds (default: 600)
 - `postCreateTimeout` / `preCleanTimeout` / `postCleanTimeout` — per-hook timeout override
 - Priority: hook-specific value > `hookTimeout` > default (600s)
+
+**Environment Variables:**
+- `CLAUDE_WORKTREE_CACHE_DIR` — override the slot cache directory (default: `~/.cache/claude-worktree`)
 
 **External Tool Dependencies:** bun, git, wezterm CLI, claude CLI
 

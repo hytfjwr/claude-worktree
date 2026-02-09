@@ -221,6 +221,8 @@ export type CleanDeps = {
     cwd: string,
     options?: { verbose?: boolean; onLine?: (line: string) => void; timeout?: number },
   ) => Promise<void>;
+  readSlot: (worktreePath: string) => Promise<number | undefined>;
+  deleteSlot: (worktreePath: string) => Promise<void>;
   confirm: (message: string) => Promise<boolean>;
   selectMultiple: (statuses: WorktreeStatus[]) => Promise<WorktreeStatus[]>;
 };

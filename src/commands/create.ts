@@ -9,7 +9,7 @@ import {
   listWorktrees,
   removeWorktree,
 } from "../core/git";
-import { findAvailableSlot } from "../core/slot";
+import { deleteSlot, findAvailableSlot, readSlot, saveSlot } from "../core/slot";
 import { buildClaudeCommand } from "../external/claude";
 import { checkWeztermAvailable, createPane, sendCommand, sendText } from "../external/wezterm";
 import type { CreateArgs, ProjectConfig } from "../types";
@@ -135,9 +135,12 @@ export async function runCreate(args: CreateArgs): Promise<void> {
       return;
     }
 
+    // Read cached slot for existing worktree
+    const existingSlot = await readSlot(existingWorktree.path);
+
     // preClean hook
     if (config?.preClean) {
-      const hookCmd = buildHookCommand(config.preClean, { path: existingWorktree.path });
+      const hookCmd = buildHookCommand(config.preClean, { path: existingWorktree.path, slot: existingSlot });
       const spinner = args.verbose
         ? null
         : startSpinner("Running preClean hook...", { timeoutSec: resolveHookTimeout("preClean", config) });
@@ -170,7 +173,7 @@ export async function runCreate(args: CreateArgs): Promise<void> {
 
     // postClean hook
     if (config?.postClean) {
-      const hookCmd = buildHookCommand(config.postClean, { path: existingWorktree.path });
+      const hookCmd = buildHookCommand(config.postClean, { path: existingWorktree.path, slot: existingSlot });
       const spinner = args.verbose
         ? null
         : startSpinner("Running postClean hook...", { timeoutSec: resolveHookTimeout("postClean", config) });
@@ -187,6 +190,9 @@ export async function runCreate(args: CreateArgs): Promise<void> {
         console.warn(`  ⚠️  postClean hook failed (continuing): ${message}`);
       }
     }
+
+    // Delete cached slot for existing worktree
+    await deleteSlot(existingWorktree.path);
 
     console.log("");
   }
@@ -221,12 +227,18 @@ export async function runCreate(args: CreateArgs): Promise<void> {
   // Create worktree directly
   await createWorktree(branchName, worktreePath, effectiveBaseBranch);
 
+  // Allocate and persist slot if any hook uses {slot}
+  let slot: number | undefined;
+  if (config) {
+    const anyHookUsesSlot = [config.postCreate, config.preClean, config.postClean].some((h) => h?.includes("{slot}"));
+    if (anyHookUsesSlot) {
+      slot = await findAvailableSlot();
+      await saveSlot(worktreePath, slot);
+    }
+  }
+
   // postCreate hook
   if (config?.postCreate) {
-    let slot: number | undefined;
-    if (config.postCreate.includes("{slot}")) {
-      slot = await findAvailableSlot();
-    }
     const hookCmd = buildHookCommand(config.postCreate, { path: worktreePath, slot });
     const spinner = args.verbose
       ? null
@@ -245,7 +257,7 @@ export async function runCreate(args: CreateArgs): Promise<void> {
       console.log("🗑️  Rolling back...");
       // Run preClean hook to clean up containers etc. before removing worktree
       if (config?.preClean) {
-        const cleanCmd = buildHookCommand(config.preClean, { path: worktreePath });
+        const cleanCmd = buildHookCommand(config.preClean, { path: worktreePath, slot });
         try {
           await runHook(cleanCmd, git.repoRoot, {
             verbose: args.verbose,
@@ -262,7 +274,7 @@ export async function runCreate(args: CreateArgs): Promise<void> {
       }
       // postClean hook after rollback
       if (config?.postClean) {
-        const postCleanCmd = buildHookCommand(config.postClean, { path: worktreePath });
+        const postCleanCmd = buildHookCommand(config.postClean, { path: worktreePath, slot });
         const rollbackSpinner = args.verbose
           ? null
           : startSpinner("Running postClean hook (rollback)...", {
@@ -280,6 +292,10 @@ export async function runCreate(args: CreateArgs): Promise<void> {
           rollbackSpinner?.fail(`postClean hook failed during rollback: ${postCleanMessage}`);
           console.warn(`  ⚠️  postClean hook failed during rollback: ${postCleanMessage}`);
         }
+      }
+      // Delete cached slot on rollback (only if a slot was allocated)
+      if (slot != null) {
+        await deleteSlot(worktreePath);
       }
       return;
     }

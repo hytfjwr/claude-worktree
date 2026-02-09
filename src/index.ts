@@ -30,7 +30,7 @@ export {
   removeWorktree,
 } from "./core/git";
 // Slot utilities
-export { findAvailableSlot, isPortInUse } from "./core/slot";
+export { deleteSlot, findAvailableSlot, getCacheDir, isPortInUse, readSlot, saveSlot } from "./core/slot";
 // Claude utilities
 export { buildClaudeCommand } from "./external/claude";
 // WezTerm utilities

@@ -142,7 +142,7 @@ You can define project-specific hooks in `.claude-worktree.json` at the reposito
 ### Template Variables
 
 - `{path}` — worktree path
-- `{slot}` — auto-assigned slot number (1-9) based on port availability (8881-8889)
+- `{slot}` — auto-assigned slot number (1-9) based on port availability (8881-8889). Slot assignments are persisted to `~/.cache/claude-worktree/slots.json` so that `preClean`/`postClean` hooks can reference the same slot that was assigned during `postCreate`.
 
 ### Hooks
 
@@ -158,6 +158,10 @@ You can define project-specific hooks in `.claude-worktree.json` at the reposito
 - `postCleanTimeout` — Override timeout for postClean hook
 
 Priority: hook-specific value > `hookTimeout` > default (600s)
+
+### Environment Variables
+
+- `CLAUDE_WORKTREE_CACHE_DIR` — Override the slot cache directory (default: `~/.cache/claude-worktree`)
 
 ## How It Works
 

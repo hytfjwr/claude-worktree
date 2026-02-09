@@ -45,8 +45,11 @@ function makeDeps(overrides: Partial<CleanDeps> = {}): CleanDeps {
       currentBranch: "main",
     }),
     loadProjectConfig: async () => null,
-    buildHookCommand: (template, vars) => template.replace(/\{path\}/g, vars.path),
+    buildHookCommand: (template, vars) =>
+      template.replace(/\{path\}/g, vars.path).replace(/\{slot\}/g, vars.slot !== undefined ? String(vars.slot) : ""),
     runHook: async () => {},
+    readSlot: async () => undefined,
+    deleteSlot: async () => {},
     confirm: async () => true,
     selectMultiple: async () => [],
     ...overrides,
@@ -610,6 +613,99 @@ describe("executeClean", () => {
       const result = await executeClean({ ...defaultArgs, force: true }, deps);
 
       expect(result.deleted).toEqual(["/tmp/repo-detached"]);
+    });
+  });
+
+  describe("slot cache integration", () => {
+    test("passes readSlot result to buildHookCommand for preClean and postClean", async () => {
+      const worktree = makeWorktree({ path: "/tmp/repo-slot" });
+      const status = makeStatus({ path: "/tmp/repo-slot" }, { canAutoClean: true });
+      const hookCommands: string[] = [];
+      const deps = makeDeps({
+        listWorktrees: async () => [worktree],
+        getWorktreeStatuses: async () => [status],
+        loadProjectConfig: async () => ({
+          preClean: "cd {path} && docker-compose -p app-{slot} down",
+          postClean: "docker volume rm app-{slot}-data || true",
+        }),
+        readSlot: async () => 3,
+        runHook: async (cmd) => {
+          hookCommands.push(cmd);
+        },
+      });
+
+      await executeClean({ ...defaultArgs, force: true }, deps);
+
+      expect(hookCommands).toEqual([
+        "cd /tmp/repo-slot && docker-compose -p app-3 down",
+        "docker volume rm app-3-data || true",
+      ]);
+    });
+
+    test("passes undefined slot when readSlot returns undefined", async () => {
+      const worktree = makeWorktree({ path: "/tmp/repo-no-slot" });
+      const status = makeStatus({ path: "/tmp/repo-no-slot" }, { canAutoClean: true });
+      const hookCommands: string[] = [];
+      const deps = makeDeps({
+        listWorktrees: async () => [worktree],
+        getWorktreeStatuses: async () => [status],
+        loadProjectConfig: async () => ({
+          preClean: "cd {path} && docker-compose -p app-{slot} down",
+        }),
+        readSlot: async () => undefined,
+        runHook: async (cmd) => {
+          hookCommands.push(cmd);
+        },
+      });
+
+      await executeClean({ ...defaultArgs, force: true }, deps);
+
+      expect(hookCommands).toEqual(["cd /tmp/repo-no-slot && docker-compose -p app- down"]);
+    });
+
+    test("calls deleteSlot after successful clean", async () => {
+      const worktree = makeWorktree({ path: "/tmp/repo-delete-slot" });
+      const status = makeStatus({ path: "/tmp/repo-delete-slot" }, { canAutoClean: true });
+      const deletedSlotPaths: string[] = [];
+      const deps = makeDeps({
+        listWorktrees: async () => [worktree],
+        getWorktreeStatuses: async () => [status],
+        readSlot: async () => 5,
+        deleteSlot: async (path) => {
+          deletedSlotPaths.push(path);
+        },
+      });
+
+      await executeClean({ ...defaultArgs, force: true }, deps);
+
+      expect(deletedSlotPaths).toEqual(["/tmp/repo-delete-slot"]);
+    });
+
+    test("same slot is passed to both preClean and postClean", async () => {
+      const worktree = makeWorktree({ path: "/tmp/repo-same-slot" });
+      const status = makeStatus({ path: "/tmp/repo-same-slot" }, { canAutoClean: true });
+      const receivedVars: Array<{ path: string; slot?: number }> = [];
+      const deps = makeDeps({
+        listWorktrees: async () => [worktree],
+        getWorktreeStatuses: async () => [status],
+        loadProjectConfig: async () => ({
+          preClean: "pre {slot}",
+          postClean: "post {slot}",
+        }),
+        readSlot: async () => 7,
+        buildHookCommand: (template, vars) => {
+          receivedVars.push({ ...vars });
+          return template
+            .replace(/\{path\}/g, vars.path)
+            .replace(/\{slot\}/g, vars.slot !== undefined ? String(vars.slot) : "");
+        },
+      });
+
+      await executeClean({ ...defaultArgs, force: true }, deps);
+
+      expect(receivedVars).toHaveLength(2);
+      expect(receivedVars[0].slot).toBe(7);
+      expect(receivedVars[1].slot).toBe(7);
     });
   });
 
