@@ -71,7 +71,7 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
 
     if (autoCleanable.length === 0) {
       console.log("\n✨ No unnecessary worktrees detected.");
-      console.log("Hint: use --all option to show all worktrees.");
+      console.log("Hint: use -all option to show all worktrees.");
       return result;
     }
 

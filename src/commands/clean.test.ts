@@ -98,7 +98,7 @@ describe("executeClean", () => {
     });
   });
 
-  describe("auto-detect mode (without --all)", () => {
+  describe("auto-detect mode (without -all)", () => {
     test("returns empty result when all canAutoClean are false", async () => {
       const worktree = makeWorktree();
       const deps = makeDeps({
@@ -133,7 +133,7 @@ describe("executeClean", () => {
     });
   });
 
-  describe("--all mode", () => {
+  describe("-all mode", () => {
     test("deletes worktrees selected via selectMultiple", async () => {
       const wt1 = makeWorktree({
         path: "/tmp/repo-a",
@@ -172,7 +172,7 @@ describe("executeClean", () => {
     });
   });
 
-  describe("--dry-run mode", () => {
+  describe("-dry-run mode", () => {
     test("returns result without deleting", async () => {
       const worktree = makeWorktree({
         path: "/tmp/repo-feature-merged",
@@ -218,7 +218,7 @@ describe("executeClean", () => {
       expect(result).toEqual({ deleted: [], skipped: [], errors: [] });
     });
 
-    test("--force skips confirmation", async () => {
+    test("-force skips confirmation", async () => {
       const worktree = makeWorktree();
       const status = makeStatus({}, { canAutoClean: true, reason: "Merged" });
       let confirmCalled = false;
@@ -777,7 +777,7 @@ describe("executeClean", () => {
       expect(consoleWarnSpy).toHaveBeenCalled();
     });
 
-    test("does not delete branch in --dry-run mode", async () => {
+    test("does not delete branch in -dry-run mode", async () => {
       const worktree = makeWorktree({
         path: "/tmp/repo-dry",
         branch: "feature/dry",
