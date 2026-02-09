@@ -51,6 +51,12 @@ describe("startSpinner", () => {
     spinner.stop();
   });
 
+  test("updateTail() accepts allLines parameter", () => {
+    const spinner = startSpinner("Processing...");
+    expect(() => spinner.updateTail(["line 3"], 3, ["line 1", "line 2", "line 3"])).not.toThrow();
+    spinner.stop();
+  });
+
   test("hides cursor on start", () => {
     const writeSpy = spyOn(process.stdout, "write");
     const spinner = startSpinner("Processing...");
@@ -116,6 +122,32 @@ describe("startSpinner", () => {
     writeSpy.mockRestore();
   });
 
+  test("shows Ctrl+O expand hint when hidden lines exist", () => {
+    const writeSpy = spyOn(process.stdout, "write");
+    const spinner = startSpinner("Processing...", { timeoutSec: 600 });
+    writeSpy.mockClear();
+
+    spinner.updateTail(["line 3", "line 4", "line 5"], 5);
+
+    const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+    expect(output).toContain("Ctrl+O to expand");
+    spinner.stop();
+    writeSpy.mockRestore();
+  });
+
+  test("does not show Ctrl+O expand hint when all lines visible", () => {
+    const writeSpy = spyOn(process.stdout, "write");
+    const spinner = startSpinner("Processing...", { timeoutSec: 600 });
+    writeSpy.mockClear();
+
+    spinner.updateTail(["line 1", "line 2"], 2);
+
+    const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+    expect(output).not.toContain("Ctrl+O");
+    spinner.stop();
+    writeSpy.mockRestore();
+  });
+
   test("renders info line without hidden count when all lines visible", () => {
     const writeSpy = spyOn(process.stdout, "write");
     const spinner = startSpinner("Processing...", { timeoutSec: 60 });
@@ -147,13 +179,13 @@ describe("startSpinner", () => {
 });
 
 describe("createTailUpdater", () => {
-  test("feeds lines to spinner.updateTail with totalCount", () => {
-    const calls: { lines: string[]; totalCount: number }[] = [];
+  test("feeds lines to spinner.updateTail with totalCount and allLines", () => {
+    const calls: { lines: string[]; totalCount: number; allLines: string[] }[] = [];
     const mockSpinner = {
       stop: () => {},
       fail: () => {},
-      updateTail: (lines: string[], totalCount: number) => {
-        calls.push({ lines: [...lines], totalCount });
+      updateTail: (lines: string[], totalCount: number, allLines?: string[]) => {
+        calls.push({ lines: [...lines], totalCount, allLines: allLines ? [...allLines] : [] });
       },
     };
 
@@ -162,19 +194,20 @@ describe("createTailUpdater", () => {
     onLine("line 2");
 
     expect(calls).toEqual([
-      { lines: ["line 1"], totalCount: 1 },
-      { lines: ["line 1", "line 2"], totalCount: 2 },
+      { lines: ["line 1"], totalCount: 1, allLines: ["line 1"] },
+      { lines: ["line 1", "line 2"], totalCount: 2, allLines: ["line 1", "line 2"] },
     ]);
   });
 
-  test("keeps only last 3 lines", () => {
-    const lastCall = { lines: [] as string[], totalCount: 0 };
+  test("keeps only last 3 tail lines but accumulates all lines", () => {
+    const lastCall = { lines: [] as string[], totalCount: 0, allLines: [] as string[] };
     const mockSpinner = {
       stop: () => {},
       fail: () => {},
-      updateTail: (lines: string[], totalCount: number) => {
+      updateTail: (lines: string[], totalCount: number, allLines?: string[]) => {
         lastCall.lines = [...lines];
         lastCall.totalCount = totalCount;
+        lastCall.allLines = allLines ? [...allLines] : [];
       },
     };
 
@@ -187,6 +220,131 @@ describe("createTailUpdater", () => {
 
     expect(lastCall.lines).toEqual(["c", "d", "e"]);
     expect(lastCall.totalCount).toBe(5);
+    expect(lastCall.allLines).toEqual(["a", "b", "c", "d", "e"]);
+  });
+});
+
+describe("keyboard handling", () => {
+  type StdinMock = { setRawMode: unknown; resume: unknown; pause: unknown; on: unknown; removeListener: unknown };
+
+  function withTTYStdin(fn: (emitKey: (byte: number) => void) => void) {
+    const stdin = process.stdin as typeof process.stdin & StdinMock;
+    const saved = {
+      isTTY: Object.getOwnPropertyDescriptor(process.stdin, "isTTY"),
+      setRawMode: stdin.setRawMode,
+      resume: stdin.resume,
+      pause: stdin.pause,
+      on: stdin.on,
+      removeListener: stdin.removeListener,
+    };
+
+    let capturedHandler: ((data: Buffer) => void) | null = null;
+
+    Object.defineProperty(process.stdin, "isTTY", { value: true, configurable: true, writable: true });
+    stdin.setRawMode = () => process.stdin;
+    stdin.resume = () => process.stdin;
+    stdin.pause = () => process.stdin;
+    stdin.on = (event: string, handler: (data: Buffer) => void) => {
+      if (event === "data") capturedHandler = handler;
+      return process.stdin;
+    };
+    stdin.removeListener = () => process.stdin;
+
+    try {
+      fn((byte: number) => capturedHandler?.(Buffer.from([byte])));
+    } finally {
+      if (saved.isTTY) {
+        Object.defineProperty(process.stdin, "isTTY", saved.isTTY);
+      } else {
+        Object.defineProperty(process.stdin, "isTTY", { value: undefined, configurable: true, writable: true });
+      }
+      stdin.setRawMode = saved.setRawMode;
+      stdin.resume = saved.resume;
+      stdin.pause = saved.pause;
+      stdin.on = saved.on;
+      stdin.removeListener = saved.removeListener;
+    }
+  }
+
+  test("Ctrl+O toggles to expanded mode showing all lines", () => {
+    withTTYStdin((emitKey) => {
+      const writeSpy = spyOn(process.stdout, "write");
+      const spinner = startSpinner("Processing...", { timeoutSec: 600 });
+
+      spinner.updateTail(["c", "d", "e"], 5, ["a", "b", "c", "d", "e"]);
+      writeSpy.mockClear();
+
+      // Press Ctrl+O to expand
+      emitKey(0x0f);
+
+      const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+      expect(output).toContain("Ctrl+O to collapse");
+      // All lines should be printed permanently
+      expect(output).toContain("a");
+      expect(output).toContain("b");
+      expect(output).toContain("c");
+
+      spinner.stop();
+      writeSpy.mockRestore();
+    });
+  });
+
+  test("Ctrl+O collapse hides expanded lines and shows tail", () => {
+    withTTYStdin((emitKey) => {
+      const writeSpy = spyOn(process.stdout, "write");
+      const spinner = startSpinner("Processing...", { timeoutSec: 600 });
+
+      spinner.updateTail(["c", "d", "e"], 5, ["a", "b", "c", "d", "e"]);
+
+      // Expand then collapse
+      emitKey(0x0f);
+      writeSpy.mockClear();
+      emitKey(0x0f);
+
+      const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+      expect(output).toContain("Ctrl+O to expand");
+      expect(output).not.toContain("Ctrl+O to collapse");
+
+      spinner.stop();
+      writeSpy.mockRestore();
+    });
+  });
+
+  test("re-expand does not duplicate previously printed lines", () => {
+    withTTYStdin((emitKey) => {
+      const writeSpy = spyOn(process.stdout, "write");
+      const spinner = startSpinner("Processing...", { timeoutSec: 600 });
+
+      spinner.updateTail(["c", "d", "e"], 5, ["a", "b", "c", "d", "e"]);
+
+      // Expand (prints all lines)
+      emitKey(0x0f);
+      // Collapse
+      emitKey(0x0f);
+      writeSpy.mockClear();
+
+      // Re-expand — should NOT re-print already permanently printed lines
+      emitKey(0x0f);
+
+      const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+      // "a" was already printed in the first expand, should not appear again
+      expect(output).not.toContain("    a");
+      expect(output).toContain("Ctrl+O to collapse");
+
+      spinner.stop();
+      writeSpy.mockRestore();
+    });
+  });
+
+  test("stop() cleans up keyboard listener", () => {
+    withTTYStdin((_emitKey) => {
+      const writeSpy = spyOn(process.stdout, "write");
+      const spinner = startSpinner("Processing...", { timeoutSec: 600 });
+
+      // stop() should not throw even with keyboard listener active
+      expect(() => spinner.stop()).not.toThrow();
+      writeSpy.mockRestore();
+    });
   });
 });
 

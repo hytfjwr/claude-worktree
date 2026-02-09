@@ -53,6 +53,7 @@ export function shimmerText(text: string, shimmerPos: number): string {
 }
 
 const TAIL_LINE_COUNT = 3;
+const MAX_ALL_LINES = 10000;
 
 export function formatDuration(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
@@ -68,13 +69,17 @@ export function formatInfoLine(hiddenCount: number, elapsedSec: number, timeoutS
 }
 
 export function createTailUpdater(spinner: Spinner): (line: string) => void {
-  const lines: string[] = [];
+  const tailLines: string[] = [];
+  const allLines: string[] = [];
   let totalCount = 0;
   return (line: string) => {
-    lines.push(line);
+    if (allLines.length < MAX_ALL_LINES) {
+      allLines.push(line);
+    }
+    tailLines.push(line);
     totalCount++;
-    if (lines.length > TAIL_LINE_COUNT) lines.shift();
-    spinner.updateTail(lines, totalCount);
+    if (tailLines.length > TAIL_LINE_COUNT) tailLines.shift();
+    spinner.updateTail(tailLines, totalCount, allLines);
   };
 }
 
@@ -86,6 +91,9 @@ export function startSpinner(message: string, options?: { timeoutSec?: number })
   let extraLines = 0;
   let tailLines: string[] = [];
   let totalLineCount = 0;
+  let allLines: string[] = [];
+  let expanded = false;
+  let expandPrintedCount = 0;
   const startTime = Date.now();
   const timeoutSec = options?.timeoutSec;
 
@@ -94,23 +102,94 @@ export function startSpinner(message: string, options?: { timeoutSec?: number })
       process.stdout.write(`\x1b[${extraLines}A`);
     }
     const frame = FRAMES[frameIndex];
-    let output = `\r\x1b[J${frame} ${shimmerText(message, shimmerPos)}`;
     const maxWidth = (process.stdout.columns || 80) - 6;
-    if (tailLines.length > 0) {
+    let output = `\r\x1b[J${frame} ${shimmerText(message, shimmerPos)}`;
+
+    if (!expanded && tailLines.length > 0) {
       for (const line of tailLines) {
         const formatted = formatTailLine(line, maxWidth);
         output += `\n\x1b[38;5;245m    ${formatted}\x1b[0m`;
       }
     }
+
     if (timeoutSec != null) {
       const elapsedSec = Math.floor((Date.now() - startTime) / 1000);
-      const hiddenCount = Math.max(0, totalLineCount - tailLines.length);
+      const hiddenCount = expanded ? 0 : Math.max(0, totalLineCount - tailLines.length);
       const infoText = formatInfoLine(hiddenCount, elapsedSec, timeoutSec);
-      const formattedInfo = formatTailLine(infoText, maxWidth);
+
+      let toggleHint = "";
+      if (expanded) {
+        toggleHint = "Ctrl+O to collapse";
+      } else if (totalLineCount > TAIL_LINE_COUNT) {
+        toggleHint = "Ctrl+O to expand";
+      }
+      const fullInfo = toggleHint ? `${infoText} — ${toggleHint}` : infoText;
+      const formattedInfo = formatTailLine(fullInfo, maxWidth);
       output += `\n\x1b[38;5;245m    ${formattedInfo}\x1b[0m`;
     }
+
     process.stdout.write(output);
-    extraLines = tailLines.length + (timeoutSec != null ? 1 : 0);
+    extraLines = (expanded ? 0 : tailLines.length) + (timeoutSec != null ? 1 : 0);
+  };
+
+  const printAllLines = () => {
+    const maxWidth = (process.stdout.columns || 80) - 6;
+    for (let i = expandPrintedCount; i < allLines.length; i++) {
+      const formatted = formatTailLine(allLines[i], maxWidth);
+      process.stdout.write(`\x1b[38;5;245m    ${formatted}\x1b[0m\n`);
+    }
+    expandPrintedCount = allLines.length;
+  };
+
+  const toggleExpand = () => {
+    if (!expanded) {
+      // Clear current spinner area
+      if (extraLines > 0) {
+        process.stdout.write(`\x1b[${extraLines}A`);
+      }
+      process.stdout.write("\r\x1b[J");
+      extraLines = 0;
+
+      // Print lines accumulated since last expand
+      printAllLines();
+      expanded = true;
+    } else {
+      expanded = false;
+    }
+    writeFrame();
+  };
+
+  // Setup keyboard listener for Ctrl+O toggle
+  let stdinHandler: ((data: Buffer) => void) | null = null;
+  const setupKeyboard = () => {
+    if (!process.stdin.isTTY) return;
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    stdinHandler = (data: Buffer) => {
+      if (data[0] === 0x03) {
+        // Ctrl+C
+        cleanupKeyboard();
+        clearInterval(timer);
+        process.stdout.write("\r\x1b[J\x1b[?25h");
+        process.exit(130);
+      }
+      if (data[0] === 0x0f) {
+        // Ctrl+O
+        toggleExpand();
+      }
+    };
+    process.stdin.on("data", stdinHandler);
+  };
+
+  const cleanupKeyboard = () => {
+    if (stdinHandler) {
+      process.stdin.removeListener("data", stdinHandler);
+      stdinHandler = null;
+    }
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(false);
+      process.stdin.pause();
+    }
   };
 
   process.stdout.write("\x1b[?25l"); // Hide cursor
@@ -123,8 +202,10 @@ export function startSpinner(message: string, options?: { timeoutSec?: number })
     }
     writeFrame();
   }, INTERVAL);
+  setupKeyboard();
 
   const clearAndWrite = (text: string) => {
+    cleanupKeyboard();
     if (extraLines > 0) {
       process.stdout.write(`\x1b[${extraLines}A`);
     }
@@ -140,9 +221,21 @@ export function startSpinner(message: string, options?: { timeoutSec?: number })
       clearInterval(timer);
       clearAndWrite(`✗ ${errorMessage}`);
     },
-    updateTail(lines: string[], totalCount: number) {
+    updateTail(lines: string[], totalCount: number, newAllLines?: string[]) {
       tailLines = [...lines];
       totalLineCount = totalCount;
+      if (newAllLines) allLines = newAllLines;
+
+      if (expanded && allLines.length > expandPrintedCount) {
+        // Print new lines above the spinner
+        if (extraLines > 0) {
+          process.stdout.write(`\x1b[${extraLines}A`);
+        }
+        process.stdout.write("\r\x1b[J");
+        extraLines = 0;
+        printAllLines();
+      }
+
       writeFrame();
     },
   };
