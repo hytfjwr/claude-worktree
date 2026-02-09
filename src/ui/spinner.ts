@@ -81,7 +81,7 @@ export function startSpinner(message: string): Spinner {
       const maxWidth = (process.stdout.columns || 80) - 6;
       for (const line of tailLines) {
         const formatted = formatTailLine(line, maxWidth);
-        output += `\n\x1b[90m    ${formatted}\x1b[0m`;
+        output += `\n\x1b[38;5;245m    ${formatted}\x1b[0m`;
       }
     }
     process.stdout.write(output);
