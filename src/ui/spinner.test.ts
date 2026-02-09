@@ -310,7 +310,7 @@ describe("keyboard handling", () => {
     });
   });
 
-  test("re-expand does not duplicate previously printed lines", () => {
+  test("re-expand shows all lines again since collapse clears them", () => {
     withTTYStdin((emitKey) => {
       const writeSpy = spyOn(process.stdout, "write");
       const spinner = startSpinner("Processing...", { timeoutSec: 600 });
@@ -319,17 +319,45 @@ describe("keyboard handling", () => {
 
       // Expand (prints all lines)
       emitKey(0x0f);
-      // Collapse
+      // Collapse (clears expanded lines from terminal)
       emitKey(0x0f);
       writeSpy.mockClear();
 
-      // Re-expand — should NOT re-print already permanently printed lines
+      // Re-expand — should re-print all lines since collapse cleared them
       emitKey(0x0f);
 
       const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
-      // "a" was already printed in the first expand, should not appear again
-      expect(output).not.toContain("    a");
+      // All lines should be printed again
+      expect(output).toContain("    a");
+      expect(output).toContain("    b");
       expect(output).toContain("Ctrl+O to collapse");
+
+      spinner.stop();
+      writeSpy.mockRestore();
+    });
+  });
+
+  test("collapse clears expanded lines from terminal", () => {
+    withTTYStdin((emitKey) => {
+      const writeSpy = spyOn(process.stdout, "write");
+      const spinner = startSpinner("Processing...", { timeoutSec: 600 });
+
+      spinner.updateTail(["c", "d", "e"], 100, ["a", "b", "c", "d", "e"]);
+
+      // Expand (prints 5 log lines + 1 info line for spinner area)
+      emitKey(0x0f);
+      writeSpy.mockClear();
+
+      // Collapse
+      emitKey(0x0f);
+
+      const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+      // Should move cursor up to cover expanded log lines (5) + spinner info line (1)
+      expect(output).toContain("\x1b[6A");
+      // Should clear from cursor to end of screen
+      expect(output).toContain("\x1b[J");
+      // Should show collapsed tail view
+      expect(output).toContain("Ctrl+O to expand");
 
       spinner.stop();
       writeSpy.mockRestore();

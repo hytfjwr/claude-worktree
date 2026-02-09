@@ -94,6 +94,7 @@ export function startSpinner(message: string, options?: { timeoutSec?: number })
   let allLines: string[] = [];
   let expanded = false;
   let expandPrintedCount = 0;
+  let expandedLogLines = 0;
   const startTime = Date.now();
   const timeoutSec = options?.timeoutSec;
 
@@ -137,6 +138,7 @@ export function startSpinner(message: string, options?: { timeoutSec?: number })
     for (let i = expandPrintedCount; i < allLines.length; i++) {
       const formatted = formatTailLine(allLines[i], maxWidth);
       process.stdout.write(`\x1b[38;5;245m    ${formatted}\x1b[0m\n`);
+      expandedLogLines++;
     }
     expandPrintedCount = allLines.length;
   };
@@ -149,11 +151,21 @@ export function startSpinner(message: string, options?: { timeoutSec?: number })
       }
       process.stdout.write("\r\x1b[J");
       extraLines = 0;
+      expandedLogLines = 0;
 
       // Print lines accumulated since last expand
       printAllLines();
       expanded = true;
     } else {
+      // Collapse: clear expanded lines + spinner area
+      const totalClearLines = expandedLogLines + extraLines;
+      if (totalClearLines > 0) {
+        process.stdout.write(`\x1b[${totalClearLines}A`);
+      }
+      process.stdout.write("\r\x1b[J");
+      extraLines = 0;
+      expandedLogLines = 0;
+      expandPrintedCount = 0;
       expanded = false;
     }
     writeFrame();
