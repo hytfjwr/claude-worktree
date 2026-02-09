@@ -244,10 +244,10 @@ describe("keyboard handling", () => {
     stdin.setRawMode = () => process.stdin;
     stdin.resume = () => process.stdin;
     stdin.pause = () => process.stdin;
-    stdin.on = (event: string, handler: (data: Buffer) => void) => {
+    stdin.on = ((event: string, handler: (data: Buffer) => void) => {
       if (event === "data") capturedHandler = handler;
       return process.stdin;
-    };
+    }) as typeof stdin.on;
     stdin.removeListener = () => process.stdin;
 
     try {
