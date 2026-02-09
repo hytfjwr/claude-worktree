@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 
 import { extractOptions } from "./options";
 import type { OptionSchema } from "./types";

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { checkWeztermAvailable, getCurrentPaneId, listWeztermPanes } from "./wezterm";
 
@@ -38,15 +38,17 @@ describe("checkWeztermAvailable", () => {
 });
 
 describe("listWeztermPanes", () => {
+  beforeEach(() => vi.resetModules());
+
   test("returns an array or null", async () => {
     const result = await listWeztermPanes();
     expect(result === null || Array.isArray(result)).toBe(true);
   });
 
   test("returns null when WezTerm is not available (mock)", async () => {
-    mock.module("./wezterm", () => ({
-      ...require("./wezterm"),
-      listWeztermPanes: mock(async () => null),
+    vi.doMock("./wezterm", async () => ({
+      ...(await vi.importActual("./wezterm")),
+      listWeztermPanes: vi.fn(async () => null),
     }));
 
     const { listWeztermPanes: mockedList } = await import("./wezterm");
@@ -59,9 +61,9 @@ describe("listWeztermPanes", () => {
       { pane_id: 1, title: "claude", cwd: "/tmp/wt-1" },
       { pane_id: 2, title: "shell", cwd: "/tmp/wt-2" },
     ];
-    mock.module("./wezterm", () => ({
-      ...require("./wezterm"),
-      listWeztermPanes: mock(async () => mockPanes),
+    vi.doMock("./wezterm", async () => ({
+      ...(await vi.importActual("./wezterm")),
+      listWeztermPanes: vi.fn(async () => mockPanes),
     }));
 
     const { listWeztermPanes: mockedList } = await import("./wezterm");
@@ -73,14 +75,16 @@ describe("listWeztermPanes", () => {
 });
 
 // ============================================================================
-// Tests for functions using shell commands (using mock.module)
+// Tests for functions using shell commands (using vi.doMock)
 // ============================================================================
 
 describe("splitPaneRight (mock)", () => {
+  beforeEach(() => vi.resetModules());
+
   test("returns pane ID", async () => {
-    mock.module("./wezterm", () => ({
-      ...require("./wezterm"),
-      splitPaneRight: mock(async () => "new-pane-123"),
+    vi.doMock("./wezterm", async () => ({
+      ...(await vi.importActual("./wezterm")),
+      splitPaneRight: vi.fn(async () => "new-pane-123"),
     }));
 
     const { splitPaneRight } = await import("./wezterm");
@@ -91,11 +95,13 @@ describe("splitPaneRight (mock)", () => {
 });
 
 describe("sendText (mock)", () => {
-  test("sends text", async () => {
-    const mockSendText = mock(async () => undefined);
+  beforeEach(() => vi.resetModules());
 
-    mock.module("./wezterm", () => ({
-      ...require("./wezterm"),
+  test("sends text", async () => {
+    const mockSendText = vi.fn(async () => undefined);
+
+    vi.doMock("./wezterm", async () => ({
+      ...(await vi.importActual("./wezterm")),
       sendText: mockSendText,
     }));
 
@@ -107,11 +113,13 @@ describe("sendText (mock)", () => {
 });
 
 describe("sendCommand (mock)", () => {
-  test("sends text with newline", async () => {
-    const mockSendCommand = mock(async () => undefined);
+  beforeEach(() => vi.resetModules());
 
-    mock.module("./wezterm", () => ({
-      ...require("./wezterm"),
+  test("sends text with newline", async () => {
+    const mockSendCommand = vi.fn(async () => undefined);
+
+    vi.doMock("./wezterm", async () => ({
+      ...(await vi.importActual("./wezterm")),
       sendCommand: mockSendCommand,
     }));
 
@@ -123,11 +131,13 @@ describe("sendCommand (mock)", () => {
 });
 
 describe("activatePane (mock)", () => {
-  test("activates pane", async () => {
-    const mockActivatePane = mock(async () => undefined);
+  beforeEach(() => vi.resetModules());
 
-    mock.module("./wezterm", () => ({
-      ...require("./wezterm"),
+  test("activates pane", async () => {
+    const mockActivatePane = vi.fn(async () => undefined);
+
+    vi.doMock("./wezterm", async () => ({
+      ...(await vi.importActual("./wezterm")),
       activatePane: mockActivatePane,
     }));
 
@@ -139,10 +149,12 @@ describe("activatePane (mock)", () => {
 });
 
 describe("createPane (mock)", () => {
+  beforeEach(() => vi.resetModules());
+
   test("creates pane and returns new paneId", async () => {
-    mock.module("./wezterm", () => ({
-      ...require("./wezterm"),
-      createPane: mock(async () => "created-pane-999"),
+    vi.doMock("./wezterm", async () => ({
+      ...(await vi.importActual("./wezterm")),
+      createPane: vi.fn(async () => "created-pane-999"),
     }));
 
     const { createPane } = await import("./wezterm");
@@ -152,9 +164,9 @@ describe("createPane (mock)", () => {
   });
 
   test("creates pane with keepFocus", async () => {
-    mock.module("./wezterm", () => ({
-      ...require("./wezterm"),
-      createPane: mock(async () => "new-pane"),
+    vi.doMock("./wezterm", async () => ({
+      ...(await vi.importActual("./wezterm")),
+      createPane: vi.fn(async () => "new-pane"),
     }));
 
     const { createPane } = await import("./wezterm");

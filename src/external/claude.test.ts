@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 
 import { buildClaudeCommand } from "./claude";
 
@@ -9,7 +9,7 @@ describe("buildClaudeCommand", () => {
     expect(result).toContain("--permission-mode plan");
     expect(result).toContain("Test prompt");
     expect(result).toContain("If anything is unclear, always confirm with the user before proceeding.");
-    expect(result).toStartWith("claude ");
+    expect(result).toMatch(/^claude /);
   });
 
   test("custom permission mode - auto-edit", () => {
@@ -81,7 +81,7 @@ PROMPT_END`);
     });
 
     expect(result).toContain("--dangerously-skip-permissions");
-    expect(result).toStartWith("claude --dangerously-skip-permissions");
+    expect(result).toMatch(/^claude --dangerously-skip-permissions/);
   });
 
   test("dangerouslySkipPermissions false - flag is not added", () => {

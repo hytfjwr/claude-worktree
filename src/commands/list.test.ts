@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, spyOn, test } from "bun:test";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import type {
   CommitInfo,
@@ -95,7 +95,7 @@ const defaultArgs: ListArgs = { json: false, verbose: false, status: false };
 
 // Suppress console output
 beforeEach(() => {
-  spyOn(console, "log").mockImplementation(() => {});
+  vi.spyOn(console, "log").mockImplementation(() => {});
 });
 
 // ============================================================================
@@ -401,7 +401,7 @@ describe("executeList", () => {
     const mainStatus = makeStatus({ isMain: true, branch: "main", path: "/repo" }, { reason: "Main worktree" });
 
     let jsonOutput = "";
-    spyOn(console, "log").mockImplementation((msg: string) => {
+    vi.spyOn(console, "log").mockImplementation((msg: string) => {
       jsonOutput += msg;
     });
 
@@ -479,7 +479,7 @@ describe("executeList", () => {
     const status = makeStatus({ branch: "feature/x", path: "/repo-feature-x" });
 
     let jsonOutput = "";
-    spyOn(console, "log").mockImplementation((msg: string) => {
+    vi.spyOn(console, "log").mockImplementation((msg: string) => {
       jsonOutput += msg;
     });
 
@@ -497,7 +497,7 @@ describe("executeList", () => {
 
   test("empty list in JSON mode", async () => {
     let jsonOutput = "";
-    spyOn(console, "log").mockImplementation((msg: string) => {
+    vi.spyOn(console, "log").mockImplementation((msg: string) => {
       jsonOutput += msg;
     });
 
@@ -638,7 +638,7 @@ describe("executeList", () => {
     const featureStatus = makeStatus({ branch: "feature/auth", path: "/repo-feature-auth" });
 
     let jsonOutput = "";
-    spyOn(console, "log").mockImplementation((msg: string) => {
+    vi.spyOn(console, "log").mockImplementation((msg: string) => {
       jsonOutput += msg;
     });
 

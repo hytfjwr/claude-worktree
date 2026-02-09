@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { WorktreeInfo } from "../types";
 import { buildWorktreeCommand, getWorktreePath, parseWorktreePorcelain } from "./git";
@@ -156,10 +156,12 @@ detached`;
 // ============================================================================
 
 describe("getGitContext (mock)", () => {
+  beforeEach(() => vi.resetModules());
+
   test("correctly retrieves repository info", async () => {
-    mock.module("./git", () => ({
-      ...require("./git"),
-      getGitContext: mock(async () => ({
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      getGitContext: vi.fn(async () => ({
         repoRoot: "/path/to/my-repo",
         repoName: "my-repo",
         currentBranch: "feature/test",
@@ -176,10 +178,12 @@ describe("getGitContext (mock)", () => {
 });
 
 describe("getMainBranch (mock)", () => {
+  beforeEach(() => vi.resetModules());
+
   test("returns main branch", async () => {
-    mock.module("./git", () => ({
-      ...require("./git"),
-      getMainBranch: mock(async () => "main"),
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      getMainBranch: vi.fn(async () => "main"),
     }));
 
     const { getMainBranch } = await import("./git");
@@ -189,9 +193,9 @@ describe("getMainBranch (mock)", () => {
   });
 
   test("returns master branch", async () => {
-    mock.module("./git", () => ({
-      ...require("./git"),
-      getMainBranch: mock(async () => "master"),
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      getMainBranch: vi.fn(async () => "master"),
     }));
 
     const { getMainBranch } = await import("./git");
@@ -202,10 +206,12 @@ describe("getMainBranch (mock)", () => {
 });
 
 describe("isWorktreeDirty (mock)", () => {
+  beforeEach(() => vi.resetModules());
+
   test("clean worktree - false", async () => {
-    mock.module("./git", () => ({
-      ...require("./git"),
-      isWorktreeDirty: mock(async () => false),
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      isWorktreeDirty: vi.fn(async () => false),
     }));
 
     const { isWorktreeDirty } = await import("./git");
@@ -215,9 +221,9 @@ describe("isWorktreeDirty (mock)", () => {
   });
 
   test("dirty worktree - true", async () => {
-    mock.module("./git", () => ({
-      ...require("./git"),
-      isWorktreeDirty: mock(async () => true),
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      isWorktreeDirty: vi.fn(async () => true),
     }));
 
     const { isWorktreeDirty } = await import("./git");
@@ -228,10 +234,12 @@ describe("isWorktreeDirty (mock)", () => {
 });
 
 describe("isBranchMerged (mock)", () => {
+  beforeEach(() => vi.resetModules());
+
   test("merged branch - true", async () => {
-    mock.module("./git", () => ({
-      ...require("./git"),
-      isBranchMerged: mock(async () => true),
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      isBranchMerged: vi.fn(async () => true),
     }));
 
     const { isBranchMerged } = await import("./git");
@@ -241,9 +249,9 @@ describe("isBranchMerged (mock)", () => {
   });
 
   test("unmerged branch - false", async () => {
-    mock.module("./git", () => ({
-      ...require("./git"),
-      isBranchMerged: mock(async () => false),
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      isBranchMerged: vi.fn(async () => false),
     }));
 
     const { isBranchMerged } = await import("./git");
@@ -254,10 +262,12 @@ describe("isBranchMerged (mock)", () => {
 });
 
 describe("isRemoteBranchDeleted (mock)", () => {
+  beforeEach(() => vi.resetModules());
+
   test("branch exists on remote - false", async () => {
-    mock.module("./git", () => ({
-      ...require("./git"),
-      isRemoteBranchDeleted: mock(async () => false),
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      isRemoteBranchDeleted: vi.fn(async () => false),
     }));
 
     const { isRemoteBranchDeleted } = await import("./git");
@@ -267,9 +277,9 @@ describe("isRemoteBranchDeleted (mock)", () => {
   });
 
   test("branch deleted from remote - true", async () => {
-    mock.module("./git", () => ({
-      ...require("./git"),
-      isRemoteBranchDeleted: mock(async () => true),
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      isRemoteBranchDeleted: vi.fn(async () => true),
     }));
 
     const { isRemoteBranchDeleted } = await import("./git");
@@ -280,6 +290,8 @@ describe("isRemoteBranchDeleted (mock)", () => {
 });
 
 describe("listWorktrees (mock)", () => {
+  beforeEach(() => vi.resetModules());
+
   test("retrieves worktree list", async () => {
     const mockWorktrees: WorktreeInfo[] = [
       {
@@ -298,9 +310,9 @@ describe("listWorktrees (mock)", () => {
       },
     ];
 
-    mock.module("./git", () => ({
-      ...require("./git"),
-      listWorktrees: mock(async () => mockWorktrees),
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      listWorktrees: vi.fn(async () => mockWorktrees),
     }));
 
     const { listWorktrees } = await import("./git");
@@ -314,9 +326,9 @@ describe("listWorktrees (mock)", () => {
   });
 
   test("empty worktree list", async () => {
-    mock.module("./git", () => ({
-      ...require("./git"),
-      listWorktrees: mock(async () => []),
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      listWorktrees: vi.fn(async () => []),
     }));
 
     const { listWorktrees } = await import("./git");
@@ -327,6 +339,8 @@ describe("listWorktrees (mock)", () => {
 });
 
 describe("findWorktreeByBranch (mock)", () => {
+  beforeEach(() => vi.resetModules());
+
   test("finds existing branch", async () => {
     const mockWorktree: WorktreeInfo = {
       path: "/path/to/repo-feature",
@@ -336,9 +350,9 @@ describe("findWorktreeByBranch (mock)", () => {
       isMain: false,
     };
 
-    mock.module("./git", () => ({
-      ...require("./git"),
-      findWorktreeByBranch: mock(async () => mockWorktree),
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      findWorktreeByBranch: vi.fn(async () => mockWorktree),
     }));
 
     const { findWorktreeByBranch } = await import("./git");
@@ -349,9 +363,9 @@ describe("findWorktreeByBranch (mock)", () => {
   });
 
   test("non-existent branch returns null", async () => {
-    mock.module("./git", () => ({
-      ...require("./git"),
-      findWorktreeByBranch: mock(async () => null),
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      findWorktreeByBranch: vi.fn(async () => null),
     }));
 
     const { findWorktreeByBranch } = await import("./git");
@@ -362,11 +376,13 @@ describe("findWorktreeByBranch (mock)", () => {
 });
 
 describe("deleteLocalBranch (mock)", () => {
-  test("branch deletion succeeds", async () => {
-    const mockDeleteLocalBranch = mock(async () => undefined);
+  beforeEach(() => vi.resetModules());
 
-    mock.module("./git", () => ({
-      ...require("./git"),
+  test("branch deletion succeeds", async () => {
+    const mockDeleteLocalBranch = vi.fn(async () => undefined);
+
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
       deleteLocalBranch: mockDeleteLocalBranch,
     }));
 
@@ -376,9 +392,9 @@ describe("deleteLocalBranch (mock)", () => {
   });
 
   test("deleting non-existent branch throws error", async () => {
-    mock.module("./git", () => ({
-      ...require("./git"),
-      deleteLocalBranch: mock(async () => {
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      deleteLocalBranch: vi.fn(async () => {
         throw new Error("Failed to delete branch nonexistent-branch: error: branch 'nonexistent-branch' not found.");
       }),
     }));
@@ -390,10 +406,12 @@ describe("deleteLocalBranch (mock)", () => {
 });
 
 describe("branchExists (mock)", () => {
+  beforeEach(() => vi.resetModules());
+
   test("returns true when branch exists", async () => {
-    mock.module("./git", () => ({
-      ...require("./git"),
-      branchExists: mock(async () => true),
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      branchExists: vi.fn(async () => true),
     }));
 
     const { branchExists } = await import("./git");
@@ -403,9 +421,9 @@ describe("branchExists (mock)", () => {
   });
 
   test("returns false for non-existent branch", async () => {
-    mock.module("./git", () => ({
-      ...require("./git"),
-      branchExists: mock(async () => false),
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      branchExists: vi.fn(async () => false),
     }));
 
     const { branchExists } = await import("./git");
@@ -420,6 +438,8 @@ describe("branchExists (mock)", () => {
 // ============================================================================
 
 describe("getWorktreeStatuses", () => {
+  beforeEach(() => vi.resetModules());
+
   function createWorktree(overrides: Partial<WorktreeInfo> = {}): WorktreeInfo {
     return {
       path: "/path/to/worktree",
@@ -434,10 +454,10 @@ describe("getWorktreeStatuses", () => {
   test("main worktree has canAutoClean: false", async () => {
     // getWorktreeStatuses internally calls isBranchMerged and isRemoteBranchDeleted
     // so we need to mock those
-    mock.module("./git", () => ({
-      ...require("./git"),
-      isBranchMerged: mock(async () => false),
-      isRemoteBranchDeleted: mock(async () => false),
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      isBranchMerged: vi.fn(async () => false),
+      isRemoteBranchDeleted: vi.fn(async () => false),
     }));
 
     const { getWorktreeStatuses } = await import("./git");
@@ -449,10 +469,10 @@ describe("getWorktreeStatuses", () => {
   });
 
   test("locked worktree has canAutoClean: false", async () => {
-    mock.module("./git", () => ({
-      ...require("./git"),
-      isBranchMerged: mock(async () => false),
-      isRemoteBranchDeleted: mock(async () => false),
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      isBranchMerged: vi.fn(async () => false),
+      isRemoteBranchDeleted: vi.fn(async () => false),
     }));
 
     const { getWorktreeStatuses } = await import("./git");
@@ -464,10 +484,10 @@ describe("getWorktreeStatuses", () => {
   });
 
   test("dirty worktree has canAutoClean: false", async () => {
-    mock.module("./git", () => ({
-      ...require("./git"),
-      isBranchMerged: mock(async () => false),
-      isRemoteBranchDeleted: mock(async () => false),
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      isBranchMerged: vi.fn(async () => false),
+      isRemoteBranchDeleted: vi.fn(async () => false),
     }));
 
     const { getWorktreeStatuses } = await import("./git");
@@ -479,10 +499,10 @@ describe("getWorktreeStatuses", () => {
   });
 
   test("condition priority: isMain > isLocked > isDirty", async () => {
-    mock.module("./git", () => ({
-      ...require("./git"),
-      isBranchMerged: mock(async () => false),
-      isRemoteBranchDeleted: mock(async () => false),
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      isBranchMerged: vi.fn(async () => false),
+      isRemoteBranchDeleted: vi.fn(async () => false),
     }));
 
     const { getWorktreeStatuses } = await import("./git");
@@ -499,10 +519,10 @@ describe("getWorktreeStatuses", () => {
   });
 
   test("null branch does not cause error", async () => {
-    mock.module("./git", () => ({
-      ...require("./git"),
-      isBranchMerged: mock(async () => false),
-      isRemoteBranchDeleted: mock(async () => false),
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      isBranchMerged: vi.fn(async () => false),
+      isRemoteBranchDeleted: vi.fn(async () => false),
     }));
 
     const { getWorktreeStatuses } = await import("./git");
@@ -515,10 +535,10 @@ describe("getWorktreeStatuses", () => {
   });
 
   test("merged branch has canAutoClean: true", async () => {
-    mock.module("./git", () => ({
-      ...require("./git"),
-      isBranchMerged: mock(async () => true),
-      isRemoteBranchDeleted: mock(async () => false),
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      isBranchMerged: vi.fn(async () => true),
+      isRemoteBranchDeleted: vi.fn(async () => false),
     }));
 
     const { getWorktreeStatuses } = await import("./git");
@@ -530,10 +550,10 @@ describe("getWorktreeStatuses", () => {
   });
 
   test("remote deleted branch has canAutoClean: true", async () => {
-    mock.module("./git", () => ({
-      ...require("./git"),
-      isBranchMerged: mock(async () => false),
-      isRemoteBranchDeleted: mock(async () => true),
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      isBranchMerged: vi.fn(async () => false),
+      isRemoteBranchDeleted: vi.fn(async () => true),
     }));
 
     const { getWorktreeStatuses } = await import("./git");
@@ -545,10 +565,10 @@ describe("getWorktreeStatuses", () => {
   });
 
   test("merged & remote deleted", async () => {
-    mock.module("./git", () => ({
-      ...require("./git"),
-      isBranchMerged: mock(async () => true),
-      isRemoteBranchDeleted: mock(async () => true),
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      isBranchMerged: vi.fn(async () => true),
+      isRemoteBranchDeleted: vi.fn(async () => true),
     }));
 
     const { getWorktreeStatuses } = await import("./git");
@@ -560,10 +580,10 @@ describe("getWorktreeStatuses", () => {
   });
 
   test("active branch has canAutoClean: false", async () => {
-    mock.module("./git", () => ({
-      ...require("./git"),
-      isBranchMerged: mock(async () => false),
-      isRemoteBranchDeleted: mock(async () => false),
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      isBranchMerged: vi.fn(async () => false),
+      isRemoteBranchDeleted: vi.fn(async () => false),
     }));
 
     const { getWorktreeStatuses } = await import("./git");

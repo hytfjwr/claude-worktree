@@ -1,4 +1,4 @@
-import { describe, expect, spyOn, test } from "bun:test";
+import { describe, expect, test, vi } from "vitest";
 
 import {
   createTailUpdater,
@@ -58,7 +58,7 @@ describe("startSpinner", () => {
   });
 
   test("hides cursor on start", () => {
-    const writeSpy = spyOn(process.stdout, "write");
+    const writeSpy = vi.spyOn(process.stdout, "write");
     const spinner = startSpinner("Processing...");
 
     const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
@@ -68,7 +68,7 @@ describe("startSpinner", () => {
   });
 
   test("stop() clears tail lines and outputs clear sequence", () => {
-    const writeSpy = spyOn(process.stdout, "write");
+    const writeSpy = vi.spyOn(process.stdout, "write");
     const spinner = startSpinner("Processing...");
     spinner.updateTail(["line 1", "line 2", "line 3"], 3);
     writeSpy.mockClear();
@@ -88,7 +88,7 @@ describe("startSpinner", () => {
   });
 
   test("fail() clears tail lines and outputs clear sequence", () => {
-    const writeSpy = spyOn(process.stdout, "write");
+    const writeSpy = vi.spyOn(process.stdout, "write");
     const spinner = startSpinner("Processing...");
     spinner.updateTail(["line 1", "line 2"], 2);
     writeSpy.mockClear();
@@ -108,7 +108,7 @@ describe("startSpinner", () => {
   });
 
   test("renders info line when timeout is specified", () => {
-    const writeSpy = spyOn(process.stdout, "write");
+    const writeSpy = vi.spyOn(process.stdout, "write");
     const spinner = startSpinner("Processing...", { timeoutSec: 600 });
     writeSpy.mockClear();
 
@@ -123,7 +123,7 @@ describe("startSpinner", () => {
   });
 
   test("shows Ctrl+O expand hint when hidden lines exist", () => {
-    const writeSpy = spyOn(process.stdout, "write");
+    const writeSpy = vi.spyOn(process.stdout, "write");
     const spinner = startSpinner("Processing...", { timeoutSec: 600 });
     writeSpy.mockClear();
 
@@ -136,7 +136,7 @@ describe("startSpinner", () => {
   });
 
   test("does not show Ctrl+O expand hint when all lines visible", () => {
-    const writeSpy = spyOn(process.stdout, "write");
+    const writeSpy = vi.spyOn(process.stdout, "write");
     const spinner = startSpinner("Processing...", { timeoutSec: 600 });
     writeSpy.mockClear();
 
@@ -149,7 +149,7 @@ describe("startSpinner", () => {
   });
 
   test("renders info line without hidden count when all lines visible", () => {
-    const writeSpy = spyOn(process.stdout, "write");
+    const writeSpy = vi.spyOn(process.stdout, "write");
     const spinner = startSpinner("Processing...", { timeoutSec: 60 });
     writeSpy.mockClear();
 
@@ -164,7 +164,7 @@ describe("startSpinner", () => {
   });
 
   test("does not render info line when no timeout", () => {
-    const writeSpy = spyOn(process.stdout, "write");
+    const writeSpy = vi.spyOn(process.stdout, "write");
     const spinner = startSpinner("Processing...");
     writeSpy.mockClear();
 
@@ -268,7 +268,7 @@ describe("keyboard handling", () => {
 
   test("Ctrl+O toggles to expanded mode showing all lines", () => {
     withTTYStdin((emitKey) => {
-      const writeSpy = spyOn(process.stdout, "write");
+      const writeSpy = vi.spyOn(process.stdout, "write");
       const spinner = startSpinner("Processing...", { timeoutSec: 600 });
 
       spinner.updateTail(["c", "d", "e"], 5, ["a", "b", "c", "d", "e"]);
@@ -291,7 +291,7 @@ describe("keyboard handling", () => {
 
   test("Ctrl+O collapse hides expanded lines and shows tail", () => {
     withTTYStdin((emitKey) => {
-      const writeSpy = spyOn(process.stdout, "write");
+      const writeSpy = vi.spyOn(process.stdout, "write");
       const spinner = startSpinner("Processing...", { timeoutSec: 600 });
 
       spinner.updateTail(["c", "d", "e"], 5, ["a", "b", "c", "d", "e"]);
@@ -312,7 +312,7 @@ describe("keyboard handling", () => {
 
   test("re-expand shows all lines again since collapse clears them", () => {
     withTTYStdin((emitKey) => {
-      const writeSpy = spyOn(process.stdout, "write");
+      const writeSpy = vi.spyOn(process.stdout, "write");
       const spinner = startSpinner("Processing...", { timeoutSec: 600 });
 
       spinner.updateTail(["c", "d", "e"], 5, ["a", "b", "c", "d", "e"]);
@@ -339,7 +339,7 @@ describe("keyboard handling", () => {
 
   test("collapse clears expanded lines from terminal", () => {
     withTTYStdin((emitKey) => {
-      const writeSpy = spyOn(process.stdout, "write");
+      const writeSpy = vi.spyOn(process.stdout, "write");
       const spinner = startSpinner("Processing...", { timeoutSec: 600 });
 
       spinner.updateTail(["c", "d", "e"], 100, ["a", "b", "c", "d", "e"]);
@@ -366,7 +366,7 @@ describe("keyboard handling", () => {
 
   test("stop() cleans up keyboard listener", () => {
     withTTYStdin((_emitKey) => {
-      const writeSpy = spyOn(process.stdout, "write");
+      const writeSpy = vi.spyOn(process.stdout, "write");
       const spinner = startSpinner("Processing...", { timeoutSec: 600 });
 
       // stop() should not throw even with keyboard listener active

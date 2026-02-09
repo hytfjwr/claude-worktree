@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
 import { tmpdir } from "node:os";
+import { describe, expect, test } from "vitest";
 
 import type { HookVars, ProjectConfig } from "../types";
 import { DEFAULT_HOOK_TIMEOUT, resolveHookTimeout, runHook } from "./config";

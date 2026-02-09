@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, spyOn, test } from "bun:test";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { CleanArgs, CleanDeps, WorktreeInfo, WorktreeStatus } from "../types";
 import { executeClean } from "./clean";
@@ -60,12 +60,12 @@ function makeDeps(overrides: Partial<CleanDeps> = {}): CleanDeps {
 const defaultArgs: CleanArgs = { force: false, all: false, dryRun: false, verbose: false };
 
 // Suppress console output
-let consoleWarnSpy: ReturnType<typeof spyOn>;
+let consoleWarnSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
-  spyOn(console, "log").mockImplementation(() => {});
-  consoleWarnSpy = spyOn(console, "warn").mockImplementation(() => {});
-  spyOn(console, "debug").mockImplementation(() => {});
+  vi.spyOn(console, "log").mockImplementation(() => {});
+  consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+  vi.spyOn(console, "debug").mockImplementation(() => {});
 });
 
 // ============================================================================
