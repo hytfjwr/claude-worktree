@@ -1,9 +1,6 @@
-import { describe, expect, test, mock, beforeEach } from "bun:test";
-import {
-  getWorktreePath,
-  buildWorktreeCommand,
-  parseWorktreePorcelain,
-} from "./git";
+import { describe, expect, mock, test } from "bun:test";
+
+import { buildWorktreeCommand, getWorktreePath, parseWorktreePorcelain } from "./git";
 import type { WorktreeInfo } from "./types";
 
 // ============================================================================

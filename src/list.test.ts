@@ -1,15 +1,16 @@
-import { describe, expect, test, beforeEach, spyOn } from "bun:test";
+import { beforeEach, describe, expect, spyOn, test } from "bun:test";
+
 import {
   executeList,
-  formatRelativeTime,
-  truncate,
-  shortenPath,
-  getStatusBadge,
   formatAheadBehind,
+  formatRelativeTime,
   formatSummary,
   formatWorktreeEntry,
+  getStatusBadge,
+  shortenPath,
+  truncate,
 } from "./list";
-import type { WorktreeInfo, WorktreeStatus, CommitInfo, ListArgs, ListDeps, WorktreeListEntry } from "./types";
+import type { CommitInfo, ListArgs, ListDeps, WorktreeInfo, WorktreeListEntry, WorktreeStatus } from "./types";
 
 // ============================================================================
 // Helper functions
@@ -169,9 +170,7 @@ describe("truncate", () => {
 
 describe("shortenPath", () => {
   test("returns relative path from repo root", () => {
-    expect(shortenPath("/home/user/repo-feature-test", "/home/user/repo")).toBe(
-      "../repo-feature-test",
-    );
+    expect(shortenPath("/home/user/repo-feature-test", "/home/user/repo")).toBe("../repo-feature-test");
   });
 
   test("returns path for same directory", () => {
@@ -347,10 +346,7 @@ describe("executeList", () => {
 
   test("single main worktree", async () => {
     const mainWt = makeWorktree({ isMain: true, branch: "main", path: "/repo" });
-    const mainStatus = makeStatus(
-      { isMain: true, branch: "main", path: "/repo" },
-      { reason: "Main worktree" },
-    );
+    const mainStatus = makeStatus({ isMain: true, branch: "main", path: "/repo" }, { reason: "Main worktree" });
     const deps = makeListDeps({
       listWorktrees: async () => [mainWt],
       getWorktreeStatuses: async () => [mainStatus],
@@ -391,10 +387,7 @@ describe("executeList", () => {
 
   test("JSON mode outputs valid JSON", async () => {
     const mainWt = makeWorktree({ isMain: true, branch: "main", path: "/repo" });
-    const mainStatus = makeStatus(
-      { isMain: true, branch: "main", path: "/repo" },
-      { reason: "Main worktree" },
-    );
+    const mainStatus = makeStatus({ isMain: true, branch: "main", path: "/repo" }, { reason: "Main worktree" });
 
     let jsonOutput = "";
     spyOn(console, "log").mockImplementation((msg: string) => {

@@ -1,14 +1,8 @@
-import { relative } from "path";
-import {
-  fetchAndPrune,
-  listWorktrees,
-  getWorktreeStatuses,
-  getLastCommit,
-  getAheadBehind,
-  getMainBranch,
-} from "./git";
+import { relative } from "node:path";
+
+import { fetchAndPrune, getAheadBehind, getLastCommit, getMainBranch, getWorktreeStatuses, listWorktrees } from "./git";
 import { startSpinner } from "./spinner";
-import type { WorktreeStatus, AheadBehind, ListArgs, WorktreeListEntry, ListResult, ListDeps } from "./types";
+import type { AheadBehind, ListArgs, ListDeps, ListResult, WorktreeListEntry, WorktreeStatus } from "./types";
 
 const defaultDeps: ListDeps = {
   fetchAndPrune,
@@ -108,11 +102,7 @@ export function formatAheadBehind(ab: AheadBehind | null): string {
   return parts.join(" ");
 }
 
-export function formatWorktreeEntry(
-  entry: WorktreeListEntry,
-  repoRoot: string,
-  verbose: boolean,
-): string[] {
+export function formatWorktreeEntry(entry: WorktreeListEntry, repoRoot: string, verbose: boolean): string[] {
   const { worktree, status, commit, aheadBehind } = entry;
   const badge = getStatusBadge(status);
   const branch = worktree.branch || "(detached)";
@@ -217,9 +207,7 @@ export async function executeList(args: ListArgs, deps: ListDeps = defaultDeps):
         isLocked: e.worktree.isLocked,
         isDirty: e.worktree.isDirty,
         status: getStatusBadge(e.status).label,
-        commit: e.commit
-          ? { hash: e.commit.hash, message: e.commit.message, date: e.commit.date.toISOString() }
-          : null,
+        commit: e.commit ? { hash: e.commit.hash, message: e.commit.message, date: e.commit.date.toISOString() } : null,
         aheadBehind: e.aheadBehind,
       })),
     };

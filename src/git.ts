@@ -1,6 +1,7 @@
 import { $ } from "bun";
-import { join, basename } from "path";
-import type { GitContext, WorktreeInfo, WorktreeStatus, ParsedWorktree, CommitInfo, AheadBehind } from "./types";
+import { basename, join } from "node:path";
+
+import type { AheadBehind, CommitInfo, GitContext, ParsedWorktree, WorktreeInfo, WorktreeStatus } from "./types";
 
 export async function getGitContext(): Promise<GitContext> {
   const repoRoot = (await $`git rev-parse --show-toplevel`.text()).trim();
@@ -28,13 +29,8 @@ export function buildWorktreeCommand(branchName: string, worktreePath: string, b
   return `git worktree add -b ${branchName} "${worktreePath}" ${baseBranch}`;
 }
 
-export async function createWorktree(
-  branchName: string,
-  worktreePath: string,
-  baseBranch: string
-): Promise<void> {
-  const result = await $`git worktree add -b ${branchName} ${worktreePath} ${baseBranch}`
-    .nothrow().quiet();
+export async function createWorktree(branchName: string, worktreePath: string, baseBranch: string): Promise<void> {
+  const result = await $`git worktree add -b ${branchName} ${worktreePath} ${baseBranch}`.nothrow().quiet();
   if (result.exitCode !== 0) {
     const stderr = result.stderr.toString().trim();
     throw new Error(`Failed to create worktree: ${stderr}`);
@@ -136,7 +132,7 @@ export async function isWorktreeDirty(worktreePath: string): Promise<boolean> {
 }
 
 export async function isBranchMerged(branch: string, baseBranch?: string): Promise<boolean> {
-  const base = baseBranch || await getMainBranch();
+  const base = baseBranch || (await getMainBranch());
 
   // Check if branch is merged into base
   const result = await $`git branch --merged ${base}`.nothrow().quiet();
@@ -144,7 +140,11 @@ export async function isBranchMerged(branch: string, baseBranch?: string): Promi
     return false;
   }
 
-  const mergedBranches = result.text().trim().split("\n").map((b: string) => b.trim().replace("* ", ""));
+  const mergedBranches = result
+    .text()
+    .trim()
+    .split("\n")
+    .map((b: string) => b.trim().replace("* ", ""));
   return mergedBranches.includes(branch);
 }
 

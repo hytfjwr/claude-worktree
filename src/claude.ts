@@ -1,4 +1,4 @@
-import type { MergeInstructions, DraftInstructions, ClaudeOptions } from "./types";
+import type { ClaudeOptions, DraftInstructions, MergeInstructions } from "./types";
 
 const DEFAULT_PROMPT_SUFFIX = "\n\nIf anything is unclear, always confirm with the user before proceeding.";
 
@@ -40,15 +40,17 @@ After completing the task, execute the following steps:
    - Report the URL of the created PR`;
 
 function buildMergeInstructions(mergeInstructions: MergeInstructions): string {
-  return MERGE_INSTRUCTION_TEMPLATE
-    .replace("{baseBranch}", mergeInstructions.baseBranch)
-    .replace("{worktreePath}", mergeInstructions.worktreePath);
+  return MERGE_INSTRUCTION_TEMPLATE.replace("{baseBranch}", mergeInstructions.baseBranch).replace(
+    "{worktreePath}",
+    mergeInstructions.worktreePath,
+  );
 }
 
 function buildDraftInstructions(draftInstructions: DraftInstructions): string {
-  return DRAFT_INSTRUCTION_TEMPLATE
-    .replace("{baseBranch}", draftInstructions.baseBranch)
-    .replace("{branchName}", draftInstructions.branchName);
+  return DRAFT_INSTRUCTION_TEMPLATE.replace("{baseBranch}", draftInstructions.baseBranch).replace(
+    "{branchName}",
+    draftInstructions.branchName,
+  );
 }
 
 /**

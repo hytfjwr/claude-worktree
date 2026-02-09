@@ -1,5 +1,6 @@
-import { describe, expect, test, afterEach, mock } from "bun:test";
-import { getCurrentPaneId, checkWeztermAvailable } from "./wezterm";
+import { afterEach, describe, expect, mock, test } from "bun:test";
+
+import { checkWeztermAvailable, getCurrentPaneId } from "./wezterm";
 
 // ============================================================================
 // Tests for pure functions using environment variables (no mocks needed)

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import { extractOptions } from "./options";
 import type { OptionSchema } from "./types";
 

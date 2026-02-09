@@ -1,10 +1,9 @@
 import { $ } from "bun";
-import { join } from "path";
-import type { ProjectConfig, HookVars } from "./types";
+import { join } from "node:path";
 
-export async function loadProjectConfig(
-  repoRoot: string
-): Promise<ProjectConfig | null> {
+import type { HookVars, ProjectConfig } from "./types";
+
+export async function loadProjectConfig(repoRoot: string): Promise<ProjectConfig | null> {
   const configPath = join(repoRoot, ".claude-worktree.json");
   const file = Bun.file(configPath);
 
@@ -29,9 +28,7 @@ export async function loadProjectConfig(
 function validateHookVars(vars: HookVars): void {
   const shellMetachars = /[;&|`$()<>\n\r]/;
   if (shellMetachars.test(vars.path)) {
-    throw new Error(
-      `Invalid hook variable: path "${vars.path}" contains shell metacharacters`
-    );
+    throw new Error(`Invalid hook variable: path "${vars.path}" contains shell metacharacters`);
   }
 }
 
@@ -39,23 +36,18 @@ export function buildHookCommand(template: string, vars: HookVars): string {
   validateHookVars(vars);
   return template
     .replace(/\{path\}/g, vars.path)
-    .replace(
-      /\{slot\}/g,
-      vars.slot !== undefined ? String(vars.slot) : ""
-    );
+    .replace(/\{slot\}/g, vars.slot !== undefined ? String(vars.slot) : "");
 }
 
 export async function runHook(
   command: string,
   cwd: string,
-  options?: { verbose?: boolean; onLine?: (line: string) => void }
+  options?: { verbose?: boolean; onLine?: (line: string) => void },
 ): Promise<void> {
   if (options?.verbose) {
     const result = await $`${{ raw: command }}`.cwd(cwd).nothrow();
     if (result.exitCode !== 0) {
-      throw new Error(
-        `Hook command failed with exit code ${result.exitCode}: ${command}`
-      );
+      throw new Error(`Hook command failed with exit code ${result.exitCode}: ${command}`);
     }
     return;
   }
@@ -82,7 +74,7 @@ export async function runHook(
 
         for (const line of lines) {
           if (line.trim()) {
-            options.onLine!(line);
+            options.onLine?.(line);
           }
         }
       }
@@ -94,28 +86,21 @@ export async function runHook(
       }
 
       if (buffer.trim()) {
-        options.onLine!(buffer);
+        options.onLine?.(buffer);
       }
     };
 
-    await Promise.all([
-      readStream(proc.stdout),
-      readStream(proc.stderr),
-    ]);
+    await Promise.all([readStream(proc.stdout), readStream(proc.stderr)]);
 
     const exitCode = await proc.exited;
     if (exitCode !== 0) {
-      throw new Error(
-        `Hook command failed with exit code ${exitCode}: ${command}`
-      );
+      throw new Error(`Hook command failed with exit code ${exitCode}: ${command}`);
     }
     return;
   }
 
   const result = await $`${{ raw: command }}`.cwd(cwd).nothrow().quiet();
   if (result.exitCode !== 0) {
-    throw new Error(
-      `Hook command failed with exit code ${result.exitCode}: ${command}`
-    );
+    throw new Error(`Hook command failed with exit code ${result.exitCode}: ${command}`);
   }
 }

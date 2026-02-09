@@ -1,15 +1,15 @@
+import { buildHookCommand, loadProjectConfig, runHook } from "./config";
 import {
-  getGitContext,
-  listWorktrees,
-  getWorktreeStatuses,
-  removeWorktree,
   deleteLocalBranch,
   fetchAndPrune,
+  getGitContext,
+  getWorktreeStatuses,
+  listWorktrees,
+  removeWorktree,
 } from "./git";
 import { confirm, selectMultiple } from "./prompt";
-import { loadProjectConfig, buildHookCommand, runHook } from "./config";
-import { startSpinner, createTailUpdater } from "./spinner";
-import type { ProjectConfig, WorktreeStatus, CleanArgs, CleanResult, CleanDeps } from "./types";
+import { createTailUpdater, startSpinner } from "./spinner";
+import type { CleanArgs, CleanDeps, CleanResult, ProjectConfig, WorktreeStatus } from "./types";
 
 const defaultDeps: CleanDeps = {
   fetchAndPrune,
@@ -100,9 +100,7 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
   // Confirmation
   if (!args.force) {
     console.log("");
-    const confirmed = await deps.confirm(
-      `Delete ${toDelete.length} worktree(s)?`
-    );
+    const confirmed = await deps.confirm(`Delete ${toDelete.length} worktree(s)?`);
     if (!confirmed) {
       console.log("Cancelled.");
       return result;
@@ -118,9 +116,7 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
     config = await deps.loadProjectConfig(repoRoot);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.debug(
-      `preClean hooks will be skipped: failed to get git context or load project config: ${message}`
-    );
+    console.debug(`preClean hooks will be skipped: failed to get git context or load project config: ${message}`);
   }
 
   // Execute deletion

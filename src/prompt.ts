@@ -1,4 +1,5 @@
 import * as readline from "node:readline";
+
 import type { WorktreeStatus } from "./types";
 
 function createReadlineInterface(): readline.Interface {
@@ -27,9 +28,7 @@ export async function confirm(message: string): Promise<boolean> {
   }
 }
 
-export async function selectMultiple(
-  statuses: WorktreeStatus[]
-): Promise<WorktreeStatus[]> {
+export async function selectMultiple(statuses: WorktreeStatus[]): Promise<WorktreeStatus[]> {
   console.log("\nSelect worktrees to delete (enter numbers separated by spaces):");
   console.log("Example: 1 3 5 or 'all' to select all, empty to cancel\n");
 

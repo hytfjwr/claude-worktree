@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { parseArgs, parseCreateArgs, parseCleanArgs, parseListArgs } from "./cli";
+
+import { parseArgs, parseCleanArgs, parseCreateArgs, parseListArgs } from "./cli";
 
 describe("parseArgs", () => {
   describe("help", () => {
@@ -486,14 +487,12 @@ describe("parseCreateArgs", () => {
 
   test("error: -merge and -draft are mutually exclusive", () => {
     expect(() => parseCreateArgs(["feature/test", "Prompt", "-merge", "-draft"])).toThrow(
-      "Cannot use both -merge and -draft options"
+      "Cannot use both -merge and -draft options",
     );
   });
 
   test("error: -base without argument", () => {
-    expect(() => parseCreateArgs(["feature/test", "Prompt", "-base"])).toThrow(
-      "-base requires a branch name argument"
-    );
+    expect(() => parseCreateArgs(["feature/test", "Prompt", "-base"])).toThrow("-base requires a branch name argument");
   });
 
   test("error: not enough arguments (0)", () => {
@@ -501,21 +500,17 @@ describe("parseCreateArgs", () => {
   });
 
   test("error: no prompt and no -plan", () => {
-    expect(() => parseCreateArgs(["feature/test"])).toThrow(
-      "A prompt or -plan option is required"
-    );
+    expect(() => parseCreateArgs(["feature/test"])).toThrow("A prompt or -plan option is required");
   });
 
   test("error: -plan without argument", () => {
-    expect(() => parseCreateArgs(["feature/test", "-plan"])).toThrow(
-      "-plan requires a file path argument"
-    );
+    expect(() => parseCreateArgs(["feature/test", "-plan"])).toThrow("-plan requires a file path argument");
   });
 
   test("error: both -plan and inline prompt", () => {
-    expect(() =>
-      parseCreateArgs(["feature/test", "Prompt", "-plan", "plan.md"])
-    ).toThrow("Cannot use both -plan and inline prompt");
+    expect(() => parseCreateArgs(["feature/test", "Prompt", "-plan", "plan.md"])).toThrow(
+      "Cannot use both -plan and inline prompt",
+    );
   });
 
   test("multi-word inline prompt", () => {
@@ -524,21 +519,15 @@ describe("parseCreateArgs", () => {
   });
 
   test("error: unknown option -unknown", () => {
-    expect(() => parseCreateArgs(["feature/test", "-unknown", "text"])).toThrow(
-      "Unknown option: -unknown"
-    );
+    expect(() => parseCreateArgs(["feature/test", "-unknown", "text"])).toThrow("Unknown option: -unknown");
   });
 
   test("error: unknown short option -x", () => {
-    expect(() => parseCreateArgs(["feature/test", "-x"])).toThrow(
-      "Unknown option: -x"
-    );
+    expect(() => parseCreateArgs(["feature/test", "-x"])).toThrow("Unknown option: -x");
   });
 
   test("error: unknown option after prompt", () => {
-    expect(() => parseCreateArgs(["feature/test", "Prompt", "-foo"])).toThrow(
-      "Unknown option: -foo"
-    );
+    expect(() => parseCreateArgs(["feature/test", "Prompt", "-foo"])).toThrow("Unknown option: -foo");
   });
 });
 

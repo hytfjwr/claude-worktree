@@ -1,4 +1,5 @@
-import { describe, expect, test, spyOn } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
+
 import { createTailUpdater, formatTailLine, lerp, shimmerText, smoothstep, startSpinner, stripAnsi } from "./spinner";
 
 describe("startSpinner", () => {
@@ -83,7 +84,9 @@ describe("createTailUpdater", () => {
     const mockSpinner = {
       stop: () => {},
       fail: () => {},
-      updateTail: (lines: string[]) => { calls.push([...lines]); },
+      updateTail: (lines: string[]) => {
+        calls.push([...lines]);
+      },
     };
 
     const onLine = createTailUpdater(mockSpinner);
@@ -98,7 +101,10 @@ describe("createTailUpdater", () => {
     const mockSpinner = {
       stop: () => {},
       fail: () => {},
-      updateTail: (lines: string[]) => { lastCall.length = 0; lastCall.push(...lines); },
+      updateTail: (lines: string[]) => {
+        lastCall.length = 0;
+        lastCall.push(...lines);
+      },
     };
 
     const onLine = createTailUpdater(mockSpinner);
@@ -162,7 +168,7 @@ describe("formatTailLine", () => {
   });
 
   test("strips ANSI before truncating", () => {
-    const colored = "\x1b[31m" + "a".repeat(100) + "\x1b[0m";
+    const colored = `\x1b[31m${"a".repeat(100)}\x1b[0m`;
     const result = formatTailLine(colored, 50);
     expect(result.length).toBe(50);
     expect(result).not.toContain("\x1b");

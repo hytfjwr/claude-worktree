@@ -1,6 +1,7 @@
-import { describe, expect, test, beforeEach, spyOn } from "bun:test";
+import { beforeEach, describe, expect, spyOn, test } from "bun:test";
+
 import { executeClean } from "./clean";
-import type { WorktreeInfo, WorktreeStatus, CleanArgs, CleanDeps } from "./types";
+import type { CleanArgs, CleanDeps, WorktreeInfo, WorktreeStatus } from "./types";
 
 // ============================================================================
 // Helper functions
@@ -19,7 +20,7 @@ function makeWorktree(overrides: Partial<WorktreeInfo> = {}): WorktreeInfo {
 
 function makeStatus(
   worktreeOverrides: Partial<WorktreeInfo> = {},
-  statusOverrides: Partial<Omit<WorktreeStatus, "worktree">> = {}
+  statusOverrides: Partial<Omit<WorktreeStatus, "worktree">> = {},
 ): WorktreeStatus {
   return {
     worktree: makeWorktree(worktreeOverrides),
@@ -44,8 +45,7 @@ function makeDeps(overrides: Partial<CleanDeps> = {}): CleanDeps {
       currentBranch: "main",
     }),
     loadProjectConfig: async () => null,
-    buildHookCommand: (template, vars) =>
-      template.replace(/\{path\}/g, vars.path),
+    buildHookCommand: (template, vars) => template.replace(/\{path\}/g, vars.path),
     runHook: async () => {},
     confirm: async () => true,
     selectMultiple: async () => [],
@@ -86,12 +86,7 @@ describe("executeClean", () => {
       const mainWorktree = makeWorktree({ isMain: true, branch: "main" });
       const deps = makeDeps({
         listWorktrees: async () => [mainWorktree],
-        getWorktreeStatuses: async () => [
-          makeStatus(
-            { isMain: true, branch: "main" },
-            { reason: "Main worktree" }
-          ),
-        ],
+        getWorktreeStatuses: async () => [makeStatus({ isMain: true, branch: "main" }, { reason: "Main worktree" })],
       });
 
       const result = await executeClean(defaultArgs, deps);
@@ -105,9 +100,7 @@ describe("executeClean", () => {
       const worktree = makeWorktree();
       const deps = makeDeps({
         listWorktrees: async () => [worktree],
-        getWorktreeStatuses: async () => [
-          makeStatus({}, { canAutoClean: false, reason: "Active" }),
-        ],
+        getWorktreeStatuses: async () => [makeStatus({}, { canAutoClean: false, reason: "Active" })],
       });
 
       const result = await executeClean(defaultArgs, deps);
@@ -122,7 +115,7 @@ describe("executeClean", () => {
       });
       const status = makeStatus(
         { path: "/tmp/repo-feature-merged", branch: "feature/merged" },
-        { canAutoClean: true, branchMerged: true, reason: "Merged" }
+        { canAutoClean: true, branchMerged: true, reason: "Merged" },
       );
       const deps = makeDeps({
         listWorktrees: async () => [worktree],
@@ -147,14 +140,8 @@ describe("executeClean", () => {
         path: "/tmp/repo-b",
         branch: "feature/b",
       });
-      const status1 = makeStatus(
-        { path: "/tmp/repo-a", branch: "feature/a" },
-        { canAutoClean: false }
-      );
-      const status2 = makeStatus(
-        { path: "/tmp/repo-b", branch: "feature/b" },
-        { canAutoClean: true }
-      );
+      const status1 = makeStatus({ path: "/tmp/repo-a", branch: "feature/a" }, { canAutoClean: false });
+      const status2 = makeStatus({ path: "/tmp/repo-b", branch: "feature/b" }, { canAutoClean: true });
 
       const deps = makeDeps({
         listWorktrees: async () => [wt1, wt2],
@@ -163,10 +150,7 @@ describe("executeClean", () => {
         confirm: async () => true,
       });
 
-      const result = await executeClean(
-        { ...defaultArgs, all: true, force: true },
-        deps
-      );
+      const result = await executeClean({ ...defaultArgs, all: true, force: true }, deps);
 
       expect(result.deleted).toEqual(["/tmp/repo-b"]);
     });
@@ -179,10 +163,7 @@ describe("executeClean", () => {
         selectMultiple: async () => [],
       });
 
-      const result = await executeClean(
-        { ...defaultArgs, all: true },
-        deps
-      );
+      const result = await executeClean({ ...defaultArgs, all: true }, deps);
 
       expect(result).toEqual({ deleted: [], skipped: [], errors: [] });
     });
@@ -196,7 +177,7 @@ describe("executeClean", () => {
       });
       const status = makeStatus(
         { path: "/tmp/repo-feature-merged", branch: "feature/merged" },
-        { canAutoClean: true, reason: "Merged" }
+        { canAutoClean: true, reason: "Merged" },
       );
       let removeWorktreeCalled = false;
       const deps = makeDeps({
@@ -207,10 +188,7 @@ describe("executeClean", () => {
         },
       });
 
-      const result = await executeClean(
-        { ...defaultArgs, dryRun: true },
-        deps
-      );
+      const result = await executeClean({ ...defaultArgs, dryRun: true }, deps);
 
       expect(removeWorktreeCalled).toBe(false);
       expect(result).toEqual({ deleted: [], skipped: [], errors: [] });
@@ -260,23 +238,14 @@ describe("executeClean", () => {
     test("records successfully deleted worktrees in deleted", async () => {
       const wt1 = makeWorktree({ path: "/tmp/repo-a", branch: "feature/a" });
       const wt2 = makeWorktree({ path: "/tmp/repo-b", branch: "feature/b" });
-      const status1 = makeStatus(
-        { path: "/tmp/repo-a", branch: "feature/a" },
-        { canAutoClean: true }
-      );
-      const status2 = makeStatus(
-        { path: "/tmp/repo-b", branch: "feature/b" },
-        { canAutoClean: true }
-      );
+      const status1 = makeStatus({ path: "/tmp/repo-a", branch: "feature/a" }, { canAutoClean: true });
+      const status2 = makeStatus({ path: "/tmp/repo-b", branch: "feature/b" }, { canAutoClean: true });
       const deps = makeDeps({
         listWorktrees: async () => [wt1, wt2],
         getWorktreeStatuses: async () => [status1, status2],
       });
 
-      const result = await executeClean(
-        { ...defaultArgs, force: true },
-        deps
-      );
+      const result = await executeClean({ ...defaultArgs, force: true }, deps);
 
       expect(result.deleted).toEqual(["/tmp/repo-a", "/tmp/repo-b"]);
       expect(result.errors).toEqual([]);
@@ -287,10 +256,7 @@ describe("executeClean", () => {
         path: "/tmp/repo-fail",
         branch: "feature/fail",
       });
-      const status = makeStatus(
-        { path: "/tmp/repo-fail", branch: "feature/fail" },
-        { canAutoClean: true }
-      );
+      const status = makeStatus({ path: "/tmp/repo-fail", branch: "feature/fail" }, { canAutoClean: true });
       const deps = makeDeps({
         listWorktrees: async () => [worktree],
         getWorktreeStatuses: async () => [status],
@@ -299,15 +265,10 @@ describe("executeClean", () => {
         },
       });
 
-      const result = await executeClean(
-        { ...defaultArgs, force: true },
-        deps
-      );
+      const result = await executeClean({ ...defaultArgs, force: true }, deps);
 
       expect(result.deleted).toEqual([]);
-      expect(result.errors).toEqual([
-        { path: "/tmp/repo-fail", error: "Permission denied" },
-      ]);
+      expect(result.errors).toEqual([{ path: "/tmp/repo-fail", error: "Permission denied" }]);
     });
 
     test("dirty worktree calls removeWorktree with force=true", async () => {
@@ -318,7 +279,7 @@ describe("executeClean", () => {
       });
       const status = makeStatus(
         { path: "/tmp/repo-dirty", branch: "feature/dirty", isDirty: true },
-        { canAutoClean: true }
+        { canAutoClean: true },
       );
       let removedWithForce = false;
       const deps = makeDeps({
@@ -344,18 +305,9 @@ describe("executeClean", () => {
         path: "/tmp/repo-ok2",
         branch: "feature/ok2",
       });
-      const status1 = makeStatus(
-        { path: "/tmp/repo-ok", branch: "feature/ok" },
-        { canAutoClean: true }
-      );
-      const status2 = makeStatus(
-        { path: "/tmp/repo-fail", branch: "feature/fail" },
-        { canAutoClean: true }
-      );
-      const status3 = makeStatus(
-        { path: "/tmp/repo-ok2", branch: "feature/ok2" },
-        { canAutoClean: true }
-      );
+      const status1 = makeStatus({ path: "/tmp/repo-ok", branch: "feature/ok" }, { canAutoClean: true });
+      const status2 = makeStatus({ path: "/tmp/repo-fail", branch: "feature/fail" }, { canAutoClean: true });
+      const status3 = makeStatus({ path: "/tmp/repo-ok2", branch: "feature/ok2" }, { canAutoClean: true });
       const deps = makeDeps({
         listWorktrees: async () => [wt1, wt2, wt3],
         getWorktreeStatuses: async () => [status1, status2, status3],
@@ -366,15 +318,10 @@ describe("executeClean", () => {
         },
       });
 
-      const result = await executeClean(
-        { ...defaultArgs, force: true },
-        deps
-      );
+      const result = await executeClean({ ...defaultArgs, force: true }, deps);
 
       expect(result.deleted).toEqual(["/tmp/repo-ok", "/tmp/repo-ok2"]);
-      expect(result.errors).toEqual([
-        { path: "/tmp/repo-fail", error: "Failed" },
-      ]);
+      expect(result.errors).toEqual([{ path: "/tmp/repo-fail", error: "Failed" }]);
     });
   });
 
@@ -390,10 +337,7 @@ describe("executeClean", () => {
         getWorktreeStatuses: async () => [status],
       });
 
-      const result = await executeClean(
-        { ...defaultArgs, force: true },
-        deps
-      );
+      const result = await executeClean({ ...defaultArgs, force: true }, deps);
 
       expect(result.deleted).toEqual([worktree.path]);
     });
@@ -402,10 +346,7 @@ describe("executeClean", () => {
   describe("preClean hook", () => {
     test("executes hook when config has preClean", async () => {
       const worktree = makeWorktree({ path: "/tmp/repo-hook" });
-      const status = makeStatus(
-        { path: "/tmp/repo-hook" },
-        { canAutoClean: true }
-      );
+      const status = makeStatus({ path: "/tmp/repo-hook" }, { canAutoClean: true });
       let hookExecuted = false;
       let hookCommand = "";
       let hookCwd = "";
@@ -428,18 +369,13 @@ describe("executeClean", () => {
       await executeClean({ ...defaultArgs, force: true }, deps);
 
       expect(hookExecuted).toBe(true);
-      expect(hookCommand).toBe(
-        "cd /tmp/repo-hook && docker-compose down"
-      );
+      expect(hookCommand).toBe("cd /tmp/repo-hook && docker-compose down");
       expect(hookCwd).toBe("/repo");
     });
 
     test("continues deletion even when preClean hook fails", async () => {
       const worktree = makeWorktree({ path: "/tmp/repo-hook-fail" });
-      const status = makeStatus(
-        { path: "/tmp/repo-hook-fail" },
-        { canAutoClean: true }
-      );
+      const status = makeStatus({ path: "/tmp/repo-hook-fail" }, { canAutoClean: true });
       const deps = makeDeps({
         listWorktrees: async () => [worktree],
         getWorktreeStatuses: async () => [status],
@@ -451,10 +387,7 @@ describe("executeClean", () => {
         },
       });
 
-      const result = await executeClean(
-        { ...defaultArgs, force: true },
-        deps
-      );
+      const result = await executeClean({ ...defaultArgs, force: true }, deps);
 
       expect(result.deleted).toEqual(["/tmp/repo-hook-fail"]);
       expect(consoleWarnSpy).toHaveBeenCalled();
@@ -496,10 +429,7 @@ describe("executeClean", () => {
         },
       });
 
-      const result = await executeClean(
-        { ...defaultArgs, force: true },
-        deps
-      );
+      const result = await executeClean({ ...defaultArgs, force: true }, deps);
 
       expect(hookCalled).toBe(false);
       expect(result.deleted).toEqual([worktree.path]);
@@ -512,19 +442,13 @@ describe("executeClean", () => {
         path: "/tmp/repo-detached",
         branch: null,
       });
-      const status = makeStatus(
-        { path: "/tmp/repo-detached", branch: null },
-        { canAutoClean: true }
-      );
+      const status = makeStatus({ path: "/tmp/repo-detached", branch: null }, { canAutoClean: true });
       const deps = makeDeps({
         listWorktrees: async () => [worktree],
         getWorktreeStatuses: async () => [status],
       });
 
-      const result = await executeClean(
-        { ...defaultArgs, force: true },
-        deps
-      );
+      const result = await executeClean({ ...defaultArgs, force: true }, deps);
 
       expect(result.deleted).toEqual(["/tmp/repo-detached"]);
     });
@@ -536,10 +460,7 @@ describe("executeClean", () => {
         path: "/tmp/repo-branch",
         branch: "feature/branch",
       });
-      const status = makeStatus(
-        { path: "/tmp/repo-branch", branch: "feature/branch" },
-        { canAutoClean: true }
-      );
+      const status = makeStatus({ path: "/tmp/repo-branch", branch: "feature/branch" }, { canAutoClean: true });
       let deletedBranch = "";
       let deletedWithForce = false;
       const deps = makeDeps({
@@ -562,10 +483,7 @@ describe("executeClean", () => {
         path: "/tmp/repo-detached",
         branch: null,
       });
-      const status = makeStatus(
-        { path: "/tmp/repo-detached", branch: null },
-        { canAutoClean: true }
-      );
+      const status = makeStatus({ path: "/tmp/repo-detached", branch: null }, { canAutoClean: true });
       let deleteLocalBranchCalled = false;
       const deps = makeDeps({
         listWorktrees: async () => [worktree],
@@ -587,7 +505,7 @@ describe("executeClean", () => {
       });
       const status = makeStatus(
         { path: "/tmp/repo-branch-fail", branch: "feature/branch-fail" },
-        { canAutoClean: true }
+        { canAutoClean: true },
       );
       const deps = makeDeps({
         listWorktrees: async () => [worktree],
@@ -597,10 +515,7 @@ describe("executeClean", () => {
         },
       });
 
-      const result = await executeClean(
-        { ...defaultArgs, force: true },
-        deps
-      );
+      const result = await executeClean({ ...defaultArgs, force: true }, deps);
 
       expect(result.deleted).toEqual(["/tmp/repo-branch-fail"]);
       expect(result.errors).toEqual([]);
@@ -612,10 +527,7 @@ describe("executeClean", () => {
         path: "/tmp/repo-dry",
         branch: "feature/dry",
       });
-      const status = makeStatus(
-        { path: "/tmp/repo-dry", branch: "feature/dry" },
-        { canAutoClean: true }
-      );
+      const status = makeStatus({ path: "/tmp/repo-dry", branch: "feature/dry" }, { canAutoClean: true });
       let deleteLocalBranchCalled = false;
       const deps = makeDeps({
         listWorktrees: async () => [worktree],
@@ -635,10 +547,7 @@ describe("executeClean", () => {
         path: "/tmp/repo-wt-fail",
         branch: "feature/wt-fail",
       });
-      const status = makeStatus(
-        { path: "/tmp/repo-wt-fail", branch: "feature/wt-fail" },
-        { canAutoClean: true }
-      );
+      const status = makeStatus({ path: "/tmp/repo-wt-fail", branch: "feature/wt-fail" }, { canAutoClean: true });
       let deleteLocalBranchCalled = false;
       const deps = makeDeps({
         listWorktrees: async () => [worktree],

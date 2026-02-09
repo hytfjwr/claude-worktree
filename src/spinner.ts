@@ -1,3 +1,5 @@
+import type { Spinner } from "./types";
+
 const FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const INTERVAL = 80; // ms
 
@@ -8,10 +10,9 @@ const SHIMMER_PAUSE = 6; // extra dark frames between sweeps
 const BASE_COLOR = { r: 120, g: 110, b: 170 };
 const BRIGHT_COLOR = { r: 230, g: 225, b: 255 };
 
-import type { Spinner } from "./types";
-
 export function stripAnsi(str: string): string {
   // CSI sequences (including ? for cursor hide/show), OSC sequences, and simple escapes
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional ANSI escape sequence matching
   return str.replace(/\x1b(?:\[[0-9;?]*[a-zA-Z]|\][^\x07]*(?:\x07|\x1b\\)|\[[0-9;]*m)/g, "");
 }
 
@@ -22,7 +23,7 @@ export function formatTailLine(line: string, maxWidth: number): string {
     if (safeWidth <= 1) {
       return "…";
     }
-    return stripped.substring(0, safeWidth - 1) + "…";
+    return `${stripped.substring(0, safeWidth - 1)}…`;
   }
   return stripped;
 }

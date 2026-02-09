@@ -1,22 +1,22 @@
-import {
-  getGitContext,
-  getWorktreePath,
-  createWorktree,
-  findWorktreeByBranch,
-  removeWorktree,
-  deleteLocalBranch,
-  branchExists,
-} from "./git";
-import { createPane, sendCommand, sendText, checkWeztermAvailable } from "./wezterm";
 import { buildClaudeCommand } from "./claude";
 import { executeClean } from "./clean";
+import { buildHookCommand, loadProjectConfig, runHook } from "./config";
+import {
+  branchExists,
+  createWorktree,
+  deleteLocalBranch,
+  findWorktreeByBranch,
+  getGitContext,
+  getWorktreePath,
+  removeWorktree,
+} from "./git";
 import { executeList } from "./list";
-import { confirm } from "./prompt";
-import { loadProjectConfig, buildHookCommand, runHook } from "./config";
-import { findAvailableSlot } from "./slot";
 import { extractOptions } from "./options";
-import { startSpinner, createTailUpdater } from "./spinner";
-import type { CreateArgs, Command, CleanArgs, ListArgs } from "./types";
+import { confirm } from "./prompt";
+import { findAvailableSlot } from "./slot";
+import { createTailUpdater, startSpinner } from "./spinner";
+import type { CleanArgs, Command, CreateArgs, ListArgs } from "./types";
+import { checkWeztermAvailable, createPane, sendCommand, sendText } from "./wezterm";
 
 export function showHelp(): void {
   console.log(`claude-worktree - CLI for parallel development with WezTerm + git worktree + Claude Code
@@ -77,7 +77,7 @@ export function parseCreateArgs(args: string[]): CreateArgs {
       "Usage: claude-worktree <branch-name> <prompt>\n" +
         "       claude-worktree <branch-name> -plan <file-path>\n" +
         "Example: claude-worktree feature/auth 'Implement authentication feature'\n" +
-        "         claude-worktree feature/auth -plan ./plan.md"
+        "         claude-worktree feature/auth -plan ./plan.md",
     );
   }
 
@@ -85,13 +85,13 @@ export function parseCreateArgs(args: string[]): CreateArgs {
 
   const { booleans, strings, remaining } = extractOptions(args.slice(1), {
     options: {
-      pane:    { type: "boolean", flag: "-pane", alias: "-p" },
-      danger:  { type: "boolean", flag: "-danger", alias: "-d" },
-      merge:   { type: "boolean", flag: "-merge", alias: "-m" },
-      draft:   { type: "boolean", flag: "-draft" },
+      pane: { type: "boolean", flag: "-pane", alias: "-p" },
+      danger: { type: "boolean", flag: "-danger", alias: "-d" },
+      merge: { type: "boolean", flag: "-merge", alias: "-m" },
+      draft: { type: "boolean", flag: "-draft" },
       verbose: { type: "boolean", flag: "-verbose", alias: "-v" },
       baseBranch: { type: "string", flag: "-base", alias: "-b", errorMessage: "-base requires a branch name argument" },
-      planFile:   { type: "string", flag: "-plan", errorMessage: "-plan requires a file path argument" },
+      planFile: { type: "string", flag: "-plan", errorMessage: "-plan requires a file path argument" },
     },
     unknownHandling: "error",
     ignoredFlags: ["-h", "-help"],
@@ -109,18 +109,14 @@ export function parseCreateArgs(args: string[]): CreateArgs {
 
   // Mutual exclusivity check for -merge and -draft
   if (merge && draft) {
-    throw new Error(
-      "Cannot use both -merge and -draft options. Please use one or the other."
-    );
+    throw new Error("Cannot use both -merge and -draft options. Please use one or the other.");
   }
 
   const inlinePrompt = remaining.join(" ");
 
   // Mutual exclusivity check: cannot specify both -plan and inline prompt
   if (planFile && inlinePrompt) {
-    throw new Error(
-      "Cannot use both -plan and inline prompt. Please use one or the other."
-    );
+    throw new Error("Cannot use both -plan and inline prompt. Please use one or the other.");
   }
 
   // Require either inline prompt or -plan
@@ -128,7 +124,7 @@ export function parseCreateArgs(args: string[]): CreateArgs {
     throw new Error(
       "A prompt or -plan option is required.\n" +
         "Usage: claude-worktree <branch-name> <prompt>\n" +
-        "       claude-worktree <branch-name> -plan <file-path>"
+        "       claude-worktree <branch-name> -plan <file-path>",
     );
   }
 
@@ -148,9 +144,9 @@ export function parseCreateArgs(args: string[]): CreateArgs {
 export function parseCleanArgs(args: string[]): CleanArgs {
   const { booleans } = extractOptions(args, {
     options: {
-      force:   { type: "boolean", flag: "-force", alias: "-f" },
-      all:     { type: "boolean", flag: "-all",   alias: "-a" },
-      dryRun:  { type: "boolean", flag: "-dry-run", alias: "-n" },
+      force: { type: "boolean", flag: "-force", alias: "-f" },
+      all: { type: "boolean", flag: "-all", alias: "-a" },
+      dryRun: { type: "boolean", flag: "-dry-run", alias: "-n" },
       verbose: { type: "boolean", flag: "-verbose", alias: "-v" },
     },
     unknownHandling: "error",
@@ -169,7 +165,7 @@ export function parseCleanArgs(args: string[]): CleanArgs {
 export function parseListArgs(args: string[]): ListArgs {
   const { booleans } = extractOptions(args, {
     options: {
-      json:    { type: "boolean", flag: "-json", alias: "-j" },
+      json: { type: "boolean", flag: "-json", alias: "-j" },
       verbose: { type: "boolean", flag: "-verbose", alias: "-v" },
     },
     unknownHandling: "error",
@@ -229,7 +225,7 @@ export async function runCreate(args: CreateArgs): Promise<void> {
       throw new Error(
         "WezTerm CLI is not installed. The -pane option requires WezTerm.\n" +
           "Install WezTerm: https://wezfurlong.org/wezterm/installation.html\n" +
-          "Or run without -pane to use the current terminal."
+          "Or run without -pane to use the current terminal.",
       );
     }
   }
@@ -273,13 +269,9 @@ export async function runCreate(args: CreateArgs): Promise<void> {
     let confirmed: boolean;
     if (existingWorktree.isDirty) {
       console.log("⚠️  Warning: there are uncommitted changes");
-      confirmed = await confirm(
-        "Discard changes and delete the worktree?"
-      );
+      confirmed = await confirm("Discard changes and delete the worktree?");
     } else {
-      confirmed = await confirm(
-        "Delete the existing worktree and start a new session?"
-      );
+      confirmed = await confirm("Delete the existing worktree and start a new session?");
     }
 
     if (!confirmed) {
@@ -327,9 +319,7 @@ export async function runCreate(args: CreateArgs): Promise<void> {
     if (branchAlreadyExists) {
       console.log(`\n⚠️  Branch already exists: ${branchName}`);
 
-      const confirmed = await confirm(
-        "Delete the branch and create a new one?"
-      );
+      const confirmed = await confirm("Delete the branch and create a new one?");
 
       if (!confirmed) {
         console.log("Cancelled.");
@@ -412,10 +402,7 @@ export async function runCreate(args: CreateArgs): Promise<void> {
     const paneId = await createPane({ keepFocus: true });
     console.log(`🪟 Created pane: ${paneId}`);
 
-    const commands = [
-      `cd "${worktreePath}"`,
-      buildClaudeCommand(claudeOptions),
-    ].join(" && ");
+    const commands = [`cd "${worktreePath}"`, buildClaudeCommand(claudeOptions)].join(" && ");
 
     await sendCommand(paneId, commands);
 
@@ -428,10 +415,7 @@ export async function runCreate(args: CreateArgs): Promise<void> {
     // Launch Claude Code in current terminal
     console.log("✅ Worktree created. Starting Claude Code...");
 
-    const commands = [
-      `cd "${worktreePath}"`,
-      buildClaudeCommand(claudeOptions),
-    ].join(" && ");
+    const commands = [`cd "${worktreePath}"`, buildClaudeCommand(claudeOptions)].join(" && ");
 
     const proc = Bun.spawn(["sh", "-c", commands], {
       stdio: ["inherit", "inherit", "inherit"],

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import type { HookVars } from "./types";
 
 // ============================================================================
@@ -11,9 +12,7 @@ import type { HookVars } from "./types";
 function validateHookVars(vars: HookVars): void {
   const shellMetachars = /[;&|`$()<>\n\r]/;
   if (shellMetachars.test(vars.path)) {
-    throw new Error(
-      `Invalid hook variable: path "${vars.path}" contains shell metacharacters`
-    );
+    throw new Error(`Invalid hook variable: path "${vars.path}" contains shell metacharacters`);
   }
 }
 
@@ -22,10 +21,7 @@ function buildHookCommand(template: string, vars: HookVars): string {
   validateHookVars(vars);
   return template
     .replace(/\{path\}/g, vars.path)
-    .replace(
-      /\{slot\}/g,
-      vars.slot !== undefined ? String(vars.slot) : ""
-    );
+    .replace(/\{slot\}/g, vars.slot !== undefined ? String(vars.slot) : "");
 }
 
 describe("buildHookCommand", () => {
@@ -57,13 +53,11 @@ describe("buildHookCommand", () => {
   });
 
   test("simultaneous replacement of both variables", () => {
-    const result = buildHookCommand(
-      "docker-compose -p {slot} -f {path}/docker-compose.yml up",
-      { path: "/app", slot: 5 }
-    );
-    expect(result).toBe(
-      "docker-compose -p 5 -f /app/docker-compose.yml up"
-    );
+    const result = buildHookCommand("docker-compose -p {slot} -f {path}/docker-compose.yml up", {
+      path: "/app",
+      slot: 5,
+    });
+    expect(result).toBe("docker-compose -p 5 -f /app/docker-compose.yml up");
   });
 
   test("template without variables returns as-is", () => {
@@ -72,27 +66,21 @@ describe("buildHookCommand", () => {
   });
 
   test("rejects path containing shell metacharacters", () => {
-    expect(() =>
-      buildHookCommand("cd {path}", { path: "/tmp/$(rm -rf /)" })
-    ).toThrow("contains shell metacharacters");
+    expect(() => buildHookCommand("cd {path}", { path: "/tmp/$(rm -rf /)" })).toThrow("contains shell metacharacters");
   });
 
   test("rejects path containing backticks", () => {
-    expect(() =>
-      buildHookCommand("cd {path}", { path: "/tmp/`whoami`" })
-    ).toThrow("contains shell metacharacters");
+    expect(() => buildHookCommand("cd {path}", { path: "/tmp/`whoami`" })).toThrow("contains shell metacharacters");
   });
 
   test("rejects path containing semicolons", () => {
-    expect(() =>
-      buildHookCommand("cd {path}", { path: "/tmp; rm -rf /" })
-    ).toThrow("contains shell metacharacters");
+    expect(() => buildHookCommand("cd {path}", { path: "/tmp; rm -rf /" })).toThrow("contains shell metacharacters");
   });
 
   test("rejects path containing pipes", () => {
-    expect(() =>
-      buildHookCommand("cd {path}", { path: "/tmp | cat /etc/passwd" })
-    ).toThrow("contains shell metacharacters");
+    expect(() => buildHookCommand("cd {path}", { path: "/tmp | cat /etc/passwd" })).toThrow(
+      "contains shell metacharacters",
+    );
   });
 
   test("allows normal paths (hyphens, slashes, dots, underscores)", () => {

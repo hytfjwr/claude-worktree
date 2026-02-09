@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import { buildClaudeCommand } from "./claude";
 
 describe("buildClaudeCommand", () => {
@@ -329,7 +330,7 @@ PROMPT_END`);
 
   test("combined special characters - all preserved as-is", () => {
     const result = buildClaudeCommand({
-      prompt: "It's a \"test\"\npath\\to\\file",
+      prompt: 'It\'s a "test"\npath\\to\\file',
       promptSuffix: "",
     });
 

@@ -205,7 +205,11 @@ export type CleanDeps = {
   getGitContext: () => Promise<GitContext>;
   loadProjectConfig: (repoRoot: string) => Promise<ProjectConfig | null>;
   buildHookCommand: (template: string, vars: HookVars) => string;
-  runHook: (command: string, cwd: string, options?: { verbose?: boolean; onLine?: (line: string) => void }) => Promise<void>;
+  runHook: (
+    command: string,
+    cwd: string,
+    options?: { verbose?: boolean; onLine?: (line: string) => void },
+  ) => Promise<void>;
   confirm: (message: string) => Promise<boolean>;
   selectMultiple: (statuses: WorktreeStatus[]) => Promise<WorktreeStatus[]>;
 };
