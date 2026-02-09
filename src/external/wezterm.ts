@@ -1,5 +1,6 @@
-import { $ } from "bun";
+import { spawn } from "node:child_process";
 
+import { exec } from "../core/exec";
 import type { WeztermPane } from "../types";
 
 export async function listWeztermPanes(): Promise<WeztermPane[] | null> {
@@ -7,7 +8,7 @@ export async function listWeztermPanes(): Promise<WeztermPane[] | null> {
     const available = await checkWeztermAvailable();
     if (!available) return null;
 
-    const result = await $`wezterm cli list --format json`.nothrow().quiet();
+    const result = await exec("wezterm", ["cli", "list", "--format", "json"]).nothrow().quiet();
     if (result.exitCode !== 0) return null;
     return JSON.parse(result.text()).map((p: { pane_id: number; title: string; cwd: string }) => ({
       pane_id: p.pane_id,
@@ -21,12 +22,8 @@ export async function listWeztermPanes(): Promise<WeztermPane[] | null> {
 
 export async function checkWeztermAvailable(): Promise<boolean> {
   try {
-    const proc = Bun.spawn(["which", "wezterm"], {
-      stdout: "ignore",
-      stderr: "ignore",
-    });
-    const exitCode = await proc.exited;
-    return exitCode === 0;
+    const result = await exec("which", ["wezterm"]).nothrow().quiet();
+    return result.exitCode === 0;
   } catch {
     return false;
   }
@@ -35,17 +32,27 @@ export async function checkWeztermAvailable(): Promise<boolean> {
 import type { PaneOptions } from "../types";
 
 export async function splitPaneRight(): Promise<string> {
-  return (await $`wezterm cli split-pane --right`.text()).trim();
+  return (await exec("wezterm", ["cli", "split-pane", "--right"]).text()).trim();
 }
 
 export async function sendText(paneId: string, text: string): Promise<void> {
   // Use --no-paste (send characters directly).
   // Since we pass the prompt via heredoc format, the shell will keep
   // waiting for input until the delimiter is reached, even with newlines.
-  const proc = Bun.spawn(["wezterm", "cli", "send-text", "--no-paste", "--pane-id", paneId], {
-    stdin: new TextEncoder().encode(text),
+  return new Promise<void>((resolve, reject) => {
+    const proc = spawn("wezterm", ["cli", "send-text", "--no-paste", "--pane-id", paneId], {
+      stdio: ["pipe", "ignore", "ignore"],
+    });
+    proc.once("error", reject);
+    proc.once("close", (code) => {
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(`wezterm send-text failed with exit code ${code}`));
+      }
+    });
+    proc.stdin.end(text);
   });
-  await proc.exited;
 }
 
 export async function sendCommand(paneId: string, command: string): Promise<void> {
@@ -59,8 +66,7 @@ export function getCurrentPaneId(): string | undefined {
 
 // Move focus to the specified pane
 export async function activatePane(paneId: string): Promise<void> {
-  const proc = Bun.spawn(["wezterm", "cli", "activate-pane", "--pane-id", paneId]);
-  await proc.exited;
+  await exec("wezterm", ["cli", "activate-pane", "--pane-id", paneId]).quiet();
 }
 
 export async function createPane(options: PaneOptions = {}): Promise<string> {
