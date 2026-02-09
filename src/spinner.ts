@@ -3,7 +3,8 @@ const INTERVAL = 80; // ms
 
 // Shimmer effect configuration
 const SHIMMER_WIDTH = 6;
-const SHIMMER_PAUSE = 12; // extra dark frames between sweeps
+const SHIMMER_SPEED = 2; // characters per frame
+const SHIMMER_PAUSE = 6; // extra dark frames between sweeps
 const BASE_COLOR = { r: 120, g: 110, b: 170 };
 const BRIGHT_COLOR = { r: 230, g: 225, b: 255 };
 
@@ -49,8 +50,8 @@ export function startSpinner(message: string): Spinner {
   write(`${FRAMES[0]} ${shimmerText(message, shimmerPos)}`);
   const timer = setInterval(() => {
     frameIndex = (frameIndex + 1) % FRAMES.length;
-    shimmerPos++;
-    if (shimmerPos > shimmerEnd + SHIMMER_PAUSE) {
+    shimmerPos += SHIMMER_SPEED;
+    if (shimmerPos > shimmerEnd + SHIMMER_PAUSE * SHIMMER_SPEED) {
       shimmerPos = -SHIMMER_WIDTH;
     }
     write(`${FRAMES[frameIndex]} ${shimmerText(message, shimmerPos)}`);
