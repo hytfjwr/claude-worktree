@@ -13,7 +13,10 @@ import {
   stripAnsi,
 } from "./spinner.ts";
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 
 describe("startSpinner", () => {
   test("returns a Spinner object", () => {
@@ -174,7 +177,8 @@ describe("startSpinner", () => {
 });
 
 describe("createTailUpdater", () => {
-  test("feeds lines to spinner.updateTail with totalCount and allLines", () => {
+  test("first line triggers immediate flush (leading edge)", () => {
+    vi.useFakeTimers();
     const calls: { lines: string[]; totalCount: number; allLines: string[] }[] = [];
     const mockSpinner = {
       stop: () => {},
@@ -186,7 +190,28 @@ describe("createTailUpdater", () => {
 
     const onLine = createTailUpdater(mockSpinner);
     onLine("line 1");
-    onLine("line 2");
+
+    expect(calls).toEqual([{ lines: ["line 1"], totalCount: 1, allLines: ["line 1"] }]);
+  });
+
+  test("second line within 1s is throttled and flushed by trailing edge", () => {
+    vi.useFakeTimers();
+    const calls: { lines: string[]; totalCount: number; allLines: string[] }[] = [];
+    const mockSpinner = {
+      stop: () => {},
+      fail: () => {},
+      updateTail: (lines: string[], totalCount: number, allLines?: string[]) => {
+        calls.push({ lines: [...lines], totalCount, allLines: allLines ? [...allLines] : [] });
+      },
+    };
+
+    const onLine = createTailUpdater(mockSpinner);
+    onLine("line 1"); // immediate flush
+    onLine("line 2"); // throttled
+
+    expect(calls.length).toBe(1); // only first line flushed
+
+    vi.advanceTimersByTime(1000);
 
     expect(calls).toEqual([
       { lines: ["line 1"], totalCount: 1, allLines: ["line 1"] },
@@ -195,6 +220,7 @@ describe("createTailUpdater", () => {
   });
 
   test("keeps only last 3 tail lines but accumulates all lines", () => {
+    vi.useFakeTimers();
     const lastCall = { lines: [] as string[], totalCount: 0, allLines: [] as string[] };
     const mockSpinner = {
       stop: () => {},
@@ -207,15 +233,49 @@ describe("createTailUpdater", () => {
     };
 
     const onLine = createTailUpdater(mockSpinner);
-    onLine("a");
+    onLine("a"); // immediate flush
     onLine("b");
     onLine("c");
     onLine("d");
-    onLine("e");
+    onLine("e"); // all throttled
+
+    vi.advanceTimersByTime(1000); // trailing edge fires
 
     expect(lastCall.lines).toEqual(["c", "d", "e"]);
     expect(lastCall.totalCount).toBe(5);
     expect(lastCall.allLines).toEqual(["a", "b", "c", "d", "e"]);
+  });
+
+  test("lines after 1s trigger a new leading edge flush", () => {
+    vi.useFakeTimers();
+    const calls: { lines: string[]; totalCount: number }[] = [];
+    const mockSpinner = {
+      stop: () => {},
+      fail: () => {},
+      updateTail: (lines: string[], totalCount: number, _allLines?: string[]) => {
+        calls.push({ lines: [...lines], totalCount });
+      },
+    };
+
+    const onLine = createTailUpdater(mockSpinner);
+    onLine("a"); // immediate flush (leading)
+
+    vi.advanceTimersByTime(1000);
+    onLine("b"); // 1s elapsed, new leading edge
+
+    expect(calls.length).toBe(2);
+    expect(calls[1]).toEqual({ lines: ["a", "b"], totalCount: 2 });
+  });
+
+  test("updateTail is safe after spinner.stop (stopped flag)", () => {
+    const writeSpy = vi.spyOn(process.stdout, "write");
+    const spinner = startSpinner("Testing...");
+    spinner.stop();
+    writeSpy.mockClear();
+
+    // After stop, updateTail should be a no-op (no writes to stdout)
+    spinner.updateTail(["should be ignored"], 1);
+    expect(writeSpy).not.toHaveBeenCalled();
   });
 });
 

@@ -75,10 +75,24 @@ export function formatInfoLine(hiddenCount: number, elapsedSec: number, timeoutS
   return `(${formatDuration(elapsedSec)}${timeoutPart})`;
 }
 
+const TAIL_UPDATE_INTERVAL = 1000; // 1 second
+
 export function createTailUpdater(spinner: Spinner): (line: string) => void {
   const tailLines: string[] = [];
   const allLines: string[] = [];
   let totalCount = 0;
+  let lastFlushTime = 0;
+  let flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const flush = () => {
+    if (flushTimer) {
+      clearTimeout(flushTimer);
+      flushTimer = null;
+    }
+    lastFlushTime = Date.now();
+    spinner.updateTail([...tailLines], totalCount, [...allLines]);
+  };
+
   return (line: string) => {
     if (allLines.length < MAX_ALL_LINES) {
       allLines.push(line);
@@ -86,7 +100,14 @@ export function createTailUpdater(spinner: Spinner): (line: string) => void {
     tailLines.push(line);
     totalCount++;
     if (tailLines.length > TAIL_LINE_COUNT) tailLines.shift();
-    spinner.updateTail(tailLines, totalCount, allLines);
+
+    const now = Date.now();
+    if (now - lastFlushTime >= TAIL_UPDATE_INTERVAL) {
+      flush();
+    } else if (!flushTimer) {
+      flushTimer = setTimeout(flush, TAIL_UPDATE_INTERVAL - (now - lastFlushTime));
+      flushTimer.unref();
+    }
   };
 }
 
@@ -101,6 +122,7 @@ export function startSpinner(message: string, options?: { timeoutSec?: number })
   let allLines: string[] = [];
   let expanded = false;
   let expandedLogLines = 0;
+  let stopped = false;
   const startTime = Date.now();
   const timeoutSec = options?.timeoutSec;
 
@@ -232,14 +254,17 @@ export function startSpinner(message: string, options?: { timeoutSec?: number })
 
   return {
     stop(finalMessage?: string) {
+      stopped = true;
       clearInterval(timer);
       clearAndWrite(finalMessage || `✓ ${message}`);
     },
     fail(errorMessage: string) {
+      stopped = true;
       clearInterval(timer);
       clearAndWrite(`✗ ${errorMessage}`);
     },
     updateTail(lines: string[], totalCount: number, newAllLines?: string[]) {
+      if (stopped) return;
       tailLines = [...lines];
       totalLineCount = totalCount;
       if (newAllLines) allLines = newAllLines;
