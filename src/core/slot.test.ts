@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
-import { deleteSlot, getCacheDir, readSlot, saveSlot } from "./slot";
+import { deleteSlot, getCacheDir, readSlot, saveSlot } from "./slot.ts";
 
 describe("slot cache", () => {
   let tempDir: string;

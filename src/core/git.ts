@@ -1,7 +1,7 @@
 import { basename, join } from "node:path";
 
-import type { AheadBehind, CommitInfo, GitContext, ParsedWorktree, WorktreeInfo, WorktreeStatus } from "../types";
-import { exec } from "./exec";
+import type { AheadBehind, CommitInfo, GitContext, ParsedWorktree, WorktreeInfo, WorktreeStatus } from "../types.ts";
+import { exec } from "./exec.ts";
 
 export async function getGitContext(): Promise<GitContext> {
   const repoRoot = (await exec("git", ["rev-parse", "--show-toplevel"]).text()).trim();

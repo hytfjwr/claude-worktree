@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { setTimeout } from "node:timers/promises";
 
-import { exec } from "./exec";
+import { exec } from "./exec.ts";
 
 export async function isPortInUse(port: number): Promise<boolean> {
   const result = await exec("lsof", [`-iTCP:${port}`, "-sTCP:LISTEN"])

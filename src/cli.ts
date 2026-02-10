@@ -1,8 +1,8 @@
-import { executeClean } from "./commands/clean";
-import { runCreate } from "./commands/create";
-import { executeList } from "./commands/list";
-import { extractOptions } from "./options";
-import type { CleanArgs, Command, CreateArgs, ListArgs } from "./types";
+import { executeClean } from "./commands/clean.ts";
+import { runCreate } from "./commands/create.ts";
+import { executeList } from "./commands/list.ts";
+import { extractOptions } from "./options.ts";
+import type { CleanArgs, Command, CreateArgs, ListArgs } from "./types.ts";
 
 export function showHelp(): void {
   console.log(`claude-worktree - CLI for parallel development with WezTerm + git worktree + Claude Code

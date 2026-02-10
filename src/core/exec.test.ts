@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { ExecError, exec } from "./exec";
+import { ExecError, exec } from "./exec.ts";
 
 // ============================================================================
 // Basic execution tests

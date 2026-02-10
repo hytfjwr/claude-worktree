@@ -8,7 +8,7 @@ import type {
   WorktreeInfo,
   WorktreeListEntry,
   WorktreeStatus,
-} from "../types";
+} from "../types.ts";
 import {
   executeList,
   formatAheadBehind,
@@ -19,7 +19,7 @@ import {
   getStatusBadge,
   shortenPath,
   truncate,
-} from "./list";
+} from "./list.ts";
 
 // ============================================================================
 // Helper functions

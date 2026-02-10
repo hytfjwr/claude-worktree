@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 
-import { exec } from "../core/exec";
-import type { WeztermPane } from "../types";
+import { exec } from "../core/exec.ts";
+import type { WeztermPane } from "../types.ts";
 
 export async function listWeztermPanes(): Promise<WeztermPane[] | null> {
   try {
@@ -29,7 +29,7 @@ export async function checkWeztermAvailable(): Promise<boolean> {
   }
 }
 
-import type { PaneOptions } from "../types";
+import type { PaneOptions } from "../types.ts";
 
 export async function splitPaneRight(): Promise<string> {
   return (await exec("wezterm", ["cli", "split-pane", "--right"]).text()).trim();

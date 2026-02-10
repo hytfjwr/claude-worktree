@@ -1,6 +1,6 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 
-import { parseArgs, run } from "../src/cli";
+import { parseArgs, run } from "../src/cli.ts";
 
 async function main() {
   try {

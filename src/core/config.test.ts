@@ -1,8 +1,8 @@
 import { tmpdir } from "node:os";
 import { describe, expect, test } from "vitest";
 
-import type { HookVars, ProjectConfig } from "../types";
-import { DEFAULT_HOOK_TIMEOUT, resolveHookTimeout, runHook } from "./config";
+import type { HookVars, ProjectConfig } from "../types.ts";
+import { DEFAULT_HOOK_TIMEOUT, resolveHookTimeout, runHook } from "./config.ts";
 
 const testCwd = tmpdir();
 

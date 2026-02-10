@@ -3,8 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, test } from "vitest";
 
-import type { ProjectConfig } from "../types";
-import { checkWorktreeLimit, readPlanFile } from "./create";
+import type { ProjectConfig } from "../types.ts";
+import { checkWorktreeLimit, readPlanFile } from "./create.ts";
 
 describe("readPlanFile", () => {
   const tmpDir = mkdtempSync(join(tmpdir(), "create-test-"));

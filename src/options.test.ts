@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 
-import { extractOptions } from "./options";
-import type { OptionSchema } from "./types";
+import { extractOptions } from "./options.ts";
+import type { OptionSchema } from "./types.ts";
 
 describe("extractOptions", () => {
   describe("boolean extraction", () => {

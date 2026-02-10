@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
-import type { SessionInfo, WeztermPane } from "../types";
+import type { SessionInfo, WeztermPane } from "../types.ts";
 import {
   completeSession,
   deleteSession,
@@ -12,7 +12,7 @@ import {
   formatElapsed,
   readSession,
   saveSession,
-} from "./session";
+} from "./session.ts";
 
 // ============================================================================
 // Pure function tests

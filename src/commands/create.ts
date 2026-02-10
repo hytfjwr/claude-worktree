@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { setTimeout } from "node:timers/promises";
 
-import { buildHookCommand, loadProjectConfig, resolveHookTimeout, runHook } from "../core/config";
+import { buildHookCommand, loadProjectConfig, resolveHookTimeout, runHook } from "../core/config.ts";
 import {
   branchExists,
   createWorktree,
@@ -12,14 +12,14 @@ import {
   getWorktreePath,
   listWorktrees,
   removeWorktree,
-} from "../core/git";
-import { completeSession, deleteSession, saveSession } from "../core/session";
-import { deleteSlot, findAvailableSlot, readSlot, saveSlot } from "../core/slot";
-import { buildClaudeCommand } from "../external/claude";
-import { checkWeztermAvailable, createPane, sendCommand, sendText } from "../external/wezterm";
-import type { CreateArgs, ProjectConfig } from "../types";
-import { confirm } from "../ui/prompt";
-import { createTailUpdater, startSpinner } from "../ui/spinner";
+} from "../core/git.ts";
+import { completeSession, deleteSession, saveSession } from "../core/session.ts";
+import { deleteSlot, findAvailableSlot, readSlot, saveSlot } from "../core/slot.ts";
+import { buildClaudeCommand } from "../external/claude.ts";
+import { checkWeztermAvailable, createPane, sendCommand, sendText } from "../external/wezterm.ts";
+import type { CreateArgs, ProjectConfig } from "../types.ts";
+import { confirm } from "../ui/prompt.ts";
+import { createTailUpdater, startSpinner } from "../ui/spinner.ts";
 
 export async function readPlanFile(filePath: string): Promise<string> {
   let content: string;

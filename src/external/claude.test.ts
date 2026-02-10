@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { buildClaudeCommand } from "./claude";
+import { buildClaudeCommand } from "./claude.ts";
 
 describe("buildClaudeCommand", () => {
   test("basic prompt - default permission mode and suffix are applied", () => {

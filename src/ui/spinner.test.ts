@@ -10,7 +10,7 @@ import {
   smoothstep,
   startSpinner,
   stripAnsi,
-} from "./spinner";
+} from "./spinner.ts";
 
 afterEach(() => vi.restoreAllMocks());
 

@@ -1,13 +1,14 @@
-.PHONY: install uninstall reinstall link unlink test help dev clean check setup typecheck pull
+.PHONY: install uninstall reinstall link unlink test help dev clean check setup typecheck pull build
 
 # Default target
 help:
 	@echo "claude-worktree Makefile commands"
 	@echo ""
-	@echo "  make install    - Install dependencies + global link"
+	@echo "  make install    - Install dependencies + build + global link"
 	@echo "  make uninstall  - Uninstall from global"
 	@echo "  make reinstall  - Reinstall"
 	@echo "  make setup      - Install dependencies only"
+	@echo "  make build      - Build TypeScript to dist/"
 	@echo "  make dev        - Run in development mode (no args)"
 	@echo "  make test       - Run tests"
 	@echo "  make typecheck  - TypeScript type check"
@@ -23,27 +24,30 @@ pull:
 
 # Install dependencies
 setup:
-	@bun install
+	@pnpm install
 	@echo "✅ Dependencies installed"
 
+# Build TypeScript
+build:
+	@pnpm run build
+	@echo "✅ Build complete"
+
 # Install globally
-install: pull setup link
+install: pull setup build link
 	@echo "✅ claude-worktree installed"
 	@echo "📍 $$(which claude-worktree)"
 
-# Run bun link
+# Run pnpm link
 link:
-	@bun link
-	@chmod +x bin/claude-worktree.ts
+	@pnpm link --global
 
 # Uninstall
 uninstall: unlink
 	@echo "✅ claude-worktree uninstalled"
 
-# Run bun unlink
+# Run pnpm unlink
 unlink:
-	@bun unlink claude-worktree 2>/dev/null || true
-	@rm -f ~/.bun/bin/claude-worktree
+	@pnpm unlink --global 2>/dev/null || true
 
 # Reinstall
 reinstall: uninstall install
@@ -54,22 +58,22 @@ test:
 
 # Run in development mode
 dev:
-	@bun run bin/claude-worktree.ts
+	@npx tsx bin/claude-worktree.ts
 
 # TypeScript type check
 typecheck:
-	@bun x tsc --noEmit
+	@pnpm exec tsc --noEmit
 	@echo "✅ Type check passed"
 
 # Delete cache
 clean:
-	@rm -rf node_modules bun.lockb 2>/dev/null || true
+	@rm -rf node_modules dist 2>/dev/null || true
 	@echo "✅ Cache deleted"
 
 # Check dependencies
 check:
 	@echo "=== Dependency check ==="
-	@printf "bun:     " && (which bun >/dev/null && bun --version) || echo "❌ not found"
+	@printf "node:    " && (which node >/dev/null && node --version) || echo "❌ not found"
 	@printf "git:     " && (which git >/dev/null && git --version | cut -d' ' -f3) || echo "❌ not found"
 	@printf "claude:  " && (which claude >/dev/null && claude --version 2>/dev/null | head -1) || echo "❌ not found"
 	@echo ""

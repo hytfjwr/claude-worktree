@@ -1,15 +1,15 @@
 // Types (centralized)
 
 // CLI
-export { parseArgs, parseListArgs, run, showHelp } from "./cli";
+export { parseArgs, parseListArgs, run, showHelp } from "./cli.ts";
 // Clean command
-export { executeClean } from "./commands/clean";
+export { executeClean } from "./commands/clean.ts";
 // Create command
-export { readPlanFile, runCreate } from "./commands/create";
+export { readPlanFile, runCreate } from "./commands/create.ts";
 // List command
-export { executeList, formatSessionState } from "./commands/list";
+export { executeList, formatSessionState } from "./commands/list.ts";
 // Config utilities
-export { buildHookCommand, loadProjectConfig, runHook } from "./core/config";
+export { buildHookCommand, loadProjectConfig, runHook } from "./core/config.ts";
 // Git utilities
 export {
   buildWorktreeCommand,
@@ -28,7 +28,7 @@ export {
   isWorktreeDirty,
   listWorktrees,
   removeWorktree,
-} from "./core/git";
+} from "./core/git.ts";
 // Session utilities
 export {
   completeSession,
@@ -38,11 +38,11 @@ export {
   readAllSessions,
   readSession,
   saveSession,
-} from "./core/session";
+} from "./core/session.ts";
 // Slot utilities
-export { deleteSlot, findAvailableSlot, getCacheDir, isPortInUse, readSlot, saveSlot } from "./core/slot";
+export { deleteSlot, findAvailableSlot, getCacheDir, isPortInUse, readSlot, saveSlot } from "./core/slot.ts";
 // Claude utilities
-export { buildClaudeCommand } from "./external/claude";
+export { buildClaudeCommand } from "./external/claude.ts";
 // WezTerm utilities
 export {
   checkWeztermAvailable,
@@ -51,9 +51,9 @@ export {
   sendCommand,
   sendText,
   splitPaneRight,
-} from "./external/wezterm";
+} from "./external/wezterm.ts";
 // Options extraction
-export { extractOptions } from "./options";
+export { extractOptions } from "./options.ts";
 export type {
   AheadBehind,
   // Options
@@ -98,8 +98,8 @@ export type {
   WorktreeInfo,
   WorktreeListEntry,
   WorktreeStatus,
-} from "./types";
+} from "./types.ts";
 // Prompt utilities
-export { confirm, selectMultiple } from "./ui/prompt";
+export { confirm, selectMultiple } from "./ui/prompt.ts";
 // Spinner utilities
-export { startSpinner } from "./ui/spinner";
+export { startSpinner } from "./ui/spinner.ts";

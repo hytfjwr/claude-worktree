@@ -1,4 +1,4 @@
-import type { ExtractResult, OptionDef, OptionSchema } from "./types";
+import type { ExtractResult, OptionDef, OptionSchema } from "./types.ts";
 
 export function extractOptions(args: string[], schema: OptionSchema): ExtractResult {
   const booleans: Record<string, boolean> = {};

@@ -1,4 +1,4 @@
-import { buildHookCommand, loadProjectConfig, resolveHookTimeout, runHook } from "../core/config";
+import { buildHookCommand, loadProjectConfig, resolveHookTimeout, runHook } from "../core/config.ts";
 import {
   deleteLocalBranch,
   fetchAndPrune,
@@ -6,12 +6,12 @@ import {
   getWorktreeStatuses,
   listWorktrees,
   removeWorktree,
-} from "../core/git";
-import { deleteSession } from "../core/session";
-import { deleteSlot, readSlot } from "../core/slot";
-import type { CleanArgs, CleanDeps, CleanResult, ProjectConfig, WorktreeStatus } from "../types";
-import { confirm, selectMultiple } from "../ui/prompt";
-import { createTailUpdater, startSpinner } from "../ui/spinner";
+} from "../core/git.ts";
+import { deleteSession } from "../core/session.ts";
+import { deleteSlot, readSlot } from "../core/slot.ts";
+import type { CleanArgs, CleanDeps, CleanResult, ProjectConfig, WorktreeStatus } from "../types.ts";
+import { confirm, selectMultiple } from "../ui/prompt.ts";
+import { createTailUpdater, startSpinner } from "../ui/spinner.ts";
 
 const defaultDeps: CleanDeps = {
   fetchAndPrune,

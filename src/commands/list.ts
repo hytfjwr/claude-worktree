@@ -7,9 +7,9 @@ import {
   getMainBranch,
   getWorktreeStatuses,
   listWorktrees,
-} from "../core/git";
-import { determineSessionStatus, formatElapsed, readAllSessions } from "../core/session";
-import { listWeztermPanes } from "../external/wezterm";
+} from "../core/git.ts";
+import { determineSessionStatus, formatElapsed, readAllSessions } from "../core/session.ts";
+import { listWeztermPanes } from "../external/wezterm.ts";
 import type {
   AheadBehind,
   ListArgs,
@@ -18,8 +18,8 @@ import type {
   SessionState,
   WorktreeListEntry,
   WorktreeStatus,
-} from "../types";
-import { startSpinner } from "../ui/spinner";
+} from "../types.ts";
+import { startSpinner } from "../ui/spinner.ts";
 
 const defaultDeps: ListDeps = {
   fetchAndPrune,

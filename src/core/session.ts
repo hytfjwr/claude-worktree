@@ -2,8 +2,8 @@ import { mkdir, open, readFile, rename, unlink, writeFile } from "node:fs/promis
 import { join } from "node:path";
 import { setTimeout } from "node:timers/promises";
 
-import type { SessionInfo, SessionState, WeztermPane } from "../types";
-import { getCacheDir } from "./slot";
+import type { SessionInfo, SessionState, WeztermPane } from "../types.ts";
+import { getCacheDir } from "./slot.ts";
 
 type SessionCache = Record<string, SessionInfo>;
 

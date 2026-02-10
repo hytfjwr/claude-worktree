@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { parseArgs, parseCleanArgs, parseCreateArgs, parseListArgs } from "./cli";
+import { parseArgs, parseCleanArgs, parseCreateArgs, parseListArgs } from "./cli.ts";
 
 describe("parseArgs", () => {
   describe("help", () => {

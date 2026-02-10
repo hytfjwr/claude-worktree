@@ -1,15 +1,15 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import type { WorktreeInfo } from "../types";
-import type { ExecResult } from "./exec";
-import { buildWorktreeCommand, getWorktreePath, parseWorktreePorcelain } from "./git";
+import type { WorktreeInfo } from "../types.ts";
+import type { ExecResult } from "./exec.ts";
+import { buildWorktreeCommand, getWorktreePath, parseWorktreePorcelain } from "./git.ts";
 
 // Hoisted mock for ./exec — default passthrough, overridable per-test via mockExecImpl
 const { mockExecImpl } = vi.hoisted(() => ({
   mockExecImpl: { current: null as ((cmd: string, args: string[]) => unknown) | null },
 }));
 
-vi.mock("./exec", async (importOriginal) => {
+vi.mock("./exec.ts", async (importOriginal) => {
   const original = (await importOriginal()) as { exec: (cmd: string, args: string[]) => unknown };
   return {
     ...original,

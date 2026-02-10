@@ -3,8 +3,8 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { TextDecoder } from "node:util";
 
-import type { HookVars, ProjectConfig } from "../types";
-import { exec } from "./exec";
+import type { HookVars, ProjectConfig } from "../types.ts";
+import { exec } from "./exec.ts";
 
 export async function loadProjectConfig(repoRoot: string): Promise<ProjectConfig | null> {
   const configPath = join(repoRoot, ".claude-worktree.json");

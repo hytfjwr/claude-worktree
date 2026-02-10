@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import { checkWeztermAvailable, getCurrentPaneId, listWeztermPanes } from "./wezterm";
+import { checkWeztermAvailable, getCurrentPaneId, listWeztermPanes } from "./wezterm.ts";
 
 // ============================================================================
 // Tests for pure functions using environment variables (no mocks needed)
