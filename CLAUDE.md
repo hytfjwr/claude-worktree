@@ -16,17 +16,17 @@ make install
 make dev
 
 # Type check
-make typecheck   # or bun run typecheck
+make typecheck   # or pnpm run typecheck
 
 # Lint (Biome)
-bun run lint
+pnpm run lint
 
 # Test
 pnpm test              # Run all tests
 pnpm test:watch        # Watch mode
 pnpm test:coverage     # With coverage
 
-# Check dependencies (bun, git, wezterm, claude)
+# Check dependencies (node, git, wezterm, claude)
 make check
 ```
 
@@ -90,7 +90,7 @@ claude-worktree clean -dry-run
 
 ## Architecture
 
-A TypeScript CLI tool running on the Bun runtime with zero external npm dependencies (uses only Bun built-in APIs).
+A TypeScript CLI tool running on Node.js.
 
 ```
 bin/
@@ -99,6 +99,8 @@ src/
   core/                # Core domain logic
     git.ts             # Git operations (repo info, worktree creation)
     git.test.ts
+    exec.ts            # Shell command execution (child_process wrapper)
+    exec.test.ts
     config.ts          # Project config (.claude-worktree.json) & hook execution
     config.test.ts
     session.ts         # Session metadata (save/read/complete/delete) & status detection
@@ -107,6 +109,7 @@ src/
     slot.test.ts
   commands/            # Command implementations
     create.ts          # Create command orchestration
+    create.test.ts
     list.ts            # Worktree listing with rich display
     list.test.ts
     clean.ts           # Worktree cleanup orchestration
@@ -167,7 +170,7 @@ src/
 **Environment Variables:**
 - `CLAUDE_WORKTREE_CACHE_DIR` — override the slot cache directory (default: `~/.cache/claude-worktree`)
 
-**External Tool Dependencies:** bun, git, wezterm CLI, claude CLI
+**External Tool Dependencies:** node, git, wezterm CLI, claude CLI
 
 ## Testing
 

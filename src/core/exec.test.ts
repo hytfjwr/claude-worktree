@@ -173,7 +173,7 @@ describe("stderr", () => {
 });
 
 // ============================================================================
-// Chaining pattern tests (matching Bun.$ usage patterns)
+// Chaining pattern tests
 // ============================================================================
 
 describe("chaining patterns", () => {

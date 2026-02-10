@@ -4,7 +4,8 @@ A CLI tool for parallel development using WezTerm + git worktree + Claude Code. 
 
 ## Requirements
 
-- [Bun](https://bun.sh/)
+- [Node.js](https://nodejs.org/) (v22+)
+- [pnpm](https://pnpm.io/)
 - [Git](https://git-scm.com/)
 - [Claude Code](https://claude.ai/code)
 - [WezTerm](https://wezfurlong.org/wezterm/) (optional, required only for `-pane`)
@@ -18,7 +19,7 @@ make install
 Or link manually:
 
 ```bash
-bun link
+pnpm link --global
 ```
 
 ## Usage
@@ -200,9 +201,9 @@ make dev
 make typecheck
 
 # Lint (Biome)
-bun run lint
+pnpm run lint
 
-# Check dependencies (bun, git, wezterm, claude)
+# Check dependencies (node, git, wezterm, claude)
 make check
 ```
 

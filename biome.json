@@ -42,7 +42,6 @@
           "level": "on",
           "options": {
             "groups": [
-              ":BUN:",
               ":NODE:",
               ":PACKAGE:",
               ":BLANK_LINE:",
