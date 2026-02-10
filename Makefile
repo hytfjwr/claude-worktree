@@ -29,11 +29,12 @@ setup:
 
 # Build TypeScript
 build:
+	@rm -rf dist
 	@pnpm run build
 	@echo "✅ Build complete"
 
 # Install globally
-install: pull setup build link
+install: pull setup build unlink link
 	@echo "✅ claude-worktree installed"
 	@echo "📍 $$(which claude-worktree)"
 
