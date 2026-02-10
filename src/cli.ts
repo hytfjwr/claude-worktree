@@ -169,9 +169,11 @@ export function parseListArgs(args: string[]): ListArgs {
 
 export function parseArgs(args: string[]): Command {
   // Internal sub-command: must be checked before help flags
-  // (base64 payload may contain -h/-help)
   if (args[0] === "_run-in-pane") {
-    return { type: "_run-in-pane", args: parseRunInPaneArgs(args.slice(1)) };
+    if (args.length !== 2) {
+      throw new Error("_run-in-pane requires exactly one payload file path argument");
+    }
+    return { type: "_run-in-pane", payloadPath: args[1] };
   }
 
   // Check for help flags
@@ -213,8 +215,10 @@ export async function run(command: Command): Promise<void> {
     case "clean":
       await executeClean(command.args);
       break;
-    case "_run-in-pane":
-      await executeRunInPane(command.args);
+    case "_run-in-pane": {
+      const runInPaneArgs = await parseRunInPaneArgs(command.payloadPath);
+      await executeRunInPane(runInPaneArgs);
       break;
+    }
   }
 }

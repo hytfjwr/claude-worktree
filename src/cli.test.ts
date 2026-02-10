@@ -108,41 +108,24 @@ describe("parseArgs", () => {
   });
 
   describe("_run-in-pane", () => {
-    test("valid payload - routes to _run-in-pane", () => {
-      const payload = Buffer.from(
-        JSON.stringify({
-          worktreePath: "/tmp/wt",
-          repoRoot: "/tmp/repo",
-          claudeCommand: "claude",
-          postCreateTimeout: 600,
-          preCleanTimeout: 600,
-          postCleanTimeout: 600,
-          verbose: false,
-        }),
-      ).toString("base64");
-      const result = parseArgs(["_run-in-pane", payload]);
-      expect(result.type).toBe("_run-in-pane");
+    test("valid payload path - routes to _run-in-pane", () => {
+      const result = parseArgs(["_run-in-pane", "/tmp/payload.json"]);
+      expect(result).toEqual({ type: "_run-in-pane", payloadPath: "/tmp/payload.json" });
     });
 
-    test("without payload - throws", () => {
-      expect(() => parseArgs(["_run-in-pane"])).toThrow("requires exactly one base64-encoded argument");
+    test("without payload path - throws", () => {
+      expect(() => parseArgs(["_run-in-pane"])).toThrow("requires exactly one payload file path argument");
     });
 
-    test("checked before help flags - not treated as unknown command", () => {
-      // _run-in-pane is checked before help/-h and before the unknown-command guard,
-      // so it is always routed correctly regardless of other args.
-      const payload = Buffer.from(
-        JSON.stringify({
-          worktreePath: "/tmp/wt",
-          repoRoot: "/tmp/repo",
-          claudeCommand: "claude -h",
-          postCreateTimeout: 600,
-          preCleanTimeout: 600,
-          postCleanTimeout: 600,
-          verbose: false,
-        }),
-      ).toString("base64");
-      const result = parseArgs(["_run-in-pane", payload]);
+    test("too many args - throws", () => {
+      expect(() => parseArgs(["_run-in-pane", "/tmp/a.json", "extra"])).toThrow(
+        "requires exactly one payload file path argument",
+      );
+    });
+
+    test("checked before help flags - not treated as help", () => {
+      // _run-in-pane is checked before help/-h and before the unknown-command guard
+      const result = parseArgs(["_run-in-pane", "/tmp/payload.json"]);
       expect(result.type).toBe("_run-in-pane");
     });
   });

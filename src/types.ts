@@ -196,7 +196,7 @@ export type Command =
   | { type: "create"; args: CreateArgs }
   | { type: "clean"; args: CleanArgs }
   | { type: "list"; args: ListArgs }
-  | { type: "_run-in-pane"; args: RunInPaneArgs };
+  | { type: "_run-in-pane"; payloadPath: string };
 
 // Re-export for backward compatibility
 export type CliArgs = CreateArgs;

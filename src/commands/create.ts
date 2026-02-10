@@ -1,6 +1,8 @@
 import { spawn } from "node:child_process";
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { randomUUID } from "node:crypto";
+import { readFile, unlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 
 import { buildHookCommand, loadProjectConfig, resolveHookTimeout, runHook } from "../core/config.ts";
 import {
@@ -286,22 +288,29 @@ export async function runCreate(args: CreateArgs): Promise<void> {
       verbose: !!args.verbose,
     };
 
-    const payload = Buffer.from(JSON.stringify(runInPaneArgs)).toString("base64");
+    const payloadPath = join(tmpdir(), `claude-worktree-${randomUUID()}.json`);
+    await writeFile(payloadPath, JSON.stringify(runInPaneArgs), { encoding: "utf-8", flag: "wx", mode: 0o600 });
 
-    const paneIdStr = await createPane({ keepFocus: true });
-    const paneId = Number.parseInt(paneIdStr, 10);
-    console.log(`🪟 Created pane: ${paneId}`);
+    try {
+      const paneIdStr = await createPane({ keepFocus: true });
+      const paneId = Number.parseInt(paneIdStr, 10);
+      console.log(`🪟 Created pane: ${paneId}`);
 
-    await sendCommand(paneIdStr, `${getSelfCommand()} _run-in-pane ${payload}`);
+      await sendCommand(paneIdStr, `${getSelfCommand()} _run-in-pane "${payloadPath}"`);
 
-    // Save session metadata
-    await saveSession(worktreePath, {
-      paneId,
-      mode: "pane",
-      startedAt: new Date().toISOString(),
-    });
+      // Save session metadata
+      await saveSession(worktreePath, {
+        paneId,
+        mode: "pane",
+        startedAt: new Date().toISOString(),
+      });
 
-    console.log("✅ Worktree created and Claude started in new pane");
+      console.log("✅ Worktree created and Claude started in new pane");
+    } catch (error) {
+      // Clean up temp file on failure (the pane side handles its own cleanup on success)
+      await unlink(payloadPath).catch(() => {});
+      throw error;
+    }
   } else {
     // Terminal mode: run postCreate hook here, then launch Claude
 

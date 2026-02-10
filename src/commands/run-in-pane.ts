@@ -1,4 +1,7 @@
 import { spawn } from "node:child_process";
+import { readFile, unlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { basename, dirname, resolve } from "node:path";
 
 import { runHook } from "../core/config.ts";
 import { removeWorktree } from "../core/git.ts";
@@ -7,18 +10,31 @@ import { deleteSlot } from "../core/slot.ts";
 import type { RunInPaneArgs } from "../types.ts";
 import { createTailUpdater, startSpinner } from "../ui/spinner.ts";
 
-export function parseRunInPaneArgs(args: string[]): RunInPaneArgs {
-  if (args.length !== 1) {
-    throw new Error("_run-in-pane requires exactly one base64-encoded argument");
+export async function parseRunInPaneArgs(payloadPath: string): Promise<RunInPaneArgs> {
+  // Validate path to prevent deletion of arbitrary files
+  const dir = resolve(dirname(payloadPath));
+  const name = basename(payloadPath);
+  if (dir !== resolve(tmpdir()) || !name.startsWith("claude-worktree-") || !name.endsWith(".json")) {
+    throw new Error(`_run-in-pane: invalid payload path: ${payloadPath}`);
   }
 
-  // Buffer.from with "base64" never throws — invalid input silently decodes to garbage,
-  // which will then fail JSON.parse below.
-  const decoded = Buffer.from(args[0], "base64").toString("utf-8");
+  let content: string;
+  try {
+    content = await readFile(payloadPath, "utf-8");
+  } catch (err) {
+    const error = err as NodeJS.ErrnoException;
+    if (error.code === "ENOENT") {
+      throw new Error(`_run-in-pane: payload file not found: ${payloadPath}`);
+    }
+    throw new Error(`_run-in-pane: failed to read payload file ${payloadPath}: ${error.message}`);
+  }
+
+  // Clean up temp file
+  await unlink(payloadPath).catch(() => {});
 
   let parsed: unknown;
   try {
-    parsed = JSON.parse(decoded);
+    parsed = JSON.parse(content);
   } catch {
     throw new Error("_run-in-pane: invalid JSON payload");
   }
