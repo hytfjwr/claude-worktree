@@ -74,6 +74,7 @@ const noopSpinner = (_message: string) => ({
   stop: (_finalMessage?: string) => {},
   fail: (_message: string) => {},
   updateTail: (_lines: string[]) => {},
+  isExpanded: () => false,
 });
 
 function makeListDeps(overrides: Partial<ListDeps> = {}): ListDeps {
@@ -516,7 +517,12 @@ describe("executeList", () => {
     const deps = makeListDeps({
       startSpinner: (_message: string) => {
         spinnerStarted = true;
-        return { stop: () => {}, fail: (_msg: string) => {}, updateTail: (_lines: string[]) => {} };
+        return {
+          stop: () => {},
+          fail: (_msg: string) => {},
+          updateTail: (_lines: string[]) => {},
+          isExpanded: () => false,
+        };
       },
     });
 
@@ -540,6 +546,7 @@ describe("executeList", () => {
         },
         fail: (_msg: string) => {},
         updateTail: (_lines: string[]) => {},
+        isExpanded: () => false,
       }),
     });
 
@@ -560,6 +567,7 @@ describe("executeList", () => {
           failMessage = msg;
         },
         updateTail: (_lines: string[]) => {},
+        isExpanded: () => false,
       }),
     });
 

@@ -159,6 +159,8 @@ export type Spinner = {
    * @param allLines - All lines accumulated since spinner start, used for expanded view
    */
   updateTail: (lines: string[], totalCount: number, allLines?: string[]) => void;
+  /** Returns true when the spinner is in expanded (Ctrl+O) mode */
+  isExpanded: () => boolean;
 };
 
 // =============================================================================

@@ -186,6 +186,7 @@ describe("createTailUpdater", () => {
       updateTail: (lines: string[], totalCount: number, allLines?: string[]) => {
         calls.push({ lines: [...lines], totalCount, allLines: allLines ? [...allLines] : [] });
       },
+      isExpanded: () => false,
     };
 
     const onLine = createTailUpdater(mockSpinner);
@@ -203,6 +204,7 @@ describe("createTailUpdater", () => {
       updateTail: (lines: string[], totalCount: number, allLines?: string[]) => {
         calls.push({ lines: [...lines], totalCount, allLines: allLines ? [...allLines] : [] });
       },
+      isExpanded: () => false,
     };
 
     const onLine = createTailUpdater(mockSpinner);
@@ -230,6 +232,7 @@ describe("createTailUpdater", () => {
         lastCall.totalCount = totalCount;
         lastCall.allLines = allLines ? [...allLines] : [];
       },
+      isExpanded: () => false,
     };
 
     const onLine = createTailUpdater(mockSpinner);
@@ -255,6 +258,7 @@ describe("createTailUpdater", () => {
       updateTail: (lines: string[], totalCount: number, _allLines?: string[]) => {
         calls.push({ lines: [...lines], totalCount });
       },
+      isExpanded: () => false,
     };
 
     const onLine = createTailUpdater(mockSpinner);
@@ -265,6 +269,57 @@ describe("createTailUpdater", () => {
 
     expect(calls.length).toBe(2);
     expect(calls[1]).toEqual({ lines: ["a", "b"], totalCount: 2 });
+  });
+
+  test("flushes every line immediately when spinner is expanded", () => {
+    vi.useFakeTimers();
+    const calls: { lines: string[]; totalCount: number }[] = [];
+    const mockSpinner = {
+      stop: () => {},
+      fail: () => {},
+      updateTail: (lines: string[], totalCount: number, _allLines?: string[]) => {
+        calls.push({ lines: [...lines], totalCount });
+      },
+      isExpanded: () => true,
+    };
+
+    const onLine = createTailUpdater(mockSpinner);
+    onLine("a");
+    onLine("b");
+    onLine("c");
+
+    // All 3 lines should flush immediately without waiting
+    expect(calls.length).toBe(3);
+    expect(calls[0]).toEqual({ lines: ["a"], totalCount: 1 });
+    expect(calls[1]).toEqual({ lines: ["a", "b"], totalCount: 2 });
+    expect(calls[2]).toEqual({ lines: ["a", "b", "c"], totalCount: 3 });
+  });
+
+  test("switches from throttled to real-time when spinner expands mid-stream", () => {
+    vi.useFakeTimers();
+    let expandedState = false;
+    const calls: { lines: string[]; totalCount: number }[] = [];
+    const mockSpinner = {
+      stop: () => {},
+      fail: () => {},
+      updateTail: (lines: string[], totalCount: number, _allLines?: string[]) => {
+        calls.push({ lines: [...lines], totalCount });
+      },
+      isExpanded: () => expandedState,
+    };
+
+    const onLine = createTailUpdater(mockSpinner);
+    onLine("a"); // immediate flush (leading edge)
+    onLine("b"); // throttled (collapsed)
+
+    expect(calls.length).toBe(1);
+
+    // User expands the spinner
+    expandedState = true;
+    onLine("c"); // should flush immediately
+
+    expect(calls.length).toBe(2);
+    expect(calls[1]).toEqual({ lines: ["a", "b", "c"], totalCount: 3 });
   });
 
   test("updateTail is safe after spinner.stop (stopped flag)", () => {

@@ -101,6 +101,17 @@ export function createTailUpdater(spinner: Spinner): (line: string) => void {
     totalCount++;
     if (tailLines.length > TAIL_LINE_COUNT) tailLines.shift();
 
+    // In expanded mode, update immediately without cloning arrays
+    if (spinner.isExpanded()) {
+      if (flushTimer) {
+        clearTimeout(flushTimer);
+        flushTimer = null;
+      }
+      lastFlushTime = Date.now();
+      spinner.updateTail(tailLines, totalCount, allLines);
+      return;
+    }
+
     const now = Date.now();
     if (now - lastFlushTime >= TAIL_UPDATE_INTERVAL) {
       flush();
@@ -277,6 +288,9 @@ export function startSpinner(message: string, options?: { timeoutSec?: number })
       }
 
       writeFrame();
+    },
+    isExpanded() {
+      return expanded;
     },
   };
 }

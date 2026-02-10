@@ -37,6 +37,7 @@ function makeSpinner() {
     stop: vi.fn(),
     fail: vi.fn(),
     updateTail: vi.fn(),
+    isExpanded: () => false,
   };
 }
 
