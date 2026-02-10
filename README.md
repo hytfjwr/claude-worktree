@@ -168,16 +168,6 @@ Priority: hook-specific value > `hookTimeout` > default (600s)
 
 - `CLAUDE_WORKTREE_CACHE_DIR` — Override the slot cache directory (default: `~/.cache/claude-worktree`)
 
-## How It Works
-
-1. Parses arguments (branch name, prompt or plan file)
-2. Gets the git repository root and current branch
-3. Loads project config from `.claude-worktree.json` (if exists)
-4. Creates worktree directly via `git worktree add`
-5. Runs `postCreate` hook (if configured)
-6. If `-pane`: Splits a new pane to the right in WezTerm → cd into worktree → launches Claude Code → saves session metadata
-7. Otherwise: cd into worktree → launches Claude Code in current terminal → marks session as completed on exit
-
 ## Development
 
 ```bash
