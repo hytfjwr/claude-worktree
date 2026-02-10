@@ -32,6 +32,14 @@ function makeStatus(
   };
 }
 
+function makeSpinner() {
+  return {
+    stop: vi.fn(),
+    fail: vi.fn(),
+    updateTail: vi.fn(),
+  };
+}
+
 function makeDeps(overrides: Partial<CleanDeps> = {}): CleanDeps {
   return {
     fetchAndPrune: async () => {},
@@ -53,6 +61,7 @@ function makeDeps(overrides: Partial<CleanDeps> = {}): CleanDeps {
     deleteSession: async () => {},
     confirm: async () => true,
     selectMultiple: async () => [],
+    startSpinner: () => makeSpinner(),
     ...overrides,
   };
 }

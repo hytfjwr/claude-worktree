@@ -28,6 +28,7 @@ const defaultDeps: CleanDeps = {
   deleteSession,
   confirm,
   selectMultiple,
+  startSpinner,
 };
 
 export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDeps): Promise<CleanResult> {
@@ -37,22 +38,31 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
     errors: [],
   };
 
-  console.log("🔄 Updating remote references...");
+  const fetchSpinner = deps.startSpinner("Updating remote references...");
   try {
     await deps.fetchAndPrune();
+    fetchSpinner.stop("✓ Done updating remote references.");
   } catch {
-    console.log("⚠️  Failed to update remote references (continuing)");
+    fetchSpinner.fail("Failed to update remote references (continuing)");
   }
 
-  console.log("📋 Fetching worktree list...");
-  const worktrees = await deps.listWorktrees();
+  const listSpinner = deps.startSpinner("Fetching worktree list...");
+  let worktrees: Awaited<ReturnType<CleanDeps["listWorktrees"]>>;
+  let statuses: Awaited<ReturnType<CleanDeps["getWorktreeStatuses"]>>;
+  try {
+    worktrees = await deps.listWorktrees();
 
-  if (worktrees.length === 0) {
-    console.log("No worktrees found.");
-    return result;
+    if (worktrees.length === 0) {
+      listSpinner.stop("No worktrees found.");
+      return result;
+    }
+
+    statuses = await deps.getWorktreeStatuses(worktrees);
+    listSpinner.stop("✓ Done fetching worktree list.");
+  } catch (error) {
+    listSpinner.fail("Failed to fetch worktree list");
+    throw error;
   }
-
-  const statuses = await deps.getWorktreeStatuses(worktrees);
 
   // Filter out main worktrees for display
   const cleanableStatuses = statuses.filter((s) => !s.worktree.isMain);
@@ -125,9 +135,11 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
   }
 
   // Execute deletion
-  console.log("\n🗑️  Deleting...");
+  console.log("");
   for (const status of toDelete) {
     const { worktree } = status;
+    const label = worktree.branch || worktree.path;
+    const spinner = deps.startSpinner(`Deleting ${label}...`);
     try {
       // Read cached slot for this worktree
       const slot = await deps.readSlot(worktree.path);
@@ -135,19 +147,14 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
       // preClean hook
       if (config?.preClean && repoRoot) {
         const hookCmd = deps.buildHookCommand(config.preClean, { path: worktree.path, slot });
-        const spinner = args.verbose
-          ? null
-          : startSpinner("Running preClean hook...", { timeoutSec: resolveHookTimeout("preClean", config) });
         try {
           await deps.runHook(hookCmd, repoRoot, {
             verbose: args.verbose,
-            onLine: spinner ? createTailUpdater(spinner) : undefined,
+            onLine: args.verbose ? undefined : createTailUpdater(spinner),
             timeout: resolveHookTimeout("preClean", config),
           });
-          spinner?.stop("✓ preClean hook done");
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          spinner?.fail(`preClean hook failed (continuing): ${message}`);
           console.warn(`  ⚠️  preClean hook failed (continuing): ${message}`);
         }
       }
@@ -167,20 +174,14 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
       // postClean hook
       if (config?.postClean && repoRoot) {
         const hookCmd = deps.buildHookCommand(config.postClean, { path: worktree.path, slot });
-        const postCleanTimeoutSec = resolveHookTimeout("postClean", config);
-        const spinner = args.verbose
-          ? null
-          : startSpinner("Running postClean hook...", { timeoutSec: postCleanTimeoutSec });
         try {
           await deps.runHook(hookCmd, repoRoot, {
             verbose: args.verbose,
-            onLine: spinner ? createTailUpdater(spinner) : undefined,
-            timeout: postCleanTimeoutSec,
+            onLine: args.verbose ? undefined : createTailUpdater(spinner),
+            timeout: resolveHookTimeout("postClean", config),
           });
-          spinner?.stop("✓ postClean hook done");
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          spinner?.fail(`postClean hook failed (continuing): ${message}`);
           console.warn(`  ⚠️  postClean hook failed (continuing): ${message}`);
         }
       }
@@ -189,11 +190,11 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
       await deps.deleteSlot(worktree.path);
       await deps.deleteSession(worktree.path);
 
-      console.log(`  ✓ ${worktree.branch || worktree.path}`);
+      spinner.stop(`✓ ${label}`);
       result.deleted.push(worktree.path);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.log(`  ✗ ${worktree.branch || worktree.path}: ${message}`);
+      spinner.fail(`${label}: ${message}`);
       result.errors.push({ path: worktree.path, error: message });
     }
   }

@@ -256,4 +256,5 @@ export type CleanDeps = {
   deleteSession: (worktreePath: string) => Promise<void>;
   confirm: (message: string) => Promise<boolean>;
   selectMultiple: (statuses: WorktreeStatus[]) => Promise<WorktreeStatus[]>;
+  startSpinner: (message: string) => Spinner;
 };
