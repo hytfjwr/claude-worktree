@@ -54,6 +54,13 @@ export function shimmerText(text: string, shimmerPos: number): string {
 
 const TAIL_LINE_COUNT = 3;
 const MAX_ALL_LINES = 10000;
+const EXPANDED_RATIO = 0.8;
+const DEFAULT_ROWS = 24;
+
+export function getMaxExpandedLines(): number {
+  const rows = process.stdout.rows || DEFAULT_ROWS;
+  return Math.max(1, Math.floor(rows * EXPANDED_RATIO));
+}
 
 export function formatDuration(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
@@ -93,7 +100,6 @@ export function startSpinner(message: string, options?: { timeoutSec?: number })
   let totalLineCount = 0;
   let allLines: string[] = [];
   let expanded = false;
-  let expandPrintedCount = 0;
   let expandedLogLines = 0;
   const startTime = Date.now();
   const timeoutSec = options?.timeoutSec;
@@ -115,7 +121,8 @@ export function startSpinner(message: string, options?: { timeoutSec?: number })
 
     if (timeoutSec != null) {
       const elapsedSec = Math.floor((Date.now() - startTime) / 1000);
-      const hiddenCount = expanded ? 0 : Math.max(0, totalLineCount - tailLines.length);
+      const visibleCount = expanded ? Math.min(allLines.length, getMaxExpandedLines()) : tailLines.length;
+      const hiddenCount = Math.max(0, totalLineCount - visibleCount);
       const infoText = formatInfoLine(hiddenCount, elapsedSec, timeoutSec);
 
       let toggleHint = "";
@@ -133,39 +140,40 @@ export function startSpinner(message: string, options?: { timeoutSec?: number })
     extraLines = (expanded ? 0 : tailLines.length) + (timeoutSec != null ? 1 : 0);
   };
 
-  const printAllLines = () => {
-    const maxWidth = (process.stdout.columns || 80) - 6;
-    for (let i = expandPrintedCount; i < allLines.length; i++) {
-      const formatted = formatTailLine(allLines[i], maxWidth);
-      process.stdout.write(`\x1b[38;5;245m    ${formatted}\x1b[0m\n`);
-      expandedLogLines++;
+  const clearRenderedArea = () => {
+    const linesToClear = expandedLogLines + extraLines;
+    if (linesToClear > 0) {
+      process.stdout.write(`\x1b[${linesToClear}A`);
     }
-    expandPrintedCount = allLines.length;
+    process.stdout.write("\r\x1b[J");
+  };
+
+  const printExpandedWindow = () => {
+    const maxLines = getMaxExpandedLines();
+    const startIdx = Math.max(0, allLines.length - maxLines);
+    const linesToPrint = allLines.slice(startIdx);
+    const maxWidth = (process.stdout.columns || 80) - 6;
+    for (const line of linesToPrint) {
+      const formatted = formatTailLine(line, maxWidth);
+      process.stdout.write(`\x1b[38;5;245m    ${formatted}\x1b[0m\n`);
+    }
+    expandedLogLines = linesToPrint.length;
   };
 
   const toggleExpand = () => {
     if (!expanded) {
-      // Clear current spinner area
-      if (extraLines > 0) {
-        process.stdout.write(`\x1b[${extraLines}A`);
-      }
-      process.stdout.write("\r\x1b[J");
+      clearRenderedArea();
       extraLines = 0;
       expandedLogLines = 0;
 
-      // Print lines accumulated since last expand
-      printAllLines();
+      // Print bounded window of recent lines
+      printExpandedWindow();
       expanded = true;
     } else {
       // Collapse: clear expanded lines + spinner area
-      const totalClearLines = expandedLogLines + extraLines;
-      if (totalClearLines > 0) {
-        process.stdout.write(`\x1b[${totalClearLines}A`);
-      }
-      process.stdout.write("\r\x1b[J");
+      clearRenderedArea();
       extraLines = 0;
       expandedLogLines = 0;
-      expandPrintedCount = 0;
       expanded = false;
     }
     writeFrame();
@@ -218,10 +226,8 @@ export function startSpinner(message: string, options?: { timeoutSec?: number })
 
   const clearAndWrite = (text: string) => {
     cleanupKeyboard();
-    if (extraLines > 0) {
-      process.stdout.write(`\x1b[${extraLines}A`);
-    }
-    process.stdout.write(`\r\x1b[J${text}\n\x1b[?25h`); // Show cursor
+    clearRenderedArea();
+    process.stdout.write(`${text}\n\x1b[?25h`); // Show cursor
   };
 
   return {
@@ -238,14 +244,11 @@ export function startSpinner(message: string, options?: { timeoutSec?: number })
       totalLineCount = totalCount;
       if (newAllLines) allLines = newAllLines;
 
-      if (expanded && allLines.length > expandPrintedCount) {
-        // Print new lines above the spinner
-        if (extraLines > 0) {
-          process.stdout.write(`\x1b[${extraLines}A`);
-        }
-        process.stdout.write("\r\x1b[J");
+      if (expanded) {
+        // Full redraw of bounded window
+        clearRenderedArea();
         extraLines = 0;
-        printAllLines();
+        printExpandedWindow();
       }
 
       writeFrame();

@@ -5,6 +5,7 @@ import {
   formatDuration,
   formatInfoLine,
   formatTailLine,
+  getMaxExpandedLines,
   lerp,
   shimmerText,
   smoothstep,
@@ -218,6 +219,20 @@ describe("createTailUpdater", () => {
   });
 });
 
+function withTerminalRows(rows: number | undefined, fn: () => void) {
+  const saved = Object.getOwnPropertyDescriptor(process.stdout, "rows");
+  Object.defineProperty(process.stdout, "rows", { value: rows, configurable: true, writable: true });
+  try {
+    fn();
+  } finally {
+    if (saved) {
+      Object.defineProperty(process.stdout, "rows", saved);
+    } else {
+      delete (process.stdout as unknown as Record<string, unknown>).rows;
+    }
+  }
+}
+
 describe("keyboard handling", () => {
   type StdinMock = { setRawMode: unknown; resume: unknown; pause: unknown; on: unknown; removeListener: unknown };
 
@@ -260,7 +275,7 @@ describe("keyboard handling", () => {
     }
   }
 
-  test("Ctrl+O toggles to expanded mode showing all lines", () => {
+  test("Ctrl+O toggles to expanded mode showing lines", () => {
     withTTYStdin((emitKey) => {
       const writeSpy = vi.spyOn(process.stdout, "write");
       const spinner = startSpinner("Processing...", { timeoutSec: 600 });
@@ -273,7 +288,7 @@ describe("keyboard handling", () => {
 
       const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
       expect(output).toContain("Ctrl+O to collapse");
-      // All lines should be printed permanently
+      // All lines should be printed (5 lines < 80% of default terminal height)
       expect(output).toContain("a");
       expect(output).toContain("b");
       expect(output).toContain("c");
@@ -354,12 +369,118 @@ describe("keyboard handling", () => {
     });
   });
 
+  test("expanded mode limits output to 80% of terminal height", () => {
+    withTTYStdin((emitKey) => {
+      // Set terminal to 5 rows → max expanded lines = Math.floor(5 * 0.8) = 4
+      withTerminalRows(5, () => {
+        const writeSpy = vi.spyOn(process.stdout, "write");
+        const spinner = startSpinner("Processing...", { timeoutSec: 600 });
+
+        const allLines = Array.from({ length: 10 }, (_, i) => `line-${i + 1}`);
+        spinner.updateTail(["line-8", "line-9", "line-10"], 10, allLines);
+        writeSpy.mockClear();
+
+        // Press Ctrl+O to expand
+        emitKey(0x0f);
+
+        const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+        // Should show only last 4 lines (80% of 5 rows)
+        expect(output).toContain("line-7");
+        expect(output).toContain("line-8");
+        expect(output).toContain("line-9");
+        expect(output).toContain("line-10");
+        // Should NOT show earlier lines
+        expect(output).not.toContain("line-5");
+        expect(output).not.toContain("line-6");
+        // Should show hidden line count in info line
+        expect(output).toContain("..+6 more lines");
+
+        spinner.stop();
+      });
+    });
+  });
+
+  test("expanded mode auto-follows new lines within bounded window", () => {
+    withTTYStdin((emitKey) => {
+      // Set terminal to 5 rows → max expanded lines = 4
+      withTerminalRows(5, () => {
+        const writeSpy = vi.spyOn(process.stdout, "write");
+        const spinner = startSpinner("Processing...", { timeoutSec: 600 });
+
+        const allLines = Array.from({ length: 10 }, (_, i) => `line-${i + 1}`);
+        spinner.updateTail(["line-8", "line-9", "line-10"], 10, allLines);
+
+        // Expand
+        emitKey(0x0f);
+
+        // Add new line while expanded
+        allLines.push("line-11");
+        writeSpy.mockClear();
+        spinner.updateTail(["line-9", "line-10", "line-11"], 11, allLines);
+
+        const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+        // Should show last 4 lines including the new one
+        expect(output).toContain("line-8");
+        expect(output).toContain("line-9");
+        expect(output).toContain("line-10");
+        expect(output).toContain("line-11");
+        // Earlier lines should be evicted
+        expect(output).not.toContain("line-7");
+
+        spinner.stop();
+      });
+    });
+  });
+
+  test("stop() during expanded mode correctly clears all lines", () => {
+    withTTYStdin((emitKey) => {
+      const writeSpy = vi.spyOn(process.stdout, "write");
+      const spinner = startSpinner("Processing...", { timeoutSec: 600 });
+
+      spinner.updateTail(["c", "d", "e"], 5, ["a", "b", "c", "d", "e"]);
+
+      // Expand (prints 5 log lines)
+      emitKey(0x0f);
+      writeSpy.mockClear();
+
+      // Stop while expanded
+      spinner.stop();
+
+      const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+      // Should move cursor up to cover expanded log lines (5) + spinner info line (1)
+      expect(output).toContain("\x1b[6A");
+      // Should clear and show final message
+      expect(output).toContain("\x1b[J");
+      expect(output).toContain("\x1b[?25h");
+    });
+  });
+
   test("stop() cleans up keyboard listener", () => {
     withTTYStdin((_emitKey) => {
       const spinner = startSpinner("Processing...", { timeoutSec: 600 });
 
       // stop() should not throw even with keyboard listener active
       expect(() => spinner.stop()).not.toThrow();
+    });
+  });
+});
+
+describe("getMaxExpandedLines", () => {
+  test("returns 80% of terminal rows", () => {
+    withTerminalRows(50, () => {
+      expect(getMaxExpandedLines()).toBe(40); // Math.floor(50 * 0.8)
+    });
+  });
+
+  test("falls back to 24 rows when process.stdout.rows is undefined", () => {
+    withTerminalRows(undefined, () => {
+      expect(getMaxExpandedLines()).toBe(19); // Math.floor(24 * 0.8)
+    });
+  });
+
+  test("returns minimum 1 for very small terminal", () => {
+    withTerminalRows(1, () => {
+      expect(getMaxExpandedLines()).toBe(1); // Math.max(1, Math.floor(1 * 0.8)) = Math.max(1, 0) = 1
     });
   });
 });
