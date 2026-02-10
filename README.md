@@ -149,19 +149,6 @@ You can define project-specific hooks in `.claude-worktree.json` at the reposito
 - `{path}` — worktree path
 - `{slot}` — auto-assigned slot number (1-9) based on port availability (8881-8889). Slot assignments are persisted to `~/.cache/claude-worktree/slots.json` so that `preClean`/`postClean` hooks can reference the same slot that was assigned during `postCreate`.
 
-### Session Tracking
-
-When a worktree is created, session metadata (pane ID, mode, start time) is saved to `~/.cache/claude-worktree/sessions.json`. Use `list -status` to see the status of each Claude session:
-
-```
-● feature/auth  Active  ↑2       ● Running (15m)  pane #3
-● fix/bug-123   Active           ✓ Done (8m)      pane #5
-```
-
-- **pane mode**: Checks if the WezTerm pane still exists → Running or Done
-- **terminal mode**: Marks as Done when the Claude process exits
-- Session data is automatically cleaned up by the `clean` command
-
 ### Hooks
 
 - **postCreate** — Runs after worktree creation (e.g., start Docker containers). If the hook fails, the worktree is automatically rolled back.
