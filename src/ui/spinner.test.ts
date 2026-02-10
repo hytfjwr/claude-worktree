@@ -1,12 +1,15 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import {
+  COLOR_THEMES,
+  type ColorTheme,
   createTailUpdater,
   formatDuration,
   formatInfoLine,
   formatTailLine,
   getMaxExpandedLines,
   lerp,
+  pickRandomTheme,
   shimmerText,
   smoothstep,
   startSpinner,
@@ -772,11 +775,48 @@ describe("shimmerText", () => {
     expect(result).toContain("o");
   });
 
-  test("all chars become base color when shimmerPos is far away", () => {
+  test("all chars become base color when shimmerPos is far away (default)", () => {
     const result = shimmerText("AB", 100);
-    // Both chars should be base color (120, 110, 170)
+    // Default base color (120, 110, 170)
     const baseColorCode = "\x1b[38;2;120;110;170m";
     const count = result.split(baseColorCode).length - 1;
     expect(count).toBe(2);
+  });
+
+  test("uses provided theme colors", () => {
+    const theme: ColorTheme = {
+      base: { r: 80, g: 160, b: 100 },
+      bright: { r: 180, g: 255, b: 200 },
+    };
+    const result = shimmerText("AB", 100, theme);
+    const baseColorCode = "\x1b[38;2;80;160;100m";
+    const count = result.split(baseColorCode).length - 1;
+    expect(count).toBe(2);
+  });
+});
+
+describe("pickRandomTheme", () => {
+  test("returns a theme from COLOR_THEMES", () => {
+    const theme = pickRandomTheme();
+    expect(COLOR_THEMES).toContainEqual(theme);
+  });
+});
+
+describe("COLOR_THEMES", () => {
+  test("has at least 2 themes", () => {
+    expect(COLOR_THEMES.length).toBeGreaterThanOrEqual(2);
+  });
+
+  test("all themes have valid RGB values (0-255)", () => {
+    for (const theme of COLOR_THEMES) {
+      for (const color of [theme.base, theme.bright]) {
+        expect(color.r).toBeGreaterThanOrEqual(0);
+        expect(color.r).toBeLessThanOrEqual(255);
+        expect(color.g).toBeGreaterThanOrEqual(0);
+        expect(color.g).toBeLessThanOrEqual(255);
+        expect(color.b).toBeGreaterThanOrEqual(0);
+        expect(color.b).toBeLessThanOrEqual(255);
+      }
+    }
   });
 });

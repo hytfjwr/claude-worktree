@@ -7,8 +7,26 @@ const INTERVAL = 80; // ms
 const SHIMMER_WIDTH = 6;
 const SHIMMER_SPEED = 2; // characters per frame
 const SHIMMER_PAUSE = 6; // extra dark frames between sweeps
-const BASE_COLOR = { r: 120, g: 110, b: 170 };
-const BRIGHT_COLOR = { r: 230, g: 225, b: 255 };
+
+type Color = { r: number; g: number; b: number };
+export type ColorTheme = { base: Color; bright: Color };
+
+export const COLOR_THEMES: readonly ColorTheme[] = [
+  { base: { r: 120, g: 110, b: 170 }, bright: { r: 230, g: 225, b: 255 } }, // Purple
+  { base: { r: 60, g: 150, b: 160 }, bright: { r: 180, g: 240, b: 255 } }, // Cyan
+  { base: { r: 80, g: 160, b: 100 }, bright: { r: 180, g: 255, b: 200 } }, // Green
+  { base: { r: 180, g: 120, b: 60 }, bright: { r: 255, g: 220, b: 150 } }, // Amber
+  { base: { r: 170, g: 90, b: 130 }, bright: { r: 255, g: 190, b: 220 } }, // Rose
+  { base: { r: 80, g: 120, b: 180 }, bright: { r: 180, g: 210, b: 255 } }, // Blue
+  { base: { r: 170, g: 150, b: 60 }, bright: { r: 255, g: 240, b: 150 } }, // Gold
+  { base: { r: 180, g: 90, b: 80 }, bright: { r: 255, g: 180, b: 170 } }, // Coral
+];
+
+const DEFAULT_THEME: ColorTheme = COLOR_THEMES[0];
+
+export function pickRandomTheme(): ColorTheme {
+  return COLOR_THEMES[Math.floor(Math.random() * COLOR_THEMES.length)];
+}
 
 export function stripAnsi(str: string): string {
   // CSI sequences (including ? for cursor hide/show), OSC sequences, and simple escapes
@@ -36,16 +54,18 @@ export function smoothstep(t: number): number {
   return t * t * (3 - 2 * t);
 }
 
-export function shimmerText(text: string, shimmerPos: number): string {
+export function shimmerText(text: string, shimmerPos: number, theme?: ColorTheme): string {
+  const baseColor = theme?.base ?? DEFAULT_THEME.base;
+  const brightColor = theme?.bright ?? DEFAULT_THEME.bright;
   const chars = [...text];
   let result = "";
   for (let i = 0; i < chars.length; i++) {
     const distance = Math.abs(i - shimmerPos);
     const t = Math.max(0, 1 - distance / SHIMMER_WIDTH);
     const st = smoothstep(t);
-    const r = lerp(BASE_COLOR.r, BRIGHT_COLOR.r, st);
-    const g = lerp(BASE_COLOR.g, BRIGHT_COLOR.g, st);
-    const b = lerp(BASE_COLOR.b, BRIGHT_COLOR.b, st);
+    const r = lerp(baseColor.r, brightColor.r, st);
+    const g = lerp(baseColor.g, brightColor.g, st);
+    const b = lerp(baseColor.b, brightColor.b, st);
     result += `\x1b[38;2;${r};${g};${b}m${chars[i]}`;
   }
   result += "\x1b[0m";
@@ -123,6 +143,7 @@ export function createTailUpdater(spinner: Spinner): (line: string) => void {
 }
 
 export function startSpinner(message: string, options?: { timeoutSec?: number }): Spinner {
+  const theme = pickRandomTheme();
   let frameIndex = 0;
   let shimmerPos = -SHIMMER_WIDTH;
   const chars = [...message];
@@ -137,13 +158,15 @@ export function startSpinner(message: string, options?: { timeoutSec?: number })
   const startTime = Date.now();
   const timeoutSec = options?.timeoutSec;
 
+  const frameColor = `\x1b[38;2;${theme.bright.r};${theme.bright.g};${theme.bright.b}m`;
+
   const writeFrame = () => {
     if (extraLines > 0) {
       process.stdout.write(`\x1b[${extraLines}A`);
     }
     const frame = FRAMES[frameIndex];
     const maxWidth = (process.stdout.columns || 80) - 6;
-    let output = `\r\x1b[J${frame} ${shimmerText(message, shimmerPos)}`;
+    let output = `\r\x1b[J${frameColor}${frame}\x1b[0m ${shimmerText(message, shimmerPos, theme)}`;
 
     if (!expanded && tailLines.length > 0) {
       for (const line of tailLines) {
