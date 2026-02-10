@@ -8,6 +8,8 @@ export { executeClean } from "./commands/clean.ts";
 export { readPlanFile, runCreate } from "./commands/create.ts";
 // List command
 export { executeList, formatSessionState } from "./commands/list.ts";
+// Run-in-pane command
+export { executeRunInPane } from "./commands/run-in-pane.ts";
 // Config utilities
 export { buildHookCommand, loadProjectConfig, runHook } from "./core/config.ts";
 // Git utilities
@@ -87,6 +89,8 @@ export type {
   ParsedWorktree,
   // Config
   ProjectConfig,
+  // RunInPane
+  RunInPaneArgs,
   // Session
   SessionInfo,
   SessionMode,

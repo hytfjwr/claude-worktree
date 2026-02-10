@@ -1,6 +1,7 @@
 import { executeClean } from "./commands/clean.ts";
 import { runCreate } from "./commands/create.ts";
 import { executeList } from "./commands/list.ts";
+import { executeRunInPane, parseRunInPaneArgs } from "./commands/run-in-pane.ts";
 import { extractOptions } from "./options.ts";
 import type { CleanArgs, Command, CreateArgs, ListArgs } from "./types.ts";
 
@@ -167,6 +168,12 @@ export function parseListArgs(args: string[]): ListArgs {
 }
 
 export function parseArgs(args: string[]): Command {
+  // Internal sub-command: must be checked before help flags
+  // (base64 payload may contain -h/-help)
+  if (args[0] === "_run-in-pane") {
+    return { type: "_run-in-pane", args: parseRunInPaneArgs(args.slice(1)) };
+  }
+
   // Check for help flags
   if (args.length === 0 || args.includes("-h") || args.includes("-help")) {
     return { type: "help" };
@@ -205,6 +212,9 @@ export async function run(command: Command): Promise<void> {
       break;
     case "clean":
       await executeClean(command.args);
+      break;
+    case "_run-in-pane":
+      await executeRunInPane(command.args);
       break;
   }
 }

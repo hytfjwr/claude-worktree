@@ -107,6 +107,46 @@ describe("parseArgs", () => {
     });
   });
 
+  describe("_run-in-pane", () => {
+    test("valid payload - routes to _run-in-pane", () => {
+      const payload = Buffer.from(
+        JSON.stringify({
+          worktreePath: "/tmp/wt",
+          repoRoot: "/tmp/repo",
+          claudeCommand: "claude",
+          postCreateTimeout: 600,
+          preCleanTimeout: 600,
+          postCleanTimeout: 600,
+          verbose: false,
+        }),
+      ).toString("base64");
+      const result = parseArgs(["_run-in-pane", payload]);
+      expect(result.type).toBe("_run-in-pane");
+    });
+
+    test("without payload - throws", () => {
+      expect(() => parseArgs(["_run-in-pane"])).toThrow("requires exactly one base64-encoded argument");
+    });
+
+    test("checked before help flags - not treated as unknown command", () => {
+      // _run-in-pane is checked before help/-h and before the unknown-command guard,
+      // so it is always routed correctly regardless of other args.
+      const payload = Buffer.from(
+        JSON.stringify({
+          worktreePath: "/tmp/wt",
+          repoRoot: "/tmp/repo",
+          claudeCommand: "claude -h",
+          postCreateTimeout: 600,
+          preCleanTimeout: 600,
+          postCleanTimeout: 600,
+          verbose: false,
+        }),
+      ).toString("base64");
+      const result = parseArgs(["_run-in-pane", payload]);
+      expect(result.type).toBe("_run-in-pane");
+    });
+  });
+
   describe("unknown command", () => {
     test.each(["ABC", "status", "hotfix"])('single word "%s" - throws unknown command error', (input) => {
       expect(() => parseArgs([input])).toThrow(`Unknown command: ${input}`);

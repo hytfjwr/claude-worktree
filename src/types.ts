@@ -177,11 +177,26 @@ export type CreateArgs = {
   verbose?: boolean;
 };
 
+export type RunInPaneArgs = {
+  worktreePath: string;
+  repoRoot: string;
+  claudeCommand: string;
+  postCreateCommand?: string;
+  postCreateTimeout: number;
+  preCleanCommand?: string;
+  preCleanTimeout: number;
+  postCleanCommand?: string;
+  postCleanTimeout: number;
+  slot?: number;
+  verbose: boolean;
+};
+
 export type Command =
   | { type: "help" }
   | { type: "create"; args: CreateArgs }
   | { type: "clean"; args: CleanArgs }
-  | { type: "list"; args: ListArgs };
+  | { type: "list"; args: ListArgs }
+  | { type: "_run-in-pane"; args: RunInPaneArgs };
 
 // Re-export for backward compatibility
 export type CliArgs = CreateArgs;

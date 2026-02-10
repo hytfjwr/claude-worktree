@@ -1,10 +1,10 @@
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterAll, describe, expect, test } from "vitest";
+import { join, resolve } from "node:path";
+import { afterAll, afterEach, describe, expect, test } from "vitest";
 
 import type { ProjectConfig } from "../types.ts";
-import { checkWorktreeLimit, readPlanFile } from "./create.ts";
+import { checkWorktreeLimit, getSelfCommand, readPlanFile } from "./create.ts";
 
 describe("readPlanFile", () => {
   const tmpDir = mkdtempSync(join(tmpdir(), "create-test-"));
@@ -37,6 +37,29 @@ describe("readPlanFile", () => {
 
   afterAll(() => {
     rmSync(tmpDir, { recursive: true, force: true });
+  });
+});
+
+describe("getSelfCommand", () => {
+  const origArgv = [...process.argv];
+
+  afterEach(() => {
+    process.argv[0] = origArgv[0];
+    process.argv[1] = origArgv[1];
+  });
+
+  test("returns quoted argv[0] and resolved argv[1]", () => {
+    process.argv[0] = "/usr/local/bin/node";
+    process.argv[1] = "bin/claude-worktree.ts";
+    const result = getSelfCommand();
+    expect(result).toBe(`"/usr/local/bin/node" "${resolve("bin/claude-worktree.ts")}"`);
+  });
+
+  test("handles paths with spaces", () => {
+    process.argv[0] = "/usr/local/bin/my node";
+    process.argv[1] = "/path with spaces/script.ts";
+    const result = getSelfCommand();
+    expect(result).toBe(`"/usr/local/bin/my node" "${resolve("/path with spaces/script.ts")}"`);
   });
 });
 

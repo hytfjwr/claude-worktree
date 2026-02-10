@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import { setTimeout } from "node:timers/promises";
+import { resolve } from "node:path";
 
 import { buildHookCommand, loadProjectConfig, resolveHookTimeout, runHook } from "../core/config.ts";
 import {
@@ -16,8 +16,8 @@ import {
 import { completeSession, deleteSession, saveSession } from "../core/session.ts";
 import { deleteSlot, findAvailableSlot, readSlot, saveSlot } from "../core/slot.ts";
 import { buildClaudeCommand } from "../external/claude.ts";
-import { checkWeztermAvailable, createPane, sendCommand, sendText } from "../external/wezterm.ts";
-import type { CreateArgs, ProjectConfig } from "../types.ts";
+import { checkWeztermAvailable, createPane, sendCommand } from "../external/wezterm.ts";
+import type { CreateArgs, ProjectConfig, RunInPaneArgs } from "../types.ts";
 import { confirm } from "../ui/prompt.ts";
 import { createTailUpdater, startSpinner } from "../ui/spinner.ts";
 
@@ -246,71 +246,7 @@ export async function runCreate(args: CreateArgs): Promise<void> {
     }
   }
 
-  // postCreate hook
-  if (config?.postCreate) {
-    const hookCmd = buildHookCommand(config.postCreate, { path: worktreePath, slot });
-    const spinner = args.verbose
-      ? null
-      : startSpinner("Running postCreate hook...", { timeoutSec: resolveHookTimeout("postCreate", config) });
-    try {
-      await runHook(hookCmd, git.repoRoot, {
-        verbose: args.verbose,
-        onLine: spinner ? createTailUpdater(spinner) : undefined,
-        timeout: resolveHookTimeout("postCreate", config),
-      });
-      spinner?.stop("✓ postCreate hook done");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      spinner?.fail("postCreate hook failed");
-      console.error(`❌ postCreate hook failed: ${message}`);
-      console.log("🗑️  Rolling back...");
-      // Run preClean hook to clean up containers etc. before removing worktree
-      if (config?.preClean) {
-        const cleanCmd = buildHookCommand(config.preClean, { path: worktreePath, slot });
-        try {
-          await runHook(cleanCmd, git.repoRoot, {
-            verbose: args.verbose,
-            timeout: resolveHookTimeout("preClean", config),
-          });
-        } catch {
-          console.warn("  ⚠️  preClean hook failed during rollback");
-        }
-      }
-      try {
-        await removeWorktree(worktreePath);
-      } catch {
-        console.warn("  ⚠️  Failed to rollback worktree");
-      }
-      // postClean hook after rollback
-      if (config?.postClean) {
-        const postCleanCmd = buildHookCommand(config.postClean, { path: worktreePath, slot });
-        const rollbackSpinner = args.verbose
-          ? null
-          : startSpinner("Running postClean hook (rollback)...", {
-              timeoutSec: resolveHookTimeout("postClean", config),
-            });
-        try {
-          await runHook(postCleanCmd, git.repoRoot, {
-            verbose: args.verbose,
-            onLine: rollbackSpinner ? createTailUpdater(rollbackSpinner) : undefined,
-            timeout: resolveHookTimeout("postClean", config),
-          });
-          rollbackSpinner?.stop();
-        } catch (error) {
-          const postCleanMessage = error instanceof Error ? error.message : String(error);
-          rollbackSpinner?.fail(`postClean hook failed during rollback: ${postCleanMessage}`);
-          console.warn(`  ⚠️  postClean hook failed during rollback: ${postCleanMessage}`);
-        }
-      }
-      // Delete cached slot on rollback (only if a slot was allocated)
-      if (slot != null) {
-        await deleteSlot(worktreePath);
-      }
-      return;
-    }
-  }
-
-  // Build execution command
+  // Build claude command options
   const claudeOptions = {
     prompt,
     dangerouslySkipPermissions: danger,
@@ -329,14 +265,34 @@ export async function runCreate(args: CreateArgs): Promise<void> {
   };
 
   if (pane) {
-    // Create WezTerm pane and send command
+    // Pane mode: create pane first, then run postCreate hook + Claude inside the pane
+    const claudeCommand = buildClaudeCommand(claudeOptions);
+
+    const runInPaneArgs: RunInPaneArgs = {
+      worktreePath,
+      repoRoot: git.repoRoot,
+      claudeCommand,
+      postCreateCommand: config?.postCreate
+        ? buildHookCommand(config.postCreate, { path: worktreePath, slot })
+        : undefined,
+      postCreateTimeout: resolveHookTimeout("postCreate", config),
+      preCleanCommand: config?.preClean ? buildHookCommand(config.preClean, { path: worktreePath, slot }) : undefined,
+      preCleanTimeout: resolveHookTimeout("preClean", config),
+      postCleanCommand: config?.postClean
+        ? buildHookCommand(config.postClean, { path: worktreePath, slot })
+        : undefined,
+      postCleanTimeout: resolveHookTimeout("postClean", config),
+      slot,
+      verbose: !!args.verbose,
+    };
+
+    const payload = Buffer.from(JSON.stringify(runInPaneArgs)).toString("base64");
+
     const paneIdStr = await createPane({ keepFocus: true });
     const paneId = Number.parseInt(paneIdStr, 10);
     console.log(`🪟 Created pane: ${paneId}`);
 
-    const commands = [`cd "${worktreePath}"`, buildClaudeCommand(claudeOptions)].join(" && ");
-
-    await sendCommand(paneIdStr, commands);
+    await sendCommand(paneIdStr, `${getSelfCommand()} _run-in-pane ${payload}`);
 
     // Save session metadata
     await saveSession(worktreePath, {
@@ -345,12 +301,74 @@ export async function runCreate(args: CreateArgs): Promise<void> {
       startedAt: new Date().toISOString(),
     });
 
-    // Send Enter to confirm the prompt after Claude starts
-    await setTimeout(2000);
-    await sendText(paneIdStr, "\n");
-
     console.log("✅ Worktree created and Claude started in new pane");
   } else {
+    // Terminal mode: run postCreate hook here, then launch Claude
+
+    // postCreate hook
+    if (config?.postCreate) {
+      const hookCmd = buildHookCommand(config.postCreate, { path: worktreePath, slot });
+      const spinner = args.verbose
+        ? null
+        : startSpinner("Running postCreate hook...", { timeoutSec: resolveHookTimeout("postCreate", config) });
+      try {
+        await runHook(hookCmd, git.repoRoot, {
+          verbose: args.verbose,
+          onLine: spinner ? createTailUpdater(spinner) : undefined,
+          timeout: resolveHookTimeout("postCreate", config),
+        });
+        spinner?.stop("✓ postCreate hook done");
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        spinner?.fail("postCreate hook failed");
+        console.error(`❌ postCreate hook failed: ${message}`);
+        console.log("🗑️  Rolling back...");
+        // Run preClean hook to clean up containers etc. before removing worktree
+        if (config?.preClean) {
+          const cleanCmd = buildHookCommand(config.preClean, { path: worktreePath, slot });
+          try {
+            await runHook(cleanCmd, git.repoRoot, {
+              verbose: args.verbose,
+              timeout: resolveHookTimeout("preClean", config),
+            });
+          } catch {
+            console.warn("  ⚠️  preClean hook failed during rollback");
+          }
+        }
+        try {
+          await removeWorktree(worktreePath);
+        } catch {
+          console.warn("  ⚠️  Failed to rollback worktree");
+        }
+        // postClean hook after rollback
+        if (config?.postClean) {
+          const postCleanCmd = buildHookCommand(config.postClean, { path: worktreePath, slot });
+          const rollbackSpinner = args.verbose
+            ? null
+            : startSpinner("Running postClean hook (rollback)...", {
+                timeoutSec: resolveHookTimeout("postClean", config),
+              });
+          try {
+            await runHook(postCleanCmd, git.repoRoot, {
+              verbose: args.verbose,
+              onLine: rollbackSpinner ? createTailUpdater(rollbackSpinner) : undefined,
+              timeout: resolveHookTimeout("postClean", config),
+            });
+            rollbackSpinner?.stop();
+          } catch (error) {
+            const postCleanMessage = error instanceof Error ? error.message : String(error);
+            rollbackSpinner?.fail(`postClean hook failed during rollback: ${postCleanMessage}`);
+            console.warn(`  ⚠️  postClean hook failed during rollback: ${postCleanMessage}`);
+          }
+        }
+        // Delete cached slot on rollback (only if a slot was allocated)
+        if (slot != null) {
+          await deleteSlot(worktreePath);
+        }
+        return;
+      }
+    }
+
     // Launch Claude Code in current terminal
     console.log("✅ Worktree created. Starting Claude Code...");
 
@@ -362,15 +380,19 @@ export async function runCreate(args: CreateArgs): Promise<void> {
       startedAt: new Date().toISOString(),
     });
 
-    await new Promise<void>((resolve, reject) => {
+    await new Promise<void>((res, rej) => {
       const proc = spawn("sh", ["-c", commands], {
         stdio: ["inherit", "inherit", "inherit"],
       });
-      proc.on("error", reject);
-      proc.on("close", () => resolve());
+      proc.on("error", rej);
+      proc.on("close", () => res());
     });
 
     // Mark session as completed after process exits
     await completeSession(worktreePath);
   }
+}
+
+export function getSelfCommand(): string {
+  return `"${process.argv[0]}" "${resolve(process.argv[1])}"`;
 }
