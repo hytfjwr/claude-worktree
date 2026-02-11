@@ -74,6 +74,53 @@ claude-worktree -help
 - `-n, -dry-run` - Preview targets without deleting
 - `-v, -verbose` - Show hook execution logs
 
+### JSON Output Schema
+
+When using `claude-worktree list -json`, the output follows this schema:
+
+```json
+{
+  "worktrees": [
+    {
+      "path": "/absolute/path/to/worktree",
+      "branch": "feature/auth",
+      "isMain": false,
+      "isLocked": false,
+      "isDirty": false,
+      "status": "Active",
+      "commit": {
+        "hash": "abc1234",
+        "message": "Commit message",
+        "date": "2025-01-15T10:00:00.000Z"
+      },
+      "aheadBehind": { "ahead": 2, "behind": 0 },
+      "session": {
+        "status": "running",
+        "elapsedMs": 900000,
+        "mode": "pane",
+        "paneId": 3
+      }
+    }
+  ]
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `path` | `string` | Absolute path to the worktree directory |
+| `branch` | `string \| null` | Branch name, or `null` for detached HEAD |
+| `isMain` | `boolean` | Whether this is the main worktree |
+| `isLocked` | `boolean` | Whether the worktree is locked |
+| `isDirty` | `boolean` | Whether the worktree has uncommitted changes |
+| `status` | `string` | One of: `"Main"`, `"Locked"`, `"Merged"`, `"Dirty"`, `"Active"` |
+| `commit` | `object \| null` | Latest commit info (`hash`, `message`, `date`) |
+| `aheadBehind` | `object \| null` | `{ ahead: number, behind: number }` relative to main branch |
+| `session` | `object \| undefined` | Claude session info (only with `-status` flag) |
+| `session.status` | `string` | `"running"` or `"done"` |
+| `session.elapsedMs` | `number` | Milliseconds since session started |
+| `session.mode` | `string` | `"pane"` or `"terminal"` |
+| `session.paneId` | `number \| undefined` | WezTerm pane ID (pane mode only) |
+
 ### Examples
 
 ```bash
@@ -167,6 +214,7 @@ Priority: hook-specific value > `hookTimeout` > default (600s)
 ### Environment Variables
 
 - `CLAUDE_WORKTREE_CACHE_DIR` — Override the slot cache directory (default: `~/.cache/claude-worktree`)
+- `NO_COLOR` — Disable colored output ([no-color.org](https://no-color.org/)). Colors are also automatically disabled when stdout is not a TTY (e.g., piped output).
 
 ## Development
 

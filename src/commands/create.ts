@@ -30,6 +30,7 @@ import type {
   RunInPaneArgs,
   WorktreeInfo,
 } from "../types.ts";
+import { icons } from "../ui/icons.ts";
 import { confirm } from "../ui/prompt.ts";
 import { executeHookWithSpinner } from "./hooks.ts";
 import { performRollback } from "./rollback.ts";
@@ -125,7 +126,7 @@ export function checkWorktreeLimit(
   }
   const effective = isReplace ? currentCount - 1 : currentCount;
   if (effective >= maxWorktrees) {
-    return `\u26a0 Worktree limit reached (${effective}/${maxWorktrees}). Run \`claude-worktree clean\` to remove unused worktrees.`;
+    return `${icons.warning()} Worktree limit reached (${effective}/${maxWorktrees}). Run \`claude-worktree clean\` to remove unused worktrees.`;
   }
   return null;
 }
@@ -179,11 +180,11 @@ async function handleExistingWorktree(
   verbose: boolean,
   deps: CreateDeps,
 ): Promise<boolean> {
-  console.log(`\n\u26a0\ufe0f  Worktree already exists: ${existingWorktree.path}`);
+  console.log(`\n${icons.warning()}  Worktree already exists: ${existingWorktree.path}`);
 
   let confirmed: boolean;
   if (existingWorktree.isDirty) {
-    console.log("\u26a0\ufe0f  Warning: there are uncommitted changes");
+    console.log(`${icons.warning()}  Warning: there are uncommitted changes`);
     confirmed = await deps.confirm("Discard changes and delete the worktree?");
   } else {
     confirmed = await deps.confirm("Delete the existing worktree and start a new session?");
@@ -207,21 +208,21 @@ async function handleExistingWorktree(
       timeout: deps.resolveHookTimeout("preClean", config),
     });
     if (!result.success) {
-      console.warn(`  \u26a0\ufe0f  preClean hook failed (continuing): ${result.message}`);
+      console.warn(`  ${icons.warning()}  preClean hook failed (continuing): ${result.message}`);
     }
   }
 
   // Delete existing worktree and branch
-  console.log("\ud83d\uddd1\ufe0f  Deleting existing worktree...");
+  console.log(`${icons.trash()}  Deleting existing worktree...`);
   await deps.removeWorktree(existingWorktree.path, existingWorktree.isDirty);
-  console.log(`  \u2713 Worktree deleted: ${existingWorktree.path}`);
+  console.log(`  ${icons.success()} Worktree deleted: ${existingWorktree.path}`);
 
   try {
     await deps.deleteLocalBranch(branchName, true);
-    console.log(`  \u2713 Branch deleted: ${branchName}`);
+    console.log(`  ${icons.success()} Branch deleted: ${branchName}`);
   } catch {
     // Ignore if branch does not exist
-    console.log(`  \u26a0\ufe0f  Branch not found (skipping): ${branchName}`);
+    console.log(`  ${icons.warning()}  Branch not found (skipping): ${branchName}`);
   }
 
   // postClean hook
@@ -235,7 +236,7 @@ async function handleExistingWorktree(
       timeout: deps.resolveHookTimeout("postClean", config),
     });
     if (!result.success) {
-      console.warn(`  \u26a0\ufe0f  postClean hook failed (continuing): ${result.message}`);
+      console.warn(`  ${icons.warning()}  postClean hook failed (continuing): ${result.message}`);
     }
   }
 
@@ -257,7 +258,7 @@ async function handleExistingBranch(branchName: string, deps: CreateDeps): Promi
     return true;
   }
 
-  console.log(`\n\u26a0\ufe0f  Branch already exists: ${branchName}`);
+  console.log(`\n${icons.warning()}  Branch already exists: ${branchName}`);
 
   const confirmed = await deps.confirm("Delete the branch and create a new one?");
   if (!confirmed) {
@@ -265,13 +266,13 @@ async function handleExistingBranch(branchName: string, deps: CreateDeps): Promi
     return false;
   }
 
-  console.log("\ud83d\uddd1\ufe0f  Deleting existing branch...");
+  console.log(`${icons.trash()}  Deleting existing branch...`);
   try {
     await deps.deleteLocalBranch(branchName, true);
-    console.log(`  \u2713 Branch deleted: ${branchName}`);
+    console.log(`  ${icons.success()} Branch deleted: ${branchName}`);
   } catch (e) {
     const errorMessage = getErrorMessage(e);
-    console.log(`  \u274c Failed to delete branch: ${errorMessage}`);
+    console.log(`  ${icons.error()} Failed to delete branch: ${errorMessage}`);
     return false;
   }
   console.log("");
@@ -351,7 +352,7 @@ async function launchClaudeInPane(
   try {
     const paneIdStr = await deps.createPane({ keepFocus: true });
     const paneId = Number.parseInt(paneIdStr, 10);
-    console.log(`🪟 Created pane: ${paneId}`);
+    console.log(`${icons.window()} Created pane: ${paneId}`);
 
     await deps.sendCommand(paneIdStr, `${getSelfCommand()} _run-in-pane "${payloadPath}"`);
 
@@ -362,7 +363,7 @@ async function launchClaudeInPane(
       startedAt: new Date().toISOString(),
     });
 
-    console.log("\u2705 Worktree created and Claude started in new pane");
+    console.log(`${icons.done()} Worktree created and Claude started in new pane`);
   } catch (error) {
     // Clean up temp file on failure (the pane side handles its own cleanup on success)
     await unlink(payloadPath).catch(() => {});
@@ -398,14 +399,14 @@ async function launchClaudeInTerminal(
       timeout: deps.resolveHookTimeout("postCreate", config),
     });
     if (!result.success) {
-      console.error(`\u274c postCreate hook failed: ${result.message}`);
+      console.error(`${icons.error()} postCreate hook failed: ${result.message}`);
       await deps.performRollback(buildRollbackOptions(worktreePath, repoRoot, config, slot, verbose, false, deps));
       return;
     }
   }
 
   // Launch Claude Code in current terminal
-  console.log("\u2705 Worktree created. Starting Claude Code...");
+  console.log(`${icons.done()} Worktree created. Starting Claude Code...`);
 
   const commands = [`cd "${worktreePath}"`, deps.buildClaudeCommand(claudeOptions)].join(" && ");
 
@@ -527,20 +528,20 @@ export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps
   }
 
   // Display info
-  console.log(`\ud83d\udccd Current branch: ${git.currentBranch}`);
+  console.log(`${icons.pin()} Current branch: ${git.currentBranch}`);
   if (baseBranch) {
-    console.log(`\ud83c\udf33 Base branch: ${baseBranch}`);
+    console.log(`${icons.tree()} Base branch: ${baseBranch}`);
   }
-  console.log(`\ud83c\udf3f New branch: ${branchName}`);
-  console.log(`\ud83d\udcc2 Worktree path: ${worktreePath}`);
+  console.log(`${icons.branch()} New branch: ${branchName}`);
+  console.log(`${icons.folder()} Worktree path: ${worktreePath}`);
   if (planFile) {
-    console.log(`\ud83d\udccb Plan file: ${planFile}`);
+    console.log(`${icons.clipboard()} Plan file: ${planFile}`);
   }
   if (merge) {
-    console.log(`\ud83d\udd00 Auto-merge to: ${git.currentBranch}`);
+    console.log(`${icons.merge()} Auto-merge to: ${git.currentBranch}`);
   }
   if (draft) {
-    console.log(`\ud83d\udcdd Draft PR to: ${effectiveBaseBranch}`);
+    console.log(`${icons.memo()} Draft PR to: ${effectiveBaseBranch}`);
   }
 
   // Handle existing worktree

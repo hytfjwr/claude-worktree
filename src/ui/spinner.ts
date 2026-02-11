@@ -1,4 +1,6 @@
 import type { Spinner } from "../types.ts";
+import { isColorEnabled } from "./color.ts";
+import { icons } from "./icons.ts";
 
 const FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const INTERVAL = 80; // ms
@@ -55,6 +57,9 @@ export function smoothstep(t: number): number {
 }
 
 export function shimmerText(text: string, shimmerPos: number, theme?: ColorTheme): string {
+  if (!isColorEnabled()) {
+    return text;
+  }
   const baseColor = theme?.base ?? DEFAULT_THEME.base;
   const brightColor = theme?.bright ?? DEFAULT_THEME.bright;
   const chars = [...text];
@@ -143,6 +148,30 @@ export function createTailUpdater(spinner: Spinner): (line: string) => void {
 }
 
 export function startSpinner(message: string, options?: { timeoutSec?: number }): Spinner {
+  // Non-TTY fallback: no cursor control, no animation, plain text only
+  if (!process.stdout.isTTY) {
+    let stopped = false;
+    process.stdout.write(`- ${message}\n`);
+    return {
+      stop(finalMessage?: string) {
+        if (stopped) return;
+        stopped = true;
+        process.stdout.write(`${finalMessage || `${icons.success()} ${message}`}\n`);
+      },
+      fail(errorMessage: string) {
+        if (stopped) return;
+        stopped = true;
+        process.stdout.write(`${icons.fail()} ${errorMessage}\n`);
+      },
+      updateTail(_lines: string[], _totalCount: number, _newAllLines?: string[]) {
+        // No-op in non-TTY mode
+      },
+      isExpanded() {
+        return false;
+      },
+    };
+  }
+
   const theme = pickRandomTheme();
   let frameIndex = 0;
   let shimmerPos = -SHIMMER_WIDTH;
@@ -158,7 +187,10 @@ export function startSpinner(message: string, options?: { timeoutSec?: number })
   const startTime = Date.now();
   const timeoutSec = options?.timeoutSec;
 
-  const frameColor = `\x1b[38;2;${theme.bright.r};${theme.bright.g};${theme.bright.b}m`;
+  const colorEnabled = isColorEnabled();
+  const frameColor = colorEnabled ? `\x1b[38;2;${theme.bright.r};${theme.bright.g};${theme.bright.b}m` : "";
+  const dimCode = colorEnabled ? "\x1b[38;5;245m" : "";
+  const resetCode = colorEnabled ? "\x1b[0m" : "";
 
   const writeFrame = () => {
     if (extraLines > 0) {
@@ -166,12 +198,12 @@ export function startSpinner(message: string, options?: { timeoutSec?: number })
     }
     const frame = FRAMES[frameIndex];
     const maxWidth = (process.stdout.columns || 80) - 6;
-    let output = `\r\x1b[J${frameColor}${frame}\x1b[0m ${shimmerText(message, shimmerPos, theme)}`;
+    let output = `\r\x1b[J${frameColor}${frame}${resetCode} ${shimmerText(message, shimmerPos, theme)}`;
 
     if (!expanded && tailLines.length > 0) {
       for (const line of tailLines) {
         const formatted = formatTailLine(line, maxWidth);
-        output += `\n\x1b[38;5;245m    ${formatted}\x1b[0m`;
+        output += `\n${dimCode}    ${formatted}${resetCode}`;
       }
     }
 
@@ -189,7 +221,7 @@ export function startSpinner(message: string, options?: { timeoutSec?: number })
       }
       const fullInfo = toggleHint ? `${infoText} — ${toggleHint}` : infoText;
       const formattedInfo = formatTailLine(fullInfo, maxWidth);
-      output += `\n\x1b[38;5;245m    ${formattedInfo}\x1b[0m`;
+      output += `\n${dimCode}    ${formattedInfo}${resetCode}`;
     }
 
     process.stdout.write(output);
@@ -211,7 +243,7 @@ export function startSpinner(message: string, options?: { timeoutSec?: number })
     const maxWidth = (process.stdout.columns || 80) - 6;
     for (const line of linesToPrint) {
       const formatted = formatTailLine(line, maxWidth);
-      process.stdout.write(`\x1b[38;5;245m    ${formatted}\x1b[0m\n`);
+      process.stdout.write(`${dimCode}    ${formatted}${resetCode}\n`);
     }
     expandedLogLines = linesToPrint.length;
   };
@@ -290,12 +322,12 @@ export function startSpinner(message: string, options?: { timeoutSec?: number })
     stop(finalMessage?: string) {
       stopped = true;
       clearInterval(timer);
-      clearAndWrite(finalMessage || `✓ ${message}`);
+      clearAndWrite(finalMessage || `${icons.success()} ${message}`);
     },
     fail(errorMessage: string) {
       stopped = true;
       clearInterval(timer);
-      clearAndWrite(`✗ ${errorMessage}`);
+      clearAndWrite(`${icons.fail()} ${errorMessage}`);
     },
     updateTail(lines: string[], totalCount: number, newAllLines?: string[]) {
       if (stopped) return;

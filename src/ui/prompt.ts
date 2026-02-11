@@ -1,6 +1,7 @@
 import * as readline from "node:readline";
 
 import type { WorktreeStatus } from "../types.ts";
+import { icons } from "./icons.ts";
 
 function createReadlineInterface(): readline.Interface {
   return readline.createInterface({
@@ -33,7 +34,7 @@ export async function selectMultiple(statuses: WorktreeStatus[]): Promise<Worktr
   console.log("Example: 1 3 5 or 'all' to select all, empty to cancel\n");
 
   statuses.forEach((status, index) => {
-    const marker = status.canAutoClean ? "●" : "○";
+    const marker = status.canAutoClean ? icons.active() : icons.inactive();
     const branch = status.worktree.branch || "(detached)";
     console.log(`  ${index + 1}. ${marker} ${branch}`);
     console.log(`     Path: ${status.worktree.path}`);

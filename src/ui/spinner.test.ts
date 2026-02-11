@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
+import { _resetColorCache } from "./color.ts";
 import {
   COLOR_THEMES,
   type ColorTheme,
@@ -16,12 +17,103 @@ import {
   stripAnsi,
 } from "./spinner.ts";
 
+function withTTY<T>(isTTY: boolean, fn: () => T): T {
+  const saved = Object.getOwnPropertyDescriptor(process.stdout, "isTTY");
+  Object.defineProperty(process.stdout, "isTTY", { value: isTTY, configurable: true, writable: true });
+  try {
+    return fn();
+  } finally {
+    if (saved) {
+      Object.defineProperty(process.stdout, "isTTY", saved);
+    } else {
+      delete (process.stdout as unknown as Record<string, unknown>).isTTY;
+    }
+  }
+}
+
+beforeEach(() => {
+  // Ensure color cache is fresh for each test
+  _resetColorCache();
+});
+
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
+  _resetColorCache();
+  delete process.env.NO_COLOR;
+});
+
+describe("startSpinner (non-TTY)", () => {
+  test("returns a Spinner without ANSI sequences", () => {
+    withTTY(false, () => {
+      const writeSpy = vi.spyOn(process.stdout, "write");
+      const spinner = startSpinner("Processing...");
+
+      const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+      expect(output).toBe("- Processing...\n");
+      expect(output).not.toContain("\x1b");
+      spinner.stop();
+    });
+  });
+
+  test("stop() outputs plain text without ANSI", () => {
+    withTTY(false, () => {
+      const writeSpy = vi.spyOn(process.stdout, "write");
+      startSpinner("Processing...").stop("Done!");
+
+      const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+      expect(output).toContain("Done!\n");
+      expect(output).not.toContain("\x1b[?25");
+    });
+  });
+
+  test("fail() outputs plain text without ANSI", () => {
+    withTTY(false, () => {
+      const writeSpy = vi.spyOn(process.stdout, "write");
+      startSpinner("Processing...").fail("Error occurred");
+
+      const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+      expect(output).toContain("Error occurred\n");
+      expect(output).not.toContain("\x1b[?25");
+    });
+  });
+
+  test("updateTail() is a no-op", () => {
+    withTTY(false, () => {
+      const writeSpy = vi.spyOn(process.stdout, "write");
+      const spinner = startSpinner("Processing...");
+      writeSpy.mockClear();
+
+      spinner.updateTail(["line 1"], 1);
+      expect(writeSpy).not.toHaveBeenCalled();
+      spinner.stop();
+    });
+  });
+
+  test("isExpanded() always returns false", () => {
+    withTTY(false, () => {
+      const spinner = startSpinner("Processing...");
+      expect(spinner.isExpanded()).toBe(false);
+      spinner.stop();
+    });
+  });
 });
 
 describe("startSpinner", () => {
+  let savedIsTTY: PropertyDescriptor | undefined;
+
+  beforeEach(() => {
+    savedIsTTY = Object.getOwnPropertyDescriptor(process.stdout, "isTTY");
+    Object.defineProperty(process.stdout, "isTTY", { value: true, configurable: true, writable: true });
+  });
+
+  afterEach(() => {
+    if (savedIsTTY) {
+      Object.defineProperty(process.stdout, "isTTY", savedIsTTY);
+    } else {
+      delete (process.stdout as unknown as Record<string, unknown>).isTTY;
+    }
+  });
   test("returns a Spinner object", () => {
     const spinner = startSpinner("Testing...");
     expect(spinner).toHaveProperty("stop");
@@ -326,14 +418,16 @@ describe("createTailUpdater", () => {
   });
 
   test("updateTail is safe after spinner.stop (stopped flag)", () => {
-    const writeSpy = vi.spyOn(process.stdout, "write");
-    const spinner = startSpinner("Testing...");
-    spinner.stop();
-    writeSpy.mockClear();
+    withTTY(true, () => {
+      const writeSpy = vi.spyOn(process.stdout, "write");
+      const spinner = startSpinner("Testing...");
+      spinner.stop();
+      writeSpy.mockClear();
 
-    // After stop, updateTail should be a no-op (no writes to stdout)
-    spinner.updateTail(["should be ignored"], 1);
-    expect(writeSpy).not.toHaveBeenCalled();
+      // After stop, updateTail should be a no-op (no writes to stdout)
+      spinner.updateTail(["should be ignored"], 1);
+      expect(writeSpy).not.toHaveBeenCalled();
+    });
   });
 });
 
@@ -358,6 +452,7 @@ describe("keyboard handling", () => {
     const stdin = process.stdin as typeof process.stdin & StdinMock;
     const saved = {
       isTTY: Object.getOwnPropertyDescriptor(process.stdin, "isTTY"),
+      stdoutIsTTY: Object.getOwnPropertyDescriptor(process.stdout, "isTTY"),
       setRawMode: stdin.setRawMode,
       resume: stdin.resume,
       pause: stdin.pause,
@@ -368,6 +463,7 @@ describe("keyboard handling", () => {
     let capturedHandler: ((data: Buffer) => void) | null = null;
 
     Object.defineProperty(process.stdin, "isTTY", { value: true, configurable: true, writable: true });
+    Object.defineProperty(process.stdout, "isTTY", { value: true, configurable: true, writable: true });
     stdin.setRawMode = () => process.stdin;
     stdin.resume = () => process.stdin;
     stdin.pause = () => process.stdin;
@@ -384,6 +480,11 @@ describe("keyboard handling", () => {
         Object.defineProperty(process.stdin, "isTTY", saved.isTTY);
       } else {
         Object.defineProperty(process.stdin, "isTTY", { value: undefined, configurable: true, writable: true });
+      }
+      if (saved.stdoutIsTTY) {
+        Object.defineProperty(process.stdout, "isTTY", saved.stdoutIsTTY);
+      } else {
+        delete (process.stdout as unknown as Record<string, unknown>).isTTY;
       }
       stdin.setRawMode = saved.setRawMode;
       stdin.resume = saved.resume;
@@ -755,10 +856,29 @@ describe("formatInfoLine", () => {
 });
 
 describe("shimmerText", () => {
-  test("returns string containing ANSI color codes", () => {
+  test("returns plain text when color is disabled", () => {
+    process.env.NO_COLOR = "1";
+    _resetColorCache();
     const result = shimmerText("hello", 2);
-    expect(result).toContain("\x1b[38;2;");
-    expect(result).toContain("\x1b[0m");
+    expect(result).toBe("hello");
+  });
+
+  test("returns string containing ANSI color codes when color is enabled", () => {
+    const saved = Object.getOwnPropertyDescriptor(process.stdout, "isTTY");
+    Object.defineProperty(process.stdout, "isTTY", { value: true, configurable: true, writable: true });
+    try {
+      delete process.env.NO_COLOR;
+      _resetColorCache();
+      const result = shimmerText("hello", 2);
+      expect(result).toContain("\x1b[38;2;");
+      expect(result).toContain("\x1b[0m");
+    } finally {
+      if (saved) {
+        Object.defineProperty(process.stdout, "isTTY", saved);
+      } else {
+        delete (process.stdout as unknown as Record<string, unknown>).isTTY;
+      }
+    }
   });
 
   test("contains all characters of original text", () => {
@@ -776,22 +896,46 @@ describe("shimmerText", () => {
   });
 
   test("all chars become base color when shimmerPos is far away (default)", () => {
-    const result = shimmerText("AB", 100);
-    // Default base color (120, 110, 170)
-    const baseColorCode = "\x1b[38;2;120;110;170m";
-    const count = result.split(baseColorCode).length - 1;
-    expect(count).toBe(2);
+    const saved = Object.getOwnPropertyDescriptor(process.stdout, "isTTY");
+    Object.defineProperty(process.stdout, "isTTY", { value: true, configurable: true, writable: true });
+    try {
+      delete process.env.NO_COLOR;
+      _resetColorCache();
+      const result = shimmerText("AB", 100);
+      // Default base color (120, 110, 170)
+      const baseColorCode = "\x1b[38;2;120;110;170m";
+      const count = result.split(baseColorCode).length - 1;
+      expect(count).toBe(2);
+    } finally {
+      if (saved) {
+        Object.defineProperty(process.stdout, "isTTY", saved);
+      } else {
+        delete (process.stdout as unknown as Record<string, unknown>).isTTY;
+      }
+    }
   });
 
   test("uses provided theme colors", () => {
-    const theme: ColorTheme = {
-      base: { r: 80, g: 160, b: 100 },
-      bright: { r: 180, g: 255, b: 200 },
-    };
-    const result = shimmerText("AB", 100, theme);
-    const baseColorCode = "\x1b[38;2;80;160;100m";
-    const count = result.split(baseColorCode).length - 1;
-    expect(count).toBe(2);
+    const saved = Object.getOwnPropertyDescriptor(process.stdout, "isTTY");
+    Object.defineProperty(process.stdout, "isTTY", { value: true, configurable: true, writable: true });
+    try {
+      delete process.env.NO_COLOR;
+      _resetColorCache();
+      const theme: ColorTheme = {
+        base: { r: 80, g: 160, b: 100 },
+        bright: { r: 180, g: 255, b: 200 },
+      };
+      const result = shimmerText("AB", 100, theme);
+      const baseColorCode = "\x1b[38;2;80;160;100m";
+      const count = result.split(baseColorCode).length - 1;
+      expect(count).toBe(2);
+    } finally {
+      if (saved) {
+        Object.defineProperty(process.stdout, "isTTY", saved);
+      } else {
+        delete (process.stdout as unknown as Record<string, unknown>).isTTY;
+      }
+    }
   });
 });
 

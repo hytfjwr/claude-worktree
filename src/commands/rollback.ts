@@ -4,6 +4,7 @@ import { removeWorktree } from "../core/git.ts";
 import { deleteSession } from "../core/session.ts";
 import { deleteSlot } from "../core/slot.ts";
 import type { RollbackOptions } from "../types.ts";
+import { icons } from "../ui/icons.ts";
 import { createTailUpdater, startSpinner } from "../ui/spinner.ts";
 
 type StepResult = { name: string; success: boolean; error?: string };
@@ -89,7 +90,7 @@ export async function performRollback(options: RollbackOptions): Promise<void> {
   if (hasFailure) {
     console.log("\nRollback Summary:");
     for (const step of steps) {
-      const marker = step.success ? "\u2713" : "\u2717";
+      const marker = step.success ? icons.success() : icons.fail();
       const detail = step.error ? ` (${step.error})` : "";
       console.log(`  ${marker} ${step.name}${detail}`);
     }

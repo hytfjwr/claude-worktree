@@ -1,6 +1,7 @@
 import { runHook } from "../core/config.ts";
 import { getErrorMessage } from "../core/errors.ts";
 import type { HookExecOptions, HookExecResult } from "../types.ts";
+import { icons } from "../ui/icons.ts";
 import { createTailUpdater, startSpinner } from "../ui/spinner.ts";
 
 /**
@@ -17,7 +18,7 @@ export async function executeHookWithSpinner(options: HookExecOptions): Promise<
       onLine: spinner ? createTailUpdater(spinner) : undefined,
       timeout,
     });
-    spinner?.stop(`\u2713 ${label} hook done`);
+    spinner?.stop(`${icons.success()} ${label} hook done`);
     return { success: true };
   } catch (error) {
     const message = getErrorMessage(error);

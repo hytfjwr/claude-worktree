@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { setTimeout } from "node:timers/promises";
 
+import { icons } from "../ui/icons.ts";
 import { isNodeError } from "./errors.ts";
 
 export function isPortInUse(port: number): Promise<boolean> {
@@ -86,7 +87,7 @@ async function withLock<T>(fn: () => Promise<T>): Promise<T> {
     }
   }
   if (!handle) {
-    console.warn("\u26a0\ufe0f  Lock acquisition failed for slots.lock, proceeding without lock");
+    console.warn(`${icons.warning()}  Lock acquisition failed for slots.lock, proceeding without lock`);
     return fn();
   }
   try {

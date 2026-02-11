@@ -1,5 +1,15 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
+vi.mock("../ui/icons.ts", () => ({
+  icons: {
+    bullet: () => "•",
+    lock: () => "🔒",
+    success: () => "✓",
+    warning: () => "!",
+    active: () => "●",
+  },
+}));
+
 import type {
   CommitInfo,
   ListArgs,
@@ -194,7 +204,7 @@ describe("getStatusBadge", () => {
   test("main worktree", () => {
     const status = makeStatus({ isMain: true });
     const badge = getStatusBadge(status);
-    expect(badge.icon).toBe("*");
+    expect(badge.icon).toBe("•");
     expect(badge.label).toBe("Main");
   });
 

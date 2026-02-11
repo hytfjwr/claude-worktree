@@ -125,6 +125,10 @@ export type {
   WorktreeListEntry,
   WorktreeStatus,
 } from "./types.ts";
+// Color utilities
+export { isColorEnabled, shouldUseColor } from "./ui/color.ts";
+// Icon utilities
+export { icons } from "./ui/icons.ts";
 // Prompt utilities
 export { confirm, selectMultiple } from "./ui/prompt.ts";
 // Spinner utilities

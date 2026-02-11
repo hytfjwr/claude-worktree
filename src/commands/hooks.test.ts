@@ -6,6 +6,12 @@ vi.mock("../core/config.ts", () => ({
   runHook: vi.fn(),
 }));
 
+vi.mock("../ui/icons.ts", () => ({
+  icons: {
+    success: () => "\u2713",
+  },
+}));
+
 vi.mock("../ui/spinner.ts", () => ({
   startSpinner: vi.fn(() => ({
     stop: vi.fn(),

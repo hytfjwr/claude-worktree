@@ -11,6 +11,7 @@ import {
 import { deleteSession } from "../core/session.ts";
 import { deleteSlot, readSlot } from "../core/slot.ts";
 import type { CleanArgs, CleanDeps, CleanResult, ProjectConfig, WorktreeStatus } from "../types.ts";
+import { icons } from "../ui/icons.ts";
 import { confirm, selectMultiple } from "../ui/prompt.ts";
 import { createTailUpdater, startSpinner } from "../ui/spinner.ts";
 
@@ -42,7 +43,7 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
   const fetchSpinner = deps.startSpinner("Updating remote references...");
   try {
     await deps.fetchAndPrune();
-    fetchSpinner.stop("✓ Done updating remote references.");
+    fetchSpinner.stop(`${icons.success()} Done updating remote references.`);
   } catch {
     fetchSpinner.fail("Failed to update remote references (continuing)");
   }
@@ -59,7 +60,7 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
     }
 
     statuses = await deps.getWorktreeStatuses(worktrees);
-    listSpinner.stop("✓ Done fetching worktree list.");
+    listSpinner.stop(`${icons.success()} Done fetching worktree list.`);
   } catch (error) {
     listSpinner.fail("Failed to fetch worktree list");
     throw error;
@@ -83,15 +84,15 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
     const autoCleanable = cleanableStatuses.filter((s) => s.canAutoClean);
 
     if (autoCleanable.length === 0) {
-      console.log("\n✨ No unnecessary worktrees detected.");
+      console.log(`\n${icons.sparkle()} No unnecessary worktrees detected.`);
       console.log("Hint: use -all option to show all worktrees.");
       return result;
     }
 
-    console.log("\n🗑️  Deletion candidates:");
+    console.log(`\n${icons.trash()}  Deletion candidates:`);
     for (const status of autoCleanable) {
       const branch = status.worktree.branch || "(detached)";
-      console.log(`  • ${branch}`);
+      console.log(`  ${icons.bullet()} ${branch}`);
       console.log(`    Path: ${status.worktree.path}`);
       console.log(`    Reason: ${status.reason}`);
     }
@@ -108,7 +109,7 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
   if (args.dryRun) {
     console.log("\n[dry-run] The following worktrees would be deleted:");
     for (const status of toDelete) {
-      console.log(`  • ${status.worktree.branch || status.worktree.path}`);
+      console.log(`  ${icons.bullet()} ${status.worktree.branch || status.worktree.path}`);
     }
     return result;
   }
@@ -156,7 +157,7 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
           });
         } catch (error) {
           const message = getErrorMessage(error);
-          console.warn(`  ⚠️  preClean hook failed (continuing): ${message}`);
+          console.warn(`  ${icons.warning()}  preClean hook failed (continuing): ${message}`);
         }
       }
 
@@ -168,7 +169,7 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
           await deps.deleteLocalBranch(worktree.branch, true);
         } catch (error) {
           const branchError = getErrorMessage(error);
-          console.warn(`  ⚠️  Failed to delete branch ${worktree.branch}: ${branchError}`);
+          console.warn(`  ${icons.warning()}  Failed to delete branch ${worktree.branch}: ${branchError}`);
         }
       }
 
@@ -183,7 +184,7 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
           });
         } catch (error) {
           const message = getErrorMessage(error);
-          console.warn(`  ⚠️  postClean hook failed (continuing): ${message}`);
+          console.warn(`  ${icons.warning()}  postClean hook failed (continuing): ${message}`);
         }
       }
 
@@ -191,7 +192,7 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
       await deps.deleteSlot(worktree.path);
       await deps.deleteSession(worktree.path);
 
-      spinner.stop(`✓ ${label}`);
+      spinner.stop(`${icons.success()} ${label}`);
       result.deleted.push(worktree.path);
     } catch (error) {
       const message = getErrorMessage(error);
@@ -203,10 +204,10 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
   // Summary
   console.log("");
   if (result.deleted.length > 0) {
-    console.log(`✅ Deleted ${result.deleted.length} worktree(s).`);
+    console.log(`${icons.done()} Deleted ${result.deleted.length} worktree(s).`);
   }
   if (result.errors.length > 0) {
-    console.log(`⚠️  Failed to delete ${result.errors.length} worktree(s).`);
+    console.log(`${icons.warning()}  Failed to delete ${result.errors.length} worktree(s).`);
   }
 
   return result;

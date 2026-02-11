@@ -18,6 +18,13 @@ vi.mock("../core/slot.ts", () => ({
   deleteSlot: vi.fn(),
 }));
 
+vi.mock("../ui/icons.ts", () => ({
+  icons: {
+    success: () => "\u2713",
+    fail: () => "\u2717",
+  },
+}));
+
 vi.mock("../ui/spinner.ts", () => ({
   startSpinner: vi.fn(() => ({
     stop: vi.fn(),
