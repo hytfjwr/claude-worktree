@@ -8,6 +8,8 @@ export { executeClean } from "./commands/clean.ts";
 export { readPlanFile, runCreate } from "./commands/create.ts";
 // List command
 export { executeList, formatSessionState } from "./commands/list.ts";
+// Rollback utility
+export { performRollback } from "./commands/rollback.ts";
 // Run-in-pane command
 export { executeRunInPane } from "./commands/run-in-pane.ts";
 // Config utilities

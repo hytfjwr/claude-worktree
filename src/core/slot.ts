@@ -73,8 +73,7 @@ async function withLock<T>(fn: () => Promise<T>): Promise<T> {
     }
   }
   if (!handle) {
-    // If lock acquisition fails after retries, proceed without lock
-    // to avoid blocking the CLI indefinitely
+    console.warn("\u26a0\ufe0f  Lock acquisition failed for slots.lock, proceeding without lock");
     return fn();
   }
   try {

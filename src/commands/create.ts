@@ -22,6 +22,7 @@ import { checkWeztermAvailable, createPane, sendCommand } from "../external/wezt
 import type { CreateArgs, ProjectConfig, RunInPaneArgs } from "../types.ts";
 import { confirm } from "../ui/prompt.ts";
 import { createTailUpdater, startSpinner } from "../ui/spinner.ts";
+import { performRollback } from "./rollback.ts";
 
 export async function readPlanFile(filePath: string): Promise<string> {
   let content: string;
@@ -309,6 +310,20 @@ export async function runCreate(args: CreateArgs): Promise<void> {
     } catch (error) {
       // Clean up temp file on failure (the pane side handles its own cleanup on success)
       await unlink(payloadPath).catch(() => {});
+      // Full rollback: saveSession hasn't run yet, so deleteSessionData is false
+      await performRollback({
+        worktreePath,
+        repoRoot: git.repoRoot,
+        preCleanCommand: config?.preClean ? buildHookCommand(config.preClean, { path: worktreePath, slot }) : undefined,
+        preCleanTimeout: resolveHookTimeout("preClean", config),
+        postCleanCommand: config?.postClean
+          ? buildHookCommand(config.postClean, { path: worktreePath, slot })
+          : undefined,
+        postCleanTimeout: resolveHookTimeout("postClean", config),
+        slot,
+        verbose: !!args.verbose,
+        deleteSessionData: false,
+      });
       throw error;
     }
   } else {
@@ -331,49 +346,21 @@ export async function runCreate(args: CreateArgs): Promise<void> {
         const message = error instanceof Error ? error.message : String(error);
         spinner?.fail("postCreate hook failed");
         console.error(`❌ postCreate hook failed: ${message}`);
-        console.log("🗑️  Rolling back...");
-        // Run preClean hook to clean up containers etc. before removing worktree
-        if (config?.preClean) {
-          const cleanCmd = buildHookCommand(config.preClean, { path: worktreePath, slot });
-          try {
-            await runHook(cleanCmd, git.repoRoot, {
-              verbose: args.verbose,
-              timeout: resolveHookTimeout("preClean", config),
-            });
-          } catch {
-            console.warn("  ⚠️  preClean hook failed during rollback");
-          }
-        }
-        try {
-          await removeWorktree(worktreePath);
-        } catch {
-          console.warn("  ⚠️  Failed to rollback worktree");
-        }
-        // postClean hook after rollback
-        if (config?.postClean) {
-          const postCleanCmd = buildHookCommand(config.postClean, { path: worktreePath, slot });
-          const rollbackSpinner = args.verbose
-            ? null
-            : startSpinner("Running postClean hook (rollback)...", {
-                timeoutSec: resolveHookTimeout("postClean", config),
-              });
-          try {
-            await runHook(postCleanCmd, git.repoRoot, {
-              verbose: args.verbose,
-              onLine: rollbackSpinner ? createTailUpdater(rollbackSpinner) : undefined,
-              timeout: resolveHookTimeout("postClean", config),
-            });
-            rollbackSpinner?.stop();
-          } catch (error) {
-            const postCleanMessage = error instanceof Error ? error.message : String(error);
-            rollbackSpinner?.fail(`postClean hook failed during rollback: ${postCleanMessage}`);
-            console.warn(`  ⚠️  postClean hook failed during rollback: ${postCleanMessage}`);
-          }
-        }
-        // Delete cached slot on rollback (only if a slot was allocated)
-        if (slot != null) {
-          await deleteSlot(worktreePath);
-        }
+        await performRollback({
+          worktreePath,
+          repoRoot: git.repoRoot,
+          preCleanCommand: config?.preClean
+            ? buildHookCommand(config.preClean, { path: worktreePath, slot })
+            : undefined,
+          preCleanTimeout: resolveHookTimeout("preClean", config),
+          postCleanCommand: config?.postClean
+            ? buildHookCommand(config.postClean, { path: worktreePath, slot })
+            : undefined,
+          postCleanTimeout: resolveHookTimeout("postClean", config),
+          slot,
+          verbose: !!args.verbose,
+          deleteSessionData: false,
+        });
         return;
       }
     }
@@ -393,8 +380,40 @@ export async function runCreate(args: CreateArgs): Promise<void> {
       const proc = spawn("sh", ["-c", commands], {
         stdio: ["inherit", "inherit", "inherit"],
       });
-      proc.on("error", rej);
-      proc.on("close", () => res());
+
+      const forwardSignal = (signal: NodeJS.Signals) => {
+        try {
+          proc.kill(signal);
+        } catch {
+          // Process may already be dead
+        }
+      };
+      // Use self-removing handlers so that Node's default signal behavior
+      // is restored after the first forward (e.g., a second Ctrl+C terminates immediately)
+      const onSigint = () => {
+        process.removeListener("SIGINT", onSigint);
+        forwardSignal("SIGINT");
+      };
+      const onSigterm = () => {
+        process.removeListener("SIGTERM", onSigterm);
+        forwardSignal("SIGTERM");
+      };
+      process.on("SIGINT", onSigint);
+      process.on("SIGTERM", onSigterm);
+
+      const cleanup = () => {
+        process.removeListener("SIGINT", onSigint);
+        process.removeListener("SIGTERM", onSigterm);
+      };
+
+      proc.on("error", (err) => {
+        cleanup();
+        rej(err);
+      });
+      proc.on("close", () => {
+        cleanup();
+        res();
+      });
     });
 
     // Mark session as completed after process exits

@@ -49,6 +49,7 @@ async function withLock<T>(fn: () => Promise<T>): Promise<T> {
     }
   }
   if (!handle) {
+    console.warn("\u26a0\ufe0f  Lock acquisition failed for sessions.lock, proceeding without lock");
     return fn();
   }
   try {

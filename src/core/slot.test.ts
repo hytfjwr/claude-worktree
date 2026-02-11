@@ -1,7 +1,7 @@
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { deleteSlot, getCacheDir, readSlot, saveSlot } from "./slot.ts";
 
@@ -90,5 +90,25 @@ describe("slot cache", () => {
     await saveSlot("/tmp/repo-a", 7);
 
     expect(await readSlot("/tmp/repo-a")).toBe(7);
+  });
+
+  test("lock acquisition failure emits warning and operation still succeeds", { timeout: 10000 }, async () => {
+    // Create the lock file manually to simulate a held lock
+    const lockFile = join(tempDir, "slots.lock");
+    writeFileSync(lockFile, "held", "utf-8");
+
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await saveSlot("/tmp/repo-lock-test", 4);
+
+      // Warning should have been emitted
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("Lock acquisition failed for slots.lock"));
+
+      // Operation should still succeed
+      const slot = await readSlot("/tmp/repo-lock-test");
+      expect(slot).toBe(4);
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });

@@ -4,11 +4,9 @@ import { tmpdir } from "node:os";
 import { basename, dirname, resolve } from "node:path";
 
 import { runHook } from "../core/config.ts";
-import { removeWorktree } from "../core/git.ts";
-import { deleteSession } from "../core/session.ts";
-import { deleteSlot } from "../core/slot.ts";
 import type { RunInPaneArgs } from "../types.ts";
 import { createTailUpdater, startSpinner } from "../ui/spinner.ts";
+import { performRollback } from "./rollback.ts";
 
 export async function parseRunInPaneArgs(payloadPath: string): Promise<RunInPaneArgs> {
   // Validate path to prevent deletion of arbitrary files
@@ -103,52 +101,17 @@ export async function executeRunInPane(args: RunInPaneArgs): Promise<void> {
       const message = error instanceof Error ? error.message : String(error);
       spinner?.fail("postCreate hook failed");
       console.error(`❌ postCreate hook failed: ${message}`);
-      console.log("🗑️  Rolling back...");
-
-      // preClean hook for rollback
-      if (args.preCleanCommand) {
-        try {
-          await runHook(args.preCleanCommand, repoRoot, {
-            verbose,
-            timeout: args.preCleanTimeout,
-          });
-        } catch {
-          console.warn("  ⚠️  preClean hook failed during rollback");
-        }
-      }
-
-      // Remove worktree
-      try {
-        await removeWorktree(worktreePath);
-      } catch {
-        console.warn("  ⚠️  Failed to rollback worktree");
-      }
-
-      // postClean hook after rollback
-      if (args.postCleanCommand) {
-        const rollbackSpinner = verbose
-          ? null
-          : startSpinner("Running postClean hook (rollback)...", { timeoutSec: args.postCleanTimeout });
-        try {
-          await runHook(args.postCleanCommand, repoRoot, {
-            verbose,
-            onLine: rollbackSpinner ? createTailUpdater(rollbackSpinner) : undefined,
-            timeout: args.postCleanTimeout,
-          });
-          rollbackSpinner?.stop();
-        } catch (error) {
-          const postCleanMessage = error instanceof Error ? error.message : String(error);
-          rollbackSpinner?.fail(`postClean hook failed during rollback: ${postCleanMessage}`);
-          console.warn(`  ⚠️  postClean hook failed during rollback: ${postCleanMessage}`);
-        }
-      }
-
-      // Delete cached slot and session on rollback
-      if (args.slot != null) {
-        await deleteSlot(worktreePath);
-      }
-      await deleteSession(worktreePath);
-
+      await performRollback({
+        worktreePath,
+        repoRoot,
+        preCleanCommand: args.preCleanCommand,
+        preCleanTimeout: args.preCleanTimeout,
+        postCleanCommand: args.postCleanCommand,
+        postCleanTimeout: args.postCleanTimeout,
+        slot: args.slot,
+        verbose,
+        deleteSessionData: true,
+      });
       return;
     }
   }

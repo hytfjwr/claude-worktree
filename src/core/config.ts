@@ -149,8 +149,21 @@ export async function runHook(
         readPromises.push(readStream(proc.stderr));
       }
 
-      const results = await Promise.all([exitPromise, ...readPromises]);
-      const exitCode = results[0];
+      let exitCode: number;
+      try {
+        const results = await Promise.all([exitPromise, ...readPromises]);
+        exitCode = results[0];
+      } catch (error) {
+        // Kill the process if a stream error occurs and process is still alive
+        try {
+          if (!proc.killed) {
+            proc.kill();
+          }
+        } catch {
+          // Process may already be dead (ESRCH)
+        }
+        throw error;
+      }
       if (exitCode !== 0) {
         throw new Error(`Hook command failed with exit code ${exitCode}: ${command}`);
       }
