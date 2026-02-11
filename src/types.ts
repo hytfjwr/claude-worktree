@@ -204,7 +204,7 @@ export type RunInPaneArgs = {
 };
 
 export type Command =
-  | { type: "help" }
+  | { type: "help"; commandHelp?: "create" | "list" | "clean" }
   | { type: "create"; args: CreateArgs }
   | { type: "clean"; args: CleanArgs }
   | { type: "list"; args: ListArgs }
@@ -315,6 +315,7 @@ export type CreateDeps = {
   loadProjectConfig: (repoRoot: string) => Promise<ProjectConfig | null>;
   listWorktrees: () => Promise<WorktreeInfo[]>;
   branchExists: (branchName: string) => Promise<boolean>;
+  verifyBranchRef: (ref: string) => Promise<boolean>;
   createWorktree: (branchName: string, worktreePath: string, baseBranch: string) => Promise<void>;
   removeWorktree: (path: string, force?: boolean) => Promise<void>;
   deleteLocalBranch: (branchName: string, force?: boolean) => Promise<void>;

@@ -1,7 +1,16 @@
 // Types (centralized)
 
 // CLI
-export { parseArgs, parseListArgs, run, showHelp } from "./cli.ts";
+export {
+  parseArgs,
+  parseListArgs,
+  run,
+  showCleanHelp,
+  showCreateHelp,
+  showHelp,
+  showListHelp,
+  validateBranchName,
+} from "./cli.ts";
 // Clean command
 export { executeClean } from "./commands/clean.ts";
 // Create command
@@ -36,6 +45,7 @@ export {
   isWorktreeDirty,
   listWorktrees,
   removeWorktree,
+  verifyBranchRef,
 } from "./core/git.ts";
 // Session utilities
 export {

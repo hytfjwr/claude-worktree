@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { readFile, unlink, writeFile } from "node:fs/promises";
+import { readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -14,6 +14,7 @@ import {
   getWorktreePath,
   listWorktrees,
   removeWorktree,
+  verifyBranchRef,
 } from "../core/git.ts";
 import { completeSession, deleteSession, saveSession } from "../core/session.ts";
 import { deleteSlot, findAvailableSlot, readSlot, saveSlot } from "../core/slot.ts";
@@ -44,6 +45,7 @@ const defaultDeps: CreateDeps = {
   loadProjectConfig,
   listWorktrees,
   branchExists,
+  verifyBranchRef,
   createWorktree,
   removeWorktree,
   deleteLocalBranch,
@@ -68,15 +70,32 @@ const defaultDeps: CreateDeps = {
 // Pure helper functions
 // =============================================================================
 
+const MAX_PLAN_FILE_SIZE = 1024 * 1024; // 1MB
+
 export async function readPlanFile(filePath: string): Promise<string> {
-  let content: string;
+  // Check file existence and size before reading
+  let fileSize: number;
   try {
-    content = await readFile(filePath, "utf-8");
+    const fileStat = await stat(filePath);
+    fileSize = fileStat.size;
   } catch (err) {
     if (isNodeError(err) && err.code === "ENOENT") {
       throw new Error(`Plan file not found: ${filePath}`);
     }
     throw new Error(`Failed to read plan file ${filePath}: ${getErrorMessage(err)}`);
+  }
+
+  if (fileSize > MAX_PLAN_FILE_SIZE) {
+    const sizeMB = (fileSize / (1024 * 1024)).toFixed(1);
+    throw new Error(`Plan file is too large (${sizeMB}MB). Maximum allowed size is 1MB: ${filePath}`);
+  }
+
+  let content: string;
+  try {
+    content = await readFile(filePath, "utf-8");
+  } catch (err) {
+    const error = err as NodeJS.ErrnoException;
+    throw new Error(`Failed to read plan file ${filePath}: ${error.message}`);
   }
 
   const trimmed = content.trim();
@@ -452,10 +471,18 @@ export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps
   if (pane) {
     const available = await deps.checkWeztermAvailable();
     if (!available) {
+      const installHint =
+        process.platform === "darwin"
+          ? "  brew install --cask wezterm    # macOS (Homebrew)"
+          : process.platform === "linux"
+            ? "  https://wezfurlong.org/wezterm/install/linux.html"
+            : "  https://wezfurlong.org/wezterm/installation.html";
+
       throw new Error(
-        "WezTerm CLI is not installed. The -pane option requires WezTerm.\n" +
-          "Install WezTerm: https://wezfurlong.org/wezterm/installation.html\n" +
-          "Or run without -pane to use the current terminal.",
+        "WezTerm CLI is not installed. The -pane option requires WezTerm.\n\n" +
+          `Install WezTerm:\n${installHint}\n\n` +
+          "Or run without -pane to use the current terminal:\n" +
+          `  claude-worktree ${branchName} '...'`,
       );
     }
   }
@@ -469,6 +496,18 @@ export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps
   const git = await deps.getGitContext();
   const worktreePath = deps.getWorktreePath(git.repoRoot, git.repoName, branchName);
   const effectiveBaseBranch = baseBranch ?? git.currentBranch;
+
+  // Verify base branch exists when explicitly specified
+  if (baseBranch) {
+    const exists = await deps.verifyBranchRef(baseBranch);
+    if (!exists) {
+      throw new Error(
+        `Base branch not found: "${baseBranch}"\n\n` +
+          "Check the branch name and try again. To see available branches:\n" +
+          "  git branch -a",
+      );
+    }
+  }
 
   const config = await deps.loadProjectConfig(git.repoRoot);
 

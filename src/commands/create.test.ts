@@ -35,6 +35,13 @@ describe("readPlanFile", () => {
     chmodSync(filePath, 0o644); // restore for cleanup
   });
 
+  test("throws when file exceeds 1MB", async () => {
+    const filePath = join(tmpDir, "large.md");
+    // Create a file slightly over 1MB
+    writeFileSync(filePath, "x".repeat(1024 * 1024 + 1));
+    await expect(readPlanFile(filePath)).rejects.toThrow("too large");
+  });
+
   afterAll(() => {
     rmSync(tmpDir, { recursive: true, force: true });
   });

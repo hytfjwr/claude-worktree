@@ -4,14 +4,32 @@ import type { AheadBehind, CommitInfo, GitContext, ParsedWorktree, WorktreeInfo,
 import { exec } from "./exec.ts";
 
 export async function getGitContext(): Promise<GitContext> {
-  const repoRoot = (await exec("git", ["rev-parse", "--show-toplevel"]).text()).trim();
+  let repoRoot: string;
+  try {
+    repoRoot = (await exec("git", ["rev-parse", "--show-toplevel"]).text()).trim();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    // Distinguish "not a git repo" from other failures (e.g., git not installed)
+    if (message.includes("not a git repository") || message.includes("ENOENT")) {
+      throw new Error(
+        `Not in a git repository (cwd: ${process.cwd()})\n\n` +
+          "Navigate to a git repository and try again:\n" +
+          "  cd /path/to/your/repo",
+      );
+    }
+    throw new Error(`Failed to detect git repository: ${message}`);
+  }
   if (!repoRoot) {
-    throw new Error("Not in a git repository");
+    throw new Error(
+      `Not in a git repository (cwd: ${process.cwd()})\n\n` +
+        "Navigate to a git repository and try again:\n" +
+        "  cd /path/to/your/repo",
+    );
   }
 
   const currentBranch = (await exec("git", ["branch", "--show-current"]).text()).trim();
   if (!currentBranch) {
-    throw new Error("Could not determine current branch");
+    throw new Error("Could not determine current branch. You may be in a detached HEAD state.");
   }
 
   return {
@@ -223,6 +241,15 @@ export async function branchExists(branchName: string): Promise<boolean> {
   const result = await exec("git", ["show-ref", "--verify", "--quiet", `refs/heads/${branchName}`])
     .nothrow()
     .quiet();
+  return result.exitCode === 0;
+}
+
+/**
+ * Verify that a branch or ref exists (resolves to a valid commit).
+ * Uses `git rev-parse --verify` which works for both local and remote refs.
+ */
+export async function verifyBranchRef(ref: string): Promise<boolean> {
+  const result = await exec("git", ["rev-parse", "--verify", ref]).nothrow().quiet();
   return result.exitCode === 0;
 }
 

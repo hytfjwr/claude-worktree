@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { parseArgs, parseCleanArgs, parseCreateArgs, parseListArgs } from "./cli.ts";
+import { parseArgs, parseCleanArgs, parseCreateArgs, parseListArgs, validateBranchName } from "./cli.ts";
 
 describe("parseArgs", () => {
   describe("help", () => {
@@ -19,14 +19,14 @@ describe("parseArgs", () => {
       expect(result).toEqual({ type: "help" });
     });
 
-    test("-h in the middle - returns help", () => {
+    test("-h in the middle - returns create help", () => {
       const result = parseArgs(["feature/test", "-h", "prompt"]);
-      expect(result).toEqual({ type: "help" });
+      expect(result).toEqual({ type: "help", commandHelp: "create" });
     });
 
-    test("-help in the middle - returns help", () => {
+    test("-help for clean - returns clean help", () => {
       const result = parseArgs(["clean", "-help"]);
-      expect(result).toEqual({ type: "help" });
+      expect(result).toEqual({ type: "help", commandHelp: "clean" });
     });
   });
 
@@ -701,5 +701,147 @@ describe("parseListArgs", () => {
 
   test("error: unknown option", () => {
     expect(() => parseListArgs(["-unknown"])).toThrow("Unknown option for list command: -unknown");
+  });
+});
+
+describe("validateBranchName", () => {
+  test("valid branch names return null", () => {
+    expect(validateBranchName("feature/auth")).toBeNull();
+    expect(validateBranchName("fix/bug-123")).toBeNull();
+    expect(validateBranchName("main")).toBeNull();
+    expect(validateBranchName("feature/deep/nested")).toBeNull();
+  });
+
+  test("starting with - is invalid", () => {
+    const result = validateBranchName("-invalid");
+    expect(result).toContain("cannot start with");
+  });
+
+  test("starting with . is invalid", () => {
+    const result = validateBranchName(".hidden");
+    expect(result).toContain("cannot start or end with");
+  });
+
+  test("ending with . is invalid", () => {
+    const result = validateBranchName("branch.");
+    expect(result).toContain("cannot start or end with");
+  });
+
+  test("path component starting with . is invalid", () => {
+    const result = validateBranchName("feature/.hidden");
+    expect(result).toContain("Path components cannot start with");
+  });
+
+  test("ending with .lock is invalid", () => {
+    const result = validateBranchName("branch.lock");
+    expect(result).toContain(".lock");
+  });
+
+  test("containing .. is invalid", () => {
+    const result = validateBranchName("a..b");
+    expect(result).toContain("..");
+  });
+
+  test("containing // is invalid", () => {
+    const result = validateBranchName("a//b");
+    expect(result).toContain("consecutive slashes");
+  });
+
+  test("ending with / is invalid", () => {
+    const result = validateBranchName("branch/");
+    expect(result).toContain('end with "/"');
+  });
+
+  test("containing @{ is invalid", () => {
+    const result = validateBranchName("branch@{0}");
+    expect(result).toContain("@{");
+  });
+
+  test("@ alone is invalid", () => {
+    const result = validateBranchName("@");
+    expect(result).toContain('"@"');
+  });
+
+  test("containing backslash is invalid", () => {
+    const result = validateBranchName("a\\b");
+    expect(result).toContain("backslash");
+  });
+
+  test("containing space is invalid", () => {
+    const result = validateBranchName("branch name");
+    expect(result).toContain("whitespace");
+  });
+
+  test("containing ~ is invalid", () => {
+    const result = validateBranchName("branch~1");
+    expect(result).toContain('"~"');
+  });
+
+  test("containing ^ is invalid", () => {
+    const result = validateBranchName("branch^2");
+    expect(result).toContain('"^"');
+  });
+
+  test("containing : is invalid", () => {
+    const result = validateBranchName("branch:name");
+    expect(result).toContain('":"');
+  });
+
+  test("containing * is invalid", () => {
+    const result = validateBranchName("branch*");
+    expect(result).toContain('"*"');
+  });
+
+  test("containing ? is invalid", () => {
+    const result = validateBranchName("branch?");
+    expect(result).toContain('"?"');
+  });
+
+  test("containing [ is invalid", () => {
+    const result = validateBranchName("branch[0]");
+    expect(result).toContain('"["');
+  });
+});
+
+describe("parseCreateArgs - branch validation", () => {
+  test("error: branch name starting with -", () => {
+    expect(() => parseCreateArgs(["-feature", "Prompt"])).toThrow("cannot start with");
+  });
+
+  test("error: branch name with spaces", () => {
+    expect(() => parseCreateArgs(["my branch", "Prompt"])).toThrow("whitespace");
+  });
+});
+
+describe("parseCreateArgs - whitespace prompt", () => {
+  test("error: whitespace-only prompt is rejected", () => {
+    expect(() => parseCreateArgs(["feature/test", "   "])).toThrow("A prompt or -plan option is required");
+  });
+});
+
+describe("parseArgs - per-command help", () => {
+  test("list -h returns list help", () => {
+    const result = parseArgs(["list", "-h"]);
+    expect(result).toEqual({ type: "help", commandHelp: "list" });
+  });
+
+  test("list -help returns list help", () => {
+    const result = parseArgs(["list", "-help"]);
+    expect(result).toEqual({ type: "help", commandHelp: "list" });
+  });
+
+  test("clean -h returns clean help", () => {
+    const result = parseArgs(["clean", "-h"]);
+    expect(result).toEqual({ type: "help", commandHelp: "clean" });
+  });
+
+  test("branch -h returns create help", () => {
+    const result = parseArgs(["feature/test", "-h"]);
+    expect(result).toEqual({ type: "help", commandHelp: "create" });
+  });
+
+  test("bare -h returns global help", () => {
+    const result = parseArgs(["-h"]);
+    expect(result).toEqual({ type: "help" });
   });
 });
