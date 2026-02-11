@@ -3,6 +3,7 @@ import { readFile, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, resolve } from "node:path";
 
+import { getErrorMessage, isNodeError } from "../core/errors.ts";
 import type { RunInPaneArgs } from "../types.ts";
 import { executeHookWithSpinner } from "./hooks.ts";
 import { performRollback } from "./rollback.ts";
@@ -19,11 +20,10 @@ export async function parseRunInPaneArgs(payloadPath: string): Promise<RunInPane
   try {
     content = await readFile(payloadPath, "utf-8");
   } catch (err) {
-    const error = err as NodeJS.ErrnoException;
-    if (error.code === "ENOENT") {
+    if (isNodeError(err) && err.code === "ENOENT") {
       throw new Error(`_run-in-pane: payload file not found: ${payloadPath}`);
     }
-    throw new Error(`_run-in-pane: failed to read payload file ${payloadPath}: ${error.message}`);
+    throw new Error(`_run-in-pane: failed to read payload file ${payloadPath}: ${getErrorMessage(err)}`);
   }
 
   // Clean up temp file

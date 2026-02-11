@@ -3,6 +3,19 @@ import { spawn } from "node:child_process";
 import { exec } from "../core/exec.ts";
 import type { WeztermPane } from "../types.ts";
 
+function isWeztermPane(value: unknown): value is { pane_id: number; title: string; cwd: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "pane_id" in value &&
+    typeof (value as Record<string, unknown>).pane_id === "number" &&
+    "title" in value &&
+    typeof (value as Record<string, unknown>).title === "string" &&
+    "cwd" in value &&
+    typeof (value as Record<string, unknown>).cwd === "string"
+  );
+}
+
 export async function listWeztermPanes(): Promise<WeztermPane[] | null> {
   try {
     const available = await checkWeztermAvailable();
@@ -10,7 +23,10 @@ export async function listWeztermPanes(): Promise<WeztermPane[] | null> {
 
     const result = await exec("wezterm", ["cli", "list", "--format", "json"]).nothrow().quiet();
     if (result.exitCode !== 0) return null;
-    return JSON.parse(result.text()).map((p: { pane_id: number; title: string; cwd: string }) => ({
+    const parsed: unknown = JSON.parse(result.text());
+    if (!Array.isArray(parsed)) return null;
+    if (!parsed.every(isWeztermPane)) return null;
+    return parsed.map((p) => ({
       pane_id: p.pane_id,
       title: p.title,
       cwd: p.cwd,

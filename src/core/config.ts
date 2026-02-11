@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { TextDecoder } from "node:util";
 
 import type { HookVars, ProjectConfig } from "../types.ts";
+import { getErrorMessage, isNodeError } from "./errors.ts";
 import { exec } from "./exec.ts";
 
 export async function loadProjectConfig(repoRoot: string): Promise<ProjectConfig | null> {
@@ -13,7 +14,7 @@ export async function loadProjectConfig(repoRoot: string): Promise<ProjectConfig
   try {
     content = await readFile(configPath, "utf-8");
   } catch (error) {
-    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") {
+    if (isNodeError(error) && error.code === "ENOENT") {
       return null;
     }
     throw error;
@@ -22,7 +23,7 @@ export async function loadProjectConfig(repoRoot: string): Promise<ProjectConfig
   try {
     return JSON.parse(content) as ProjectConfig;
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = getErrorMessage(error);
     console.warn(`⚠️  Failed to parse .claude-worktree.json: ${message}`);
     return null;
   }

@@ -4,6 +4,8 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { setTimeout } from "node:timers/promises";
 
+import { isNodeError } from "./errors.ts";
+
 export function isPortInUse(port: number): Promise<boolean> {
   return new Promise((resolve) => {
     const server = createServer();
@@ -53,7 +55,7 @@ async function readCache(): Promise<SlotCache> {
     const data = await readFile(getCacheFile(), "utf-8");
     return JSON.parse(data) as SlotCache;
   } catch (err: unknown) {
-    if (err instanceof Error && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT") {
+    if (isNodeError(err) && err.code === "ENOENT") {
       return {};
     }
     // Parse errors or other read errors: return empty cache

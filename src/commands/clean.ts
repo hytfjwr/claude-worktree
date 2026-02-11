@@ -1,4 +1,5 @@
 import { buildHookCommand, loadProjectConfig, resolveHookTimeout, runHook } from "../core/config.ts";
+import { getErrorMessage } from "../core/errors.ts";
 import {
   deleteLocalBranch,
   fetchAndPrune,
@@ -130,7 +131,7 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
     repoRoot = git.repoRoot;
     config = await deps.loadProjectConfig(repoRoot);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = getErrorMessage(error);
     console.debug(`preClean hooks will be skipped: failed to get git context or load project config: ${message}`);
   }
 
@@ -154,7 +155,7 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
             timeout: resolveHookTimeout("preClean", config),
           });
         } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
+          const message = getErrorMessage(error);
           console.warn(`  ⚠️  preClean hook failed (continuing): ${message}`);
         }
       }
@@ -166,7 +167,7 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
         try {
           await deps.deleteLocalBranch(worktree.branch, true);
         } catch (error) {
-          const branchError = error instanceof Error ? error.message : String(error);
+          const branchError = getErrorMessage(error);
           console.warn(`  ⚠️  Failed to delete branch ${worktree.branch}: ${branchError}`);
         }
       }
@@ -181,7 +182,7 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
             timeout: resolveHookTimeout("postClean", config),
           });
         } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
+          const message = getErrorMessage(error);
           console.warn(`  ⚠️  postClean hook failed (continuing): ${message}`);
         }
       }
@@ -193,7 +194,7 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
       spinner.stop(`✓ ${label}`);
       result.deleted.push(worktree.path);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = getErrorMessage(error);
       spinner.fail(`${label}: ${message}`);
       result.errors.push({ path: worktree.path, error: message });
     }

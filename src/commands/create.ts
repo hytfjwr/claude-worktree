@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import { buildHookCommand, loadProjectConfig, resolveHookTimeout } from "../core/config.ts";
+import { getErrorMessage, isNodeError } from "../core/errors.ts";
 import {
   branchExists,
   createWorktree,
@@ -72,11 +73,10 @@ export async function readPlanFile(filePath: string): Promise<string> {
   try {
     content = await readFile(filePath, "utf-8");
   } catch (err) {
-    const error = err as NodeJS.ErrnoException;
-    if (error.code === "ENOENT") {
+    if (isNodeError(err) && err.code === "ENOENT") {
       throw new Error(`Plan file not found: ${filePath}`);
     }
-    throw new Error(`Failed to read plan file ${filePath}: ${error.message}`);
+    throw new Error(`Failed to read plan file ${filePath}: ${getErrorMessage(err)}`);
   }
 
   const trimmed = content.trim();
@@ -251,7 +251,7 @@ async function handleExistingBranch(branchName: string, deps: CreateDeps): Promi
     await deps.deleteLocalBranch(branchName, true);
     console.log(`  \u2713 Branch deleted: ${branchName}`);
   } catch (e) {
-    const errorMessage = e instanceof Error ? e.message : String(e);
+    const errorMessage = getErrorMessage(e);
     console.log(`  \u274c Failed to delete branch: ${errorMessage}`);
     return false;
   }

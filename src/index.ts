@@ -16,6 +16,8 @@ export { performRollback } from "./commands/rollback.ts";
 export { executeRunInPane } from "./commands/run-in-pane.ts";
 // Config utilities
 export { buildHookCommand, loadProjectConfig, runHook } from "./core/config.ts";
+// Error utilities
+export { getErrorMessage, isNodeError } from "./core/errors.ts";
 // Git utilities
 export {
   buildWorktreeCommand,

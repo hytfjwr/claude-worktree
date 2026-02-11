@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { setTimeout } from "node:timers/promises";
 
 import type { SessionInfo, SessionState, WeztermPane } from "../types.ts";
+import { isNodeError } from "./errors.ts";
 import { getCacheDir } from "./slot.ts";
 
 type SessionCache = Record<string, SessionInfo>;
@@ -20,7 +21,7 @@ async function readCache(): Promise<SessionCache> {
     const data = await readFile(getSessionFile(), "utf-8");
     return JSON.parse(data) as SessionCache;
   } catch (err: unknown) {
-    if (err instanceof Error && "code" in err && err.code === "ENOENT") {
+    if (isNodeError(err) && err.code === "ENOENT") {
       return {};
     }
     throw err;
