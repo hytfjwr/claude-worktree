@@ -114,6 +114,16 @@ export type HookVars = {
   slot?: number;
 };
 
+export type HookExecOptions = {
+  hookCmd: string;
+  cwd: string;
+  label: string;
+  verbose: boolean;
+  timeout: number;
+};
+
+export type HookExecResult = { success: true } | { success: false; message: string };
+
 // =============================================================================
 // Options types
 // =============================================================================
@@ -274,4 +284,63 @@ export type CleanDeps = {
   confirm: (message: string) => Promise<boolean>;
   selectMultiple: (statuses: WorktreeStatus[]) => Promise<WorktreeStatus[]>;
   startSpinner: (message: string) => Spinner;
+};
+
+// =============================================================================
+// Rollback types
+// =============================================================================
+
+export type RollbackOptions = {
+  worktreePath: string;
+  repoRoot: string;
+  preCleanCommand?: string;
+  preCleanTimeout: number;
+  postCleanCommand?: string;
+  postCleanTimeout: number;
+  slot?: number;
+  verbose: boolean;
+  /** Whether to delete session data during rollback (true for pane mode, false for terminal mode pre-session) */
+  deleteSessionData: boolean;
+};
+
+// =============================================================================
+// Create types
+// =============================================================================
+
+export type CreateDeps = {
+  // Git operations
+  checkWeztermAvailable: () => Promise<boolean>;
+  getGitContext: () => Promise<GitContext>;
+  getWorktreePath: (repoRoot: string, repoName: string, branchName: string) => string;
+  loadProjectConfig: (repoRoot: string) => Promise<ProjectConfig | null>;
+  listWorktrees: () => Promise<WorktreeInfo[]>;
+  branchExists: (branchName: string) => Promise<boolean>;
+  createWorktree: (branchName: string, worktreePath: string, baseBranch: string) => Promise<void>;
+  removeWorktree: (path: string, force?: boolean) => Promise<void>;
+  deleteLocalBranch: (branchName: string, force?: boolean) => Promise<void>;
+
+  // Config/hooks
+  buildHookCommand: (template: string, vars: HookVars) => string;
+  resolveHookTimeout: (hookName: "postCreate" | "preClean" | "postClean", config: ProjectConfig | null) => number;
+  executeHookWithSpinner: (options: HookExecOptions) => Promise<HookExecResult>;
+
+  // Session/slot
+  findAvailableSlot: () => Promise<number>;
+  saveSlot: (worktreePath: string, slot: number) => Promise<void>;
+  readSlot: (worktreePath: string) => Promise<number | undefined>;
+  deleteSlot: (worktreePath: string) => Promise<void>;
+  saveSession: (worktreePath: string, session: SessionInfo) => Promise<void>;
+  completeSession: (worktreePath: string) => Promise<void>;
+  deleteSession: (worktreePath: string) => Promise<void>;
+
+  // Claude/WezTerm
+  buildClaudeCommand: (options: ClaudeOptions) => string;
+  createPane: (options?: PaneOptions) => Promise<string>;
+  sendCommand: (paneId: string, command: string) => Promise<void>;
+
+  // UI
+  confirm: (message: string) => Promise<boolean>;
+
+  // Rollback
+  performRollback: (options: RollbackOptions) => Promise<void>;
 };

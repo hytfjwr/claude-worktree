@@ -5,7 +5,9 @@ export { parseArgs, parseListArgs, run, showHelp } from "./cli.ts";
 // Clean command
 export { executeClean } from "./commands/clean.ts";
 // Create command
-export { readPlanFile, runCreate } from "./commands/create.ts";
+export { buildClaudeOptions, readPlanFile, runCreate } from "./commands/create.ts";
+// Hook utilities (shared between create and run-in-pane)
+export { executeHookWithSpinner } from "./commands/hooks.ts";
 // List command
 export { executeList, formatSessionState } from "./commands/list.ts";
 // Rollback utility
@@ -71,12 +73,16 @@ export type {
   CliArgs,
   Command,
   CommitInfo,
-  // CLI
+  // Create
   CreateArgs,
+  CreateDeps,
   DraftInstructions,
   ExtractResult,
   // Git
   GitContext,
+  // Hook
+  HookExecOptions,
+  HookExecResult,
   HookVars,
   // List
   ListArgs,
@@ -91,6 +97,8 @@ export type {
   ParsedWorktree,
   // Config
   ProjectConfig,
+  // Rollback
+  RollbackOptions,
   // RunInPane
   RunInPaneArgs,
   // Session

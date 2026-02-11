@@ -2,20 +2,8 @@ import { runHook } from "../core/config.ts";
 import { removeWorktree } from "../core/git.ts";
 import { deleteSession } from "../core/session.ts";
 import { deleteSlot } from "../core/slot.ts";
+import type { RollbackOptions } from "../types.ts";
 import { createTailUpdater, startSpinner } from "../ui/spinner.ts";
-
-export type RollbackOptions = {
-  worktreePath: string;
-  repoRoot: string;
-  preCleanCommand?: string;
-  preCleanTimeout: number;
-  postCleanCommand?: string;
-  postCleanTimeout: number;
-  slot?: number;
-  verbose: boolean;
-  /** Whether to delete session data during rollback (true for pane mode, false for terminal mode pre-session) */
-  deleteSessionData: boolean;
-};
 
 type StepResult = { name: string; success: boolean; error?: string };
 

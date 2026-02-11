@@ -3,9 +3,8 @@ import { readFile, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, resolve } from "node:path";
 
-import { runHook } from "../core/config.ts";
 import type { RunInPaneArgs } from "../types.ts";
-import { createTailUpdater, startSpinner } from "../ui/spinner.ts";
+import { executeHookWithSpinner } from "./hooks.ts";
 import { performRollback } from "./rollback.ts";
 
 export async function parseRunInPaneArgs(payloadPath: string): Promise<RunInPaneArgs> {
@@ -89,18 +88,15 @@ export async function executeRunInPane(args: RunInPaneArgs): Promise<void> {
 
   // Run postCreate hook if configured
   if (args.postCreateCommand) {
-    const spinner = verbose ? null : startSpinner("Running postCreate hook...", { timeoutSec: args.postCreateTimeout });
-    try {
-      await runHook(args.postCreateCommand, repoRoot, {
-        verbose,
-        onLine: spinner ? createTailUpdater(spinner) : undefined,
-        timeout: args.postCreateTimeout,
-      });
-      spinner?.stop("✓ postCreate hook done");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      spinner?.fail("postCreate hook failed");
-      console.error(`❌ postCreate hook failed: ${message}`);
+    const result = await executeHookWithSpinner({
+      hookCmd: args.postCreateCommand,
+      cwd: repoRoot,
+      label: "postCreate",
+      verbose,
+      timeout: args.postCreateTimeout,
+    });
+    if (!result.success) {
+      console.error(`\u274c postCreate hook failed: ${result.message}`);
       await performRollback({
         worktreePath,
         repoRoot,
