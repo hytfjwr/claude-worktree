@@ -1,15 +1,20 @@
 import { mkdir, open, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { createServer } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { setTimeout } from "node:timers/promises";
 
-import { exec } from "./exec.ts";
-
-export async function isPortInUse(port: number): Promise<boolean> {
-  const result = await exec("lsof", [`-iTCP:${port}`, "-sTCP:LISTEN"])
-    .nothrow()
-    .quiet();
-  return result.exitCode === 0;
+export function isPortInUse(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const server = createServer();
+    server.once("error", () => {
+      resolve(true);
+    });
+    server.once("listening", () => {
+      server.close(() => resolve(false));
+    });
+    server.listen(port, "127.0.0.1");
+  });
 }
 
 export async function findAvailableSlot(basePort: number = 8880, maxSlots: number = 9): Promise<number> {
@@ -19,11 +24,11 @@ export async function findAvailableSlot(basePort: number = 8880, maxSlots: numbe
   if (!Number.isInteger(maxSlots) || maxSlots < 1 || maxSlots > 65535 - basePort) {
     throw new Error(`Invalid maxSlots: ${maxSlots}. Must be a positive integer and basePort + maxSlots <= 65535`);
   }
-  for (let i = 1; i <= maxSlots; i++) {
-    const port = basePort + i;
-    if (!(await isPortInUse(port))) {
-      return i;
-    }
+  // Check all ports in parallel
+  const results = await Promise.all(Array.from({ length: maxSlots }, (_, i) => isPortInUse(basePort + i + 1)));
+  const slotIndex = results.indexOf(false);
+  if (slotIndex !== -1) {
+    return slotIndex + 1;
   }
   throw new Error(`No available slots (all ports ${basePort + 1}-${basePort + maxSlots} are in use)`);
 }

@@ -37,7 +37,7 @@ function validateHookVars(vars: HookVars): void {
   if (vars.path.length === 0) {
     throw new Error("Invalid path in hook variables. Path must not be empty.");
   }
-  const SAFE_PATH = /^[a-zA-Z0-9._\/-]+$/;
+  const SAFE_PATH = /^[a-zA-Z0-9._/-]+$/;
   if (!SAFE_PATH.test(vars.path)) {
     throw new Error(
       `Invalid path in hook variables: ${JSON.stringify(vars.path)}. Only alphanumeric, dots, underscores, slashes, and hyphens are allowed.`,
@@ -55,9 +55,7 @@ function validateHookVars(vars: HookVars): void {
 
 export function buildHookCommand(template: string, vars: HookVars): string {
   validateHookVars(vars);
-  return template
-    .replace(/\{path\}/g, vars.path)
-    .replace(/\{slot\}/g, vars.slot != null ? String(vars.slot) : "");
+  return template.replace(/\{path\}/g, vars.path).replace(/\{slot\}/g, vars.slot != null ? String(vars.slot) : "");
 }
 
 export const DEFAULT_HOOK_TIMEOUT = 600;

@@ -198,25 +198,27 @@ export async function executeList(args: ListArgs, deps: ListDeps = defaultDeps):
       const panes = args.status ? await deps.listWeztermPanes() : null;
       const sessions = args.status ? await deps.readAllSessions() : {};
 
-      // Build entries
-      for (const status of statuses) {
-        const commit = await deps.getLastCommit(status.worktree.path);
+      // Build entries (parallelize per-worktree git operations)
+      result.entries = await Promise.all(
+        statuses.map(async (status) => {
+          const [commit, aheadBehind] = await Promise.all([
+            deps.getLastCommit(status.worktree.path),
+            status.worktree.branch && !status.worktree.isMain
+              ? deps.getAheadBehind(status.worktree.branch, mainBranch)
+              : Promise.resolve(null),
+          ]);
 
-        let aheadBehind: AheadBehind | null = null;
-        if (status.worktree.branch && !status.worktree.isMain) {
-          aheadBehind = await deps.getAheadBehind(status.worktree.branch, mainBranch);
-        }
-
-        let session: SessionState | undefined;
-        if (args.status) {
-          const sessionInfo = sessions[status.worktree.path];
-          if (sessionInfo) {
-            session = determineSessionStatus(sessionInfo, panes);
+          let session: SessionState | undefined;
+          if (args.status) {
+            const sessionInfo = sessions[status.worktree.path];
+            if (sessionInfo) {
+              session = determineSessionStatus(sessionInfo, panes);
+            }
           }
-        }
 
-        result.entries.push({ worktree: status.worktree, status, commit, aheadBehind, session });
-      }
+          return { worktree: status.worktree, status, commit, aheadBehind, session };
+        }),
+      );
     }
 
     succeeded = true;
@@ -267,11 +269,11 @@ export async function executeList(args: ListArgs, deps: ListDeps = defaultDeps):
   // Rich display
   console.log(`\n${BOLD}Worktrees (${result.entries.length})${RESET}\n`);
 
-  for (const entry of result.entries) {
-    // Derive repoRoot from main worktree path or first worktree
-    const mainEntry = result.entries.find((e) => e.worktree.isMain);
-    const repoRoot = mainEntry ? mainEntry.worktree.path : entry.worktree.path;
+  // Derive repoRoot from main worktree path or first worktree
+  const mainEntry = result.entries.find((e) => e.worktree.isMain);
+  const repoRoot = mainEntry?.worktree.path ?? result.entries[0]?.worktree.path ?? ".";
 
+  for (const entry of result.entries) {
     const lines = formatWorktreeEntry(entry, repoRoot, args.verbose);
     for (const line of lines) {
       console.log(line);
