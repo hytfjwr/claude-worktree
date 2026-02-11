@@ -59,7 +59,7 @@ test:
 
 # Run in development mode
 dev:
-	@npx tsx bin/claude-worktree.ts
+	@pnpm run build && node dist/bin/claude-worktree.js
 
 # TypeScript type check
 typecheck:
