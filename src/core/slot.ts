@@ -13,6 +13,12 @@ export async function isPortInUse(port: number): Promise<boolean> {
 }
 
 export async function findAvailableSlot(basePort: number = 8880, maxSlots: number = 9): Promise<number> {
+  if (!Number.isInteger(basePort) || basePort < 1 || basePort > 65535) {
+    throw new Error(`Invalid basePort: ${basePort}. Must be an integer between 1 and 65535`);
+  }
+  if (!Number.isInteger(maxSlots) || maxSlots < 1 || maxSlots > 65535 - basePort) {
+    throw new Error(`Invalid maxSlots: ${maxSlots}. Must be a positive integer and basePort + maxSlots <= 65535`);
+  }
   for (let i = 1; i <= maxSlots; i++) {
     const port = basePort + i;
     if (!(await isPortInUse(port))) {

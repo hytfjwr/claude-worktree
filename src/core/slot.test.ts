@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import { deleteSlot, getCacheDir, readSlot, saveSlot } from "./slot.ts";
+import { deleteSlot, findAvailableSlot, getCacheDir, readSlot, saveSlot } from "./slot.ts";
 
 describe("slot cache", () => {
   let tempDir: string;
@@ -110,5 +110,35 @@ describe("slot cache", () => {
     } finally {
       warnSpy.mockRestore();
     }
+  });
+});
+
+describe("findAvailableSlot validation", () => {
+  test("rejects basePort less than 1", async () => {
+    await expect(findAvailableSlot(0)).rejects.toThrow("Invalid basePort: 0");
+  });
+
+  test("rejects basePort greater than 65535", async () => {
+    await expect(findAvailableSlot(65536)).rejects.toThrow("Invalid basePort: 65536");
+  });
+
+  test("rejects non-integer basePort", async () => {
+    await expect(findAvailableSlot(8880.5)).rejects.toThrow("Invalid basePort: 8880.5");
+  });
+
+  test("rejects negative basePort", async () => {
+    await expect(findAvailableSlot(-1)).rejects.toThrow("Invalid basePort: -1");
+  });
+
+  test("rejects maxSlots less than 1", async () => {
+    await expect(findAvailableSlot(8880, 0)).rejects.toThrow("Invalid maxSlots: 0");
+  });
+
+  test("rejects maxSlots that would exceed port range", async () => {
+    await expect(findAvailableSlot(65530, 10)).rejects.toThrow("Invalid maxSlots: 10");
+  });
+
+  test("rejects non-integer maxSlots", async () => {
+    await expect(findAvailableSlot(8880, 1.5)).rejects.toThrow("Invalid maxSlots: 1.5");
   });
 });

@@ -14,9 +14,22 @@ const testCwd = tmpdir();
 
 // Same logic as validateHookVars (for pure function testing)
 function validateHookVars(vars: HookVars): void {
-  const shellMetachars = /[;&|`$()<>\n\r]/;
-  if (shellMetachars.test(vars.path)) {
-    throw new Error(`Invalid hook variable: path "${vars.path}" contains shell metacharacters`);
+  if (vars.path.length === 0) {
+    throw new Error("Invalid path in hook variables. Path must not be empty.");
+  }
+  const SAFE_PATH = /^[a-zA-Z0-9._\/-]+$/;
+  if (!SAFE_PATH.test(vars.path)) {
+    throw new Error(
+      `Invalid path in hook variables: ${JSON.stringify(vars.path)}. Only alphanumeric, dots, underscores, slashes, and hyphens are allowed.`,
+    );
+  }
+  if (vars.path.startsWith("-")) {
+    throw new Error(
+      "Invalid path in hook variables. Path must not start with '-' to avoid being interpreted as a command-line option.",
+    );
+  }
+  if (vars.slot != null && (!Number.isInteger(vars.slot) || vars.slot < 1 || vars.slot > 9)) {
+    throw new Error("Invalid slot: must be an integer between 1-9");
   }
 }
 
@@ -25,7 +38,7 @@ function buildHookCommand(template: string, vars: HookVars): string {
   validateHookVars(vars);
   return template
     .replace(/\{path\}/g, vars.path)
-    .replace(/\{slot\}/g, vars.slot !== undefined ? String(vars.slot) : "");
+    .replace(/\{slot\}/g, vars.slot != null ? String(vars.slot) : "");
 }
 
 describe("buildHookCommand", () => {
@@ -70,21 +83,61 @@ describe("buildHookCommand", () => {
   });
 
   test("rejects path containing shell metacharacters", () => {
-    expect(() => buildHookCommand("cd {path}", { path: "/tmp/$(rm -rf /)" })).toThrow("contains shell metacharacters");
+    expect(() => buildHookCommand("cd {path}", { path: "/tmp/$(rm -rf /)" })).toThrow("Invalid path in hook variables");
   });
 
   test("rejects path containing backticks", () => {
-    expect(() => buildHookCommand("cd {path}", { path: "/tmp/`whoami`" })).toThrow("contains shell metacharacters");
+    expect(() => buildHookCommand("cd {path}", { path: "/tmp/`whoami`" })).toThrow("Invalid path in hook variables");
   });
 
   test("rejects path containing semicolons", () => {
-    expect(() => buildHookCommand("cd {path}", { path: "/tmp; rm -rf /" })).toThrow("contains shell metacharacters");
+    expect(() => buildHookCommand("cd {path}", { path: "/tmp; rm -rf /" })).toThrow("Invalid path in hook variables");
   });
 
   test("rejects path containing pipes", () => {
     expect(() => buildHookCommand("cd {path}", { path: "/tmp | cat /etc/passwd" })).toThrow(
-      "contains shell metacharacters",
+      "Invalid path in hook variables",
     );
+  });
+
+  test("rejects path containing glob wildcards", () => {
+    expect(() => buildHookCommand("cd {path}", { path: "/tmp/*" })).toThrow("Invalid path in hook variables");
+    expect(() => buildHookCommand("cd {path}", { path: "/tmp/?" })).toThrow("Invalid path in hook variables");
+  });
+
+  test("rejects path containing tilde", () => {
+    expect(() => buildHookCommand("cd {path}", { path: "~/tmp" })).toThrow("Invalid path in hook variables");
+  });
+
+  test("rejects path containing quotes", () => {
+    expect(() => buildHookCommand("cd {path}", { path: '/tmp/"foo"' })).toThrow("Invalid path in hook variables");
+    expect(() => buildHookCommand("cd {path}", { path: "/tmp/'foo'" })).toThrow("Invalid path in hook variables");
+  });
+
+  test("rejects path containing brackets", () => {
+    expect(() => buildHookCommand("cd {path}", { path: "/tmp/[a]" })).toThrow("Invalid path in hook variables");
+    expect(() => buildHookCommand("cd {path}", { path: "/tmp/{a,b}" })).toThrow("Invalid path in hook variables");
+  });
+
+  test("rejects path containing spaces", () => {
+    expect(() => buildHookCommand("cd {path}", { path: "/tmp/my dir" })).toThrow("Invalid path in hook variables");
+  });
+
+  test("rejects empty path", () => {
+    expect(() => buildHookCommand("cd {path}", { path: "" })).toThrow("Path must not be empty");
+  });
+
+  test("rejects path starting with hyphen", () => {
+    expect(() => buildHookCommand("cd {path}", { path: "-help" })).toThrow(
+      "Path must not start with '-'",
+    );
+    expect(() => buildHookCommand("cd {path}", { path: "--version" })).toThrow(
+      "Path must not start with '-'",
+    );
+  });
+
+  test("error message includes the invalid path value", () => {
+    expect(() => buildHookCommand("cd {path}", { path: "/tmp/$bad" })).toThrow('"/tmp/$bad"');
   });
 
   test("allows normal paths (hyphens, slashes, dots, underscores)", () => {
@@ -92,6 +145,28 @@ describe("buildHookCommand", () => {
       path: "/home/user/my-project_v2/work.tree",
     });
     expect(result).toBe("cd /home/user/my-project_v2/work.tree");
+  });
+
+  test("rejects slot outside valid range", () => {
+    expect(() => buildHookCommand("echo {slot}", { path: "/path", slot: 0 })).toThrow(
+      "Invalid slot: must be an integer between 1-9",
+    );
+    expect(() => buildHookCommand("echo {slot}", { path: "/path", slot: 10 })).toThrow(
+      "Invalid slot: must be an integer between 1-9",
+    );
+    expect(() => buildHookCommand("echo {slot}", { path: "/path", slot: -1 })).toThrow(
+      "Invalid slot: must be an integer between 1-9",
+    );
+    expect(() => buildHookCommand("echo {slot}", { path: "/path", slot: 1.5 })).toThrow(
+      "Invalid slot: must be an integer between 1-9",
+    );
+  });
+
+  test("allows valid slot values 1-9", () => {
+    for (let i = 1; i <= 9; i++) {
+      const result = buildHookCommand("echo {slot}", { path: "/path", slot: i });
+      expect(result).toBe(`echo ${i}`);
+    }
   });
 });
 

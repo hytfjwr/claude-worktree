@@ -34,9 +34,22 @@ export async function loadProjectConfig(repoRoot: string): Promise<ProjectConfig
  * but dynamic values substituted via {path}/{slot} must be safe.
  */
 function validateHookVars(vars: HookVars): void {
-  const shellMetachars = /[;&|`$()<>\n\r]/;
-  if (shellMetachars.test(vars.path)) {
-    throw new Error(`Invalid hook variable: path "${vars.path}" contains shell metacharacters`);
+  if (vars.path.length === 0) {
+    throw new Error("Invalid path in hook variables. Path must not be empty.");
+  }
+  const SAFE_PATH = /^[a-zA-Z0-9._\/-]+$/;
+  if (!SAFE_PATH.test(vars.path)) {
+    throw new Error(
+      `Invalid path in hook variables: ${JSON.stringify(vars.path)}. Only alphanumeric, dots, underscores, slashes, and hyphens are allowed.`,
+    );
+  }
+  if (vars.path.startsWith("-")) {
+    throw new Error(
+      "Invalid path in hook variables. Path must not start with '-' to avoid being interpreted as a command-line option.",
+    );
+  }
+  if (vars.slot != null && (!Number.isInteger(vars.slot) || vars.slot < 1 || vars.slot > 9)) {
+    throw new Error("Invalid slot: must be an integer between 1-9");
   }
 }
 
@@ -44,7 +57,7 @@ export function buildHookCommand(template: string, vars: HookVars): string {
   validateHookVars(vars);
   return template
     .replace(/\{path\}/g, vars.path)
-    .replace(/\{slot\}/g, vars.slot !== undefined ? String(vars.slot) : "");
+    .replace(/\{slot\}/g, vars.slot != null ? String(vars.slot) : "");
 }
 
 export const DEFAULT_HOOK_TIMEOUT = 600;
