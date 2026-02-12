@@ -1,0 +1,7 @@
+pre-commit:
+  parallel: true
+  commands:
+    lint:
+      run: pnpm run lint
+    typecheck:
+      run: pnpm run typecheck

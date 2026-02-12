@@ -6,8 +6,6 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "module": "nodenext",
-    "moduleResolution": "nodenext",
     "rewriteRelativeImportExtensions": true,
     "types": ["node"]
   },

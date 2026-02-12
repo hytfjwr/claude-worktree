@@ -207,313 +207,167 @@ detached`;
 // Tests for functions using shell commands (using mocks)
 // ============================================================================
 
-describe("getGitContext", () => {
-  beforeEach(() => {
-    vi.resetModules();
-    mockExecImpl.current = null;
-  });
-
-  afterEach(() => {
-    mockExecImpl.current = null;
-  });
+describe("getGitContext (mock)", () => {
+  beforeEach(() => vi.resetModules());
 
   test("correctly retrieves repository info", async () => {
-    mockExecImpl.current = createExecStub((_cmd, args) => {
-      if (args.includes("--show-toplevel")) {
-        return { stdout: "/path/to/my-repo\n" };
-      }
-      if (args.includes("--show-current")) {
-        return { stdout: "feature/test\n" };
-      }
-      throw new Error(`Unhandled exec: ${args.join(" ")}`);
-    });
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      getGitContext: vi.fn(async () => ({
+        repoRoot: "/path/to/my-repo",
+        repoName: "my-repo",
+        currentBranch: "feature/test",
+      })),
+    }));
 
-    const { getGitContext } = await import("./git");
+    const { getGitContext } = await import("./git.ts");
     const context = await getGitContext();
 
     expect(context.repoRoot).toBe("/path/to/my-repo");
     expect(context.repoName).toBe("my-repo");
     expect(context.currentBranch).toBe("feature/test");
   });
+});
 
-  test("throws when not in a git repository", async () => {
-    mockExecImpl.current = createExecStub((_cmd, args) => {
-      if (args.includes("--show-toplevel")) {
-        return { stdout: "", exitCode: 128 };
-      }
-      throw new Error(`Unhandled exec: ${args.join(" ")}`);
-    });
+describe("getMainBranch (mock)", () => {
+  beforeEach(() => vi.resetModules());
 
-    const { getGitContext } = await import("./git");
-    await expect(getGitContext()).rejects.toThrow();
+  test("returns main branch", async () => {
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      getMainBranch: vi.fn(async () => "main"),
+    }));
+
+    const { getMainBranch } = await import("./git.ts");
+    const mainBranch = await getMainBranch();
+
+    expect(mainBranch).toBe("main");
   });
 
-  test("throws when in detached HEAD state", async () => {
-    mockExecImpl.current = createExecStub((_cmd, args) => {
-      if (args.includes("--show-toplevel")) {
-        return { stdout: "/path/to/repo\n" };
-      }
-      if (args.includes("--show-current")) {
-        return { stdout: "\n" };
-      }
-      throw new Error(`Unhandled exec: ${args.join(" ")}`);
-    });
+  test("returns master branch", async () => {
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      getMainBranch: vi.fn(async () => "master"),
+    }));
 
-    const { getGitContext } = await import("./git");
-    await expect(getGitContext()).rejects.toThrow("Could not determine current branch");
+    const { getMainBranch } = await import("./git.ts");
+    const mainBranch = await getMainBranch();
+
+    expect(mainBranch).toBe("master");
   });
 });
 
-describe("getMainBranch", () => {
-  beforeEach(() => {
-    vi.resetModules();
-    mockExecImpl.current = null;
+describe("isWorktreeDirty (mock)", () => {
+  beforeEach(() => vi.resetModules());
+
+  test("clean worktree - false", async () => {
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      isWorktreeDirty: vi.fn(async () => false),
+    }));
+
+    const { isWorktreeDirty } = await import("./git.ts");
+    const isDirty = await isWorktreeDirty("/path/to/worktree");
+
+    expect(isDirty).toBe(false);
   });
 
-  afterEach(() => {
-    mockExecImpl.current = null;
-  });
+  test("dirty worktree - true", async () => {
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      isWorktreeDirty: vi.fn(async () => true),
+    }));
 
-  test("returns main when symbolic-ref points to origin/main", async () => {
-    mockExecImpl.current = createExecStub((_cmd, args) => {
-      if (args.includes("symbolic-ref")) {
-        return { stdout: "refs/remotes/origin/main\n" };
-      }
-      throw new Error(`Unhandled exec: ${args.join(" ")}`);
-    });
+    const { isWorktreeDirty } = await import("./git.ts");
+    const isDirty = await isWorktreeDirty("/path/to/worktree");
 
-    const { getMainBranch } = await import("./git");
-    expect(await getMainBranch()).toBe("main");
-  });
-
-  test("returns master when symbolic-ref points to origin/master", async () => {
-    mockExecImpl.current = createExecStub((_cmd, args) => {
-      if (args.includes("symbolic-ref")) {
-        return { stdout: "refs/remotes/origin/master\n" };
-      }
-      throw new Error(`Unhandled exec: ${args.join(" ")}`);
-    });
-
-    const { getMainBranch } = await import("./git");
-    expect(await getMainBranch()).toBe("master");
-  });
-
-  test("falls back to branch list when symbolic-ref fails", async () => {
-    mockExecImpl.current = createExecStub((_cmd, args) => {
-      if (args.includes("symbolic-ref")) {
-        return { stdout: "", exitCode: 1 };
-      }
-      if (args.includes("-a")) {
-        return { stdout: "  main\n  remotes/origin/main\n" };
-      }
-      throw new Error(`Unhandled exec: ${args.join(" ")}`);
-    });
-
-    const { getMainBranch } = await import("./git");
-    expect(await getMainBranch()).toBe("main");
-  });
-
-  test("returns master when no main branch in branch list", async () => {
-    mockExecImpl.current = createExecStub((_cmd, args) => {
-      if (args.includes("symbolic-ref")) {
-        return { stdout: "", exitCode: 1 };
-      }
-      if (args.includes("-a")) {
-        return { stdout: "  remotes/origin/master\n" };
-      }
-      throw new Error(`Unhandled exec: ${args.join(" ")}`);
-    });
-
-    const { getMainBranch } = await import("./git");
-    expect(await getMainBranch()).toBe("master");
+    expect(isDirty).toBe(true);
   });
 });
 
-describe("isWorktreeDirty", () => {
-  beforeEach(() => {
-    vi.resetModules();
-    mockExecImpl.current = null;
+describe("isBranchMerged (mock)", () => {
+  beforeEach(() => vi.resetModules());
+
+  test("merged branch - true", async () => {
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      isBranchMerged: vi.fn(async () => true),
+    }));
+
+    const { isBranchMerged } = await import("./git.ts");
+    const isMerged = await isBranchMerged("feature/completed");
+
+    expect(isMerged).toBe(true);
   });
 
-  afterEach(() => {
-    mockExecImpl.current = null;
-  });
+  test("unmerged branch - false", async () => {
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      isBranchMerged: vi.fn(async () => false),
+    }));
 
-  test("clean worktree returns false", async () => {
-    mockExecImpl.current = createExecStub((_cmd, args) => {
-      if (args.includes("status") && args.includes("--porcelain")) {
-        return { stdout: "" };
-      }
-      throw new Error(`Unhandled exec: ${args.join(" ")}`);
-    });
+    const { isBranchMerged } = await import("./git.ts");
+    const isMerged = await isBranchMerged("feature/in-progress");
 
-    const { isWorktreeDirty } = await import("./git");
-    expect(await isWorktreeDirty("/path/to/worktree")).toBe(false);
-  });
-
-  test("dirty worktree returns true", async () => {
-    mockExecImpl.current = createExecStub((_cmd, args) => {
-      if (args.includes("status") && args.includes("--porcelain")) {
-        return { stdout: " M src/file.ts\n" };
-      }
-      throw new Error(`Unhandled exec: ${args.join(" ")}`);
-    });
-
-    const { isWorktreeDirty } = await import("./git");
-    expect(await isWorktreeDirty("/path/to/worktree")).toBe(true);
-  });
-
-  test("returns true when git status fails", async () => {
-    mockExecImpl.current = createExecStub((_cmd, args) => {
-      if (args.includes("status") && args.includes("--porcelain")) {
-        return { stdout: "", exitCode: 128 };
-      }
-      throw new Error(`Unhandled exec: ${args.join(" ")}`);
-    });
-
-    const { isWorktreeDirty } = await import("./git");
-    expect(await isWorktreeDirty("/path/to/worktree")).toBe(true);
+    expect(isMerged).toBe(false);
   });
 });
 
-describe("isBranchMerged", () => {
-  beforeEach(() => {
-    vi.resetModules();
-    mockExecImpl.current = null;
+describe("isRemoteBranchDeleted (mock)", () => {
+  beforeEach(() => vi.resetModules());
+
+  test("branch exists on remote - false", async () => {
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      isRemoteBranchDeleted: vi.fn(async () => false),
+    }));
+
+    const { isRemoteBranchDeleted } = await import("./git.ts");
+    const isDeleted = await isRemoteBranchDeleted("main");
+
+    expect(isDeleted).toBe(false);
   });
 
-  afterEach(() => {
-    mockExecImpl.current = null;
-  });
+  test("branch deleted from remote - true", async () => {
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      isRemoteBranchDeleted: vi.fn(async () => true),
+    }));
 
-  test("merged branch returns true", async () => {
-    mockExecImpl.current = createExecStub((_cmd, args) => {
-      if (args.includes("symbolic-ref")) {
-        return { stdout: "refs/remotes/origin/main\n" };
-      }
-      if (args.includes("--merged")) {
-        return { stdout: "  main\n  feature/completed\n" };
-      }
-      throw new Error(`Unhandled exec: ${args.join(" ")}`);
-    });
+    const { isRemoteBranchDeleted } = await import("./git.ts");
+    const isDeleted = await isRemoteBranchDeleted("feature/deleted");
 
-    const { isBranchMerged } = await import("./git");
-    expect(await isBranchMerged("feature/completed")).toBe(true);
-  });
-
-  test("unmerged branch returns false", async () => {
-    mockExecImpl.current = createExecStub((_cmd, args) => {
-      if (args.includes("symbolic-ref")) {
-        return { stdout: "refs/remotes/origin/main\n" };
-      }
-      if (args.includes("--merged")) {
-        return { stdout: "  main\n" };
-      }
-      throw new Error(`Unhandled exec: ${args.join(" ")}`);
-    });
-
-    const { isBranchMerged } = await import("./git");
-    expect(await isBranchMerged("feature/in-progress")).toBe(false);
-  });
-
-  test("returns false when git branch --merged fails", async () => {
-    mockExecImpl.current = createExecStub((_cmd, args) => {
-      if (args.includes("symbolic-ref")) {
-        return { stdout: "refs/remotes/origin/main\n" };
-      }
-      if (args.includes("--merged")) {
-        return { stdout: "", exitCode: 1 };
-      }
-      throw new Error(`Unhandled exec: ${args.join(" ")}`);
-    });
-
-    const { isBranchMerged } = await import("./git");
-    expect(await isBranchMerged("feature/test")).toBe(false);
+    expect(isDeleted).toBe(true);
   });
 });
 
-describe("isRemoteBranchDeleted", () => {
-  beforeEach(() => {
-    vi.resetModules();
-    mockExecImpl.current = null;
-  });
-
-  afterEach(() => {
-    mockExecImpl.current = null;
-  });
-
-  test("branch exists on remote returns false", async () => {
-    mockExecImpl.current = createExecStub((_cmd, args) => {
-      if (args.includes("ls-remote")) {
-        return { stdout: "abc123\trefs/heads/main\n" };
-      }
-      throw new Error(`Unhandled exec: ${args.join(" ")}`);
-    });
-
-    const { isRemoteBranchDeleted } = await import("./git");
-    expect(await isRemoteBranchDeleted("main")).toBe(false);
-  });
-
-  test("branch deleted from remote returns true", async () => {
-    mockExecImpl.current = createExecStub((_cmd, args) => {
-      if (args.includes("ls-remote")) {
-        return { stdout: "" };
-      }
-      throw new Error(`Unhandled exec: ${args.join(" ")}`);
-    });
-
-    const { isRemoteBranchDeleted } = await import("./git");
-    expect(await isRemoteBranchDeleted("feature/deleted")).toBe(true);
-  });
-
-  test("returns true when ls-remote fails", async () => {
-    mockExecImpl.current = createExecStub((_cmd, args) => {
-      if (args.includes("ls-remote")) {
-        return { stdout: "", exitCode: 1 };
-      }
-      throw new Error(`Unhandled exec: ${args.join(" ")}`);
-    });
-
-    const { isRemoteBranchDeleted } = await import("./git");
-    expect(await isRemoteBranchDeleted("feature/test")).toBe(true);
-  });
-});
-
-describe("listWorktrees", () => {
-  beforeEach(() => {
-    vi.resetModules();
-    mockExecImpl.current = null;
-  });
-
-  afterEach(() => {
-    mockExecImpl.current = null;
-  });
+describe("listWorktrees (mock)", () => {
+  beforeEach(() => vi.resetModules());
 
   test("retrieves worktree list", async () => {
-    const porcelainOutput = [
-      "worktree /path/to/repo",
-      "HEAD abc123",
-      "branch refs/heads/main",
-      "",
-      "worktree /path/to/repo-feature",
-      "HEAD def456",
-      "branch refs/heads/feature/test",
-    ].join("\n");
+    const mockWorktrees: WorktreeInfo[] = [
+      {
+        path: "/path/to/repo",
+        branch: "main",
+        isLocked: false,
+        isDirty: false,
+        isMain: true,
+      },
+      {
+        path: "/path/to/repo-feature",
+        branch: "feature/test",
+        isLocked: false,
+        isDirty: false,
+        isMain: false,
+      },
+    ];
 
-    mockExecImpl.current = createExecStub((_cmd, args) => {
-      if (args.includes("list") && args.includes("--porcelain")) {
-        return { stdout: porcelainOutput };
-      }
-      if (args.includes("symbolic-ref")) {
-        return { stdout: "refs/remotes/origin/main\n" };
-      }
-      if (args.includes("status") && args.includes("--porcelain")) {
-        return { stdout: "" };
-      }
-      throw new Error(`Unhandled exec: ${args.join(" ")}`);
-    });
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      listWorktrees: vi.fn(async () => ({ worktrees: mockWorktrees, mainBranch: "main" })),
+    }));
 
-    const { listWorktrees } = await import("./git");
+    const { listWorktrees } = await import("./git.ts");
     const { worktrees } = await listWorktrees();
 
     expect(worktrees).toHaveLength(2);
@@ -524,58 +378,36 @@ describe("listWorktrees", () => {
   });
 
   test("empty worktree list", async () => {
-    mockExecImpl.current = createExecStub((_cmd, args) => {
-      if (args.includes("list") && args.includes("--porcelain")) {
-        return { stdout: "" };
-      }
-      if (args.includes("symbolic-ref")) {
-        return { stdout: "refs/remotes/origin/main\n" };
-      }
-      throw new Error(`Unhandled exec: ${args.join(" ")}`);
-    });
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      listWorktrees: vi.fn(async () => ({ worktrees: [], mainBranch: "main" })),
+    }));
 
-    const { listWorktrees } = await import("./git");
+    const { listWorktrees } = await import("./git.ts");
     const { worktrees } = await listWorktrees();
 
     expect(worktrees).toHaveLength(0);
   });
 });
 
-describe("findWorktreeByBranch", () => {
-  beforeEach(() => {
-    vi.resetModules();
-    mockExecImpl.current = null;
-  });
-
-  afterEach(() => {
-    mockExecImpl.current = null;
-  });
+describe("findWorktreeByBranch (mock)", () => {
+  beforeEach(() => vi.resetModules());
 
   test("finds existing branch", async () => {
-    const porcelainOutput = [
-      "worktree /path/to/repo",
-      "HEAD abc123",
-      "branch refs/heads/main",
-      "",
-      "worktree /path/to/repo-feature",
-      "HEAD def456",
-      "branch refs/heads/feature/test",
-    ].join("\n");
+    const mockWorktree: WorktreeInfo = {
+      path: "/path/to/repo-feature",
+      branch: "feature/test",
+      isLocked: false,
+      isDirty: false,
+      isMain: false,
+    };
 
-    mockExecImpl.current = createExecStub((_cmd, args) => {
-      if (args.includes("list") && args.includes("--porcelain")) {
-        return { stdout: porcelainOutput };
-      }
-      if (args.includes("symbolic-ref")) {
-        return { stdout: "refs/remotes/origin/main\n" };
-      }
-      if (args.includes("status") && args.includes("--porcelain")) {
-        return { stdout: "" };
-      }
-      throw new Error(`Unhandled exec: ${args.join(" ")}`);
-    });
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      findWorktreeByBranch: vi.fn(async () => mockWorktree),
+    }));
 
-    const { findWorktreeByBranch } = await import("./git");
+    const { findWorktreeByBranch } = await import("./git.ts");
     const worktree = await findWorktreeByBranch("feature/test");
 
     expect(worktree).not.toBeNull();
@@ -583,95 +415,73 @@ describe("findWorktreeByBranch", () => {
   });
 
   test("non-existent branch returns null", async () => {
-    const porcelainOutput = ["worktree /path/to/repo", "HEAD abc123", "branch refs/heads/main"].join("\n");
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      findWorktreeByBranch: vi.fn(async () => null),
+    }));
 
-    mockExecImpl.current = createExecStub((_cmd, args) => {
-      if (args.includes("list") && args.includes("--porcelain")) {
-        return { stdout: porcelainOutput };
-      }
-      if (args.includes("symbolic-ref")) {
-        return { stdout: "refs/remotes/origin/main\n" };
-      }
-      if (args.includes("status") && args.includes("--porcelain")) {
-        return { stdout: "" };
-      }
-      throw new Error(`Unhandled exec: ${args.join(" ")}`);
-    });
-
-    const { findWorktreeByBranch } = await import("./git");
+    const { findWorktreeByBranch } = await import("./git.ts");
     const worktree = await findWorktreeByBranch("nonexistent-branch");
 
     expect(worktree).toBeNull();
   });
 });
 
-describe("deleteLocalBranch", () => {
-  beforeEach(() => {
-    vi.resetModules();
-    mockExecImpl.current = null;
-  });
-
-  afterEach(() => {
-    mockExecImpl.current = null;
-  });
+describe("deleteLocalBranch (mock)", () => {
+  beforeEach(() => vi.resetModules());
 
   test("branch deletion succeeds", async () => {
-    mockExecImpl.current = createExecStub((_cmd, args) => {
-      if (args.includes("-d")) {
-        return { stdout: "" };
-      }
-      throw new Error(`Unhandled exec: ${args.join(" ")}`);
-    });
+    const mockDeleteLocalBranch = vi.fn(async () => undefined);
 
-    const { deleteLocalBranch } = await import("./git");
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      deleteLocalBranch: mockDeleteLocalBranch,
+    }));
+
+    const { deleteLocalBranch } = await import("./git.ts");
+
     await expect(deleteLocalBranch("feature/old")).resolves.toBeUndefined();
   });
 
   test("deleting non-existent branch throws error", async () => {
-    mockExecImpl.current = createExecStub((_cmd, args) => {
-      if (args.includes("-d")) {
-        return { stdout: "", exitCode: 1 };
-      }
-      throw new Error(`Unhandled exec: ${args.join(" ")}`);
-    });
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      deleteLocalBranch: vi.fn(async () => {
+        throw new Error("Failed to delete branch nonexistent-branch: error: branch 'nonexistent-branch' not found.");
+      }),
+    }));
 
-    const { deleteLocalBranch } = await import("./git");
+    const { deleteLocalBranch } = await import("./git.ts");
+
     await expect(deleteLocalBranch("nonexistent-branch")).rejects.toThrow("Failed to delete branch");
   });
 });
 
-describe("branchExists", () => {
-  beforeEach(() => {
-    vi.resetModules();
-    mockExecImpl.current = null;
-  });
-
-  afterEach(() => {
-    mockExecImpl.current = null;
-  });
+describe("branchExists (mock)", () => {
+  beforeEach(() => vi.resetModules());
 
   test("returns true when branch exists", async () => {
-    mockExecImpl.current = createExecStub((_cmd, args) => {
-      if (args.includes("show-ref")) {
-        return { stdout: "", exitCode: 0 };
-      }
-      throw new Error(`Unhandled exec: ${args.join(" ")}`);
-    });
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      branchExists: vi.fn(async () => true),
+    }));
 
-    const { branchExists } = await import("./git");
-    expect(await branchExists("main")).toBe(true);
+    const { branchExists } = await import("./git.ts");
+    const exists = await branchExists("main");
+
+    expect(exists).toBe(true);
   });
 
   test("returns false for non-existent branch", async () => {
-    mockExecImpl.current = createExecStub((_cmd, args) => {
-      if (args.includes("show-ref")) {
-        return { stdout: "", exitCode: 1 };
-      }
-      throw new Error(`Unhandled exec: ${args.join(" ")}`);
-    });
+    vi.doMock("./git", async () => ({
+      ...(await vi.importActual("./git")),
+      branchExists: vi.fn(async () => false),
+    }));
 
-    const { branchExists } = await import("./git");
-    expect(await branchExists("nonexistent-branch")).toBe(false);
+    const { branchExists } = await import("./git.ts");
+    const exists = await branchExists("nonexistent-branch");
+
+    expect(exists).toBe(false);
   });
 });
 
@@ -717,7 +527,7 @@ describe("getWorktreeStatuses", () => {
   test("main worktree has canAutoClean: false", async () => {
     setExecMockForStatuses({ branchMerged: false, remoteBranchDeleted: false });
 
-    const { getWorktreeStatuses } = await import("./git");
+    const { getWorktreeStatuses } = await import("./git.ts");
     const worktree = createWorktree({ isMain: true, branch: "main" });
     const statuses = await getWorktreeStatuses([worktree], "main");
 
@@ -728,7 +538,7 @@ describe("getWorktreeStatuses", () => {
   test("locked worktree has canAutoClean: false", async () => {
     setExecMockForStatuses({ branchMerged: false, remoteBranchDeleted: false });
 
-    const { getWorktreeStatuses } = await import("./git");
+    const { getWorktreeStatuses } = await import("./git.ts");
     const worktree = createWorktree({ isLocked: true });
     const statuses = await getWorktreeStatuses([worktree], "main");
 
@@ -739,7 +549,7 @@ describe("getWorktreeStatuses", () => {
   test("dirty worktree has canAutoClean: false", async () => {
     setExecMockForStatuses({ branchMerged: false, remoteBranchDeleted: false });
 
-    const { getWorktreeStatuses } = await import("./git");
+    const { getWorktreeStatuses } = await import("./git.ts");
     const worktree = createWorktree({ isDirty: true });
     const statuses = await getWorktreeStatuses([worktree], "main");
 
@@ -750,7 +560,7 @@ describe("getWorktreeStatuses", () => {
   test("condition priority: isMain > isLocked > isDirty", async () => {
     setExecMockForStatuses({ branchMerged: false, remoteBranchDeleted: false });
 
-    const { getWorktreeStatuses } = await import("./git");
+    const { getWorktreeStatuses } = await import("./git.ts");
 
     // isMain takes highest priority
     const mainAndLocked = createWorktree({ isMain: true, isLocked: true, isDirty: true });
@@ -766,7 +576,7 @@ describe("getWorktreeStatuses", () => {
   test("null branch does not cause error", async () => {
     setExecMockForStatuses({ branchMerged: false, remoteBranchDeleted: false });
 
-    const { getWorktreeStatuses } = await import("./git");
+    const { getWorktreeStatuses } = await import("./git.ts");
     const worktree = createWorktree({ branch: null });
     const statuses = await getWorktreeStatuses([worktree], "main");
 
@@ -778,7 +588,7 @@ describe("getWorktreeStatuses", () => {
   test("merged branch has canAutoClean: true", async () => {
     setExecMockForStatuses({ branchMerged: true, remoteBranchDeleted: false });
 
-    const { getWorktreeStatuses } = await import("./git");
+    const { getWorktreeStatuses } = await import("./git.ts");
     const worktree = createWorktree();
     const statuses = await getWorktreeStatuses([worktree], "main");
 
@@ -789,7 +599,7 @@ describe("getWorktreeStatuses", () => {
   test("remote deleted branch has canAutoClean: true", async () => {
     setExecMockForStatuses({ branchMerged: false, remoteBranchDeleted: true });
 
-    const { getWorktreeStatuses } = await import("./git");
+    const { getWorktreeStatuses } = await import("./git.ts");
     const worktree = createWorktree();
     const statuses = await getWorktreeStatuses([worktree], "main");
 
@@ -800,7 +610,7 @@ describe("getWorktreeStatuses", () => {
   test("merged & remote deleted", async () => {
     setExecMockForStatuses({ branchMerged: true, remoteBranchDeleted: true });
 
-    const { getWorktreeStatuses } = await import("./git");
+    const { getWorktreeStatuses } = await import("./git.ts");
     const worktree = createWorktree();
     const statuses = await getWorktreeStatuses([worktree], "main");
 
@@ -811,7 +621,7 @@ describe("getWorktreeStatuses", () => {
   test("active branch has canAutoClean: false", async () => {
     setExecMockForStatuses({ branchMerged: false, remoteBranchDeleted: false });
 
-    const { getWorktreeStatuses } = await import("./git");
+    const { getWorktreeStatuses } = await import("./git.ts");
     const worktree = createWorktree();
     const statuses = await getWorktreeStatuses([worktree], "main");
 

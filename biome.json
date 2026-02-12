@@ -24,10 +24,17 @@
     "enabled": true,
     "rules": {
       "recommended": true,
+      "complexity": {
+        "noExcessiveCognitiveComplexity": "warn"
+      },
       "style": {
         "useNodejsImportProtocol": "error",
         "useImportType": "error",
-        "useExportType": "error"
+        "useExportType": "error",
+        "useConsistentBuiltinInstantiation": "error"
+      },
+      "suspicious": {
+        "noConsole": "warn"
       },
       "correctness": {
         "noUnusedImports": "error"
