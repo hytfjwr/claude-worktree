@@ -46,9 +46,9 @@ link:
 uninstall: unlink
 	@echo "✅ claude-worktree uninstalled"
 
-# Run pnpm unlink
+# Remove global link
 unlink:
-	@pnpm unlink --global 2>/dev/null || true
+	@pnpm remove --global @hytfjwr/claude-worktree 2>/dev/null || true
 
 # Reinstall
 reinstall: uninstall install
