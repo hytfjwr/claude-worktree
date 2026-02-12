@@ -172,8 +172,8 @@ describe("runHook timeout", () => {
   const sleepCmd = 'node -e "setTimeout(() => {}, 10000)"';
 
   test("throws timeout error when command exceeds timeout", async () => {
-    await expect(runHook(sleepCmd, testCwd, { timeout: 1 })).rejects.toThrow(
-      `Hook command timed out after 1s: ${sleepCmd}`,
+    await expect(runHook(sleepCmd, testCwd, { timeout: 0.05 })).rejects.toThrow(
+      `Hook command timed out after 0.05s: ${sleepCmd}`,
     );
   });
 
@@ -183,8 +183,8 @@ describe("runHook timeout", () => {
 
   test("throws timeout error with onLine mode", async () => {
     const lines: string[] = [];
-    await expect(runHook(sleepCmd, testCwd, { timeout: 1, onLine: (line) => lines.push(line) })).rejects.toThrow(
-      `Hook command timed out after 1s: ${sleepCmd}`,
+    await expect(runHook(sleepCmd, testCwd, { timeout: 0.05, onLine: (line) => lines.push(line) })).rejects.toThrow(
+      `Hook command timed out after 0.05s: ${sleepCmd}`,
     );
   });
 });

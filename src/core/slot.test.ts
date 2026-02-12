@@ -3,6 +3,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
+// Speed up lock acquisition failure tests by using minimal retries
+vi.mock("./cache.ts", async (importOriginal) => {
+  const mod = await importOriginal<typeof import("./cache.ts")>();
+  return {
+    ...mod,
+    withLock: (lockFile: string, fn: () => Promise<unknown>) =>
+      mod.withLock(lockFile, fn, { maxRetries: 2, retryIntervalMs: 1 }),
+  };
+});
+
 import { deleteSlot, findAvailableSlot, getCacheDir, readSlot, saveSlot } from "./slot.ts";
 
 describe("slot cache", () => {
@@ -92,7 +102,7 @@ describe("slot cache", () => {
     expect(await readSlot("/tmp/repo-a")).toBe(7);
   });
 
-  test("lock acquisition failure emits warning and operation still succeeds", { timeout: 10000 }, async () => {
+  test("lock acquisition failure emits warning and operation still succeeds", async () => {
     // Create the lock file manually to simulate a held lock
     const lockFile = join(tempDir, "slots.lock");
     writeFileSync(lockFile, "held", "utf-8");

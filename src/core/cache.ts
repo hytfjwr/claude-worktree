@@ -8,16 +8,24 @@ import { isNodeError } from "./errors.ts";
 export const LOCK_MAX_RETRIES = 50;
 export const LOCK_RETRY_INTERVAL_MS = 100;
 
-export async function withLock<T>(lockFile: string, fn: () => Promise<T>): Promise<T> {
+export interface LockOptions {
+  maxRetries?: number;
+  retryIntervalMs?: number;
+}
+
+export async function withLock<T>(lockFile: string, fn: () => Promise<T>, options?: LockOptions): Promise<T> {
+  const maxRetries = options?.maxRetries ?? LOCK_MAX_RETRIES;
+  const retryIntervalMs = options?.retryIntervalMs ?? LOCK_RETRY_INTERVAL_MS;
+
   await mkdir(dirname(lockFile), { recursive: true });
 
   let handle: Awaited<ReturnType<typeof open>> | undefined;
-  for (let i = 0; i < LOCK_MAX_RETRIES; i++) {
+  for (let i = 0; i < maxRetries; i++) {
     try {
       handle = await open(lockFile, "wx");
       break;
     } catch {
-      await setTimeout(LOCK_RETRY_INTERVAL_MS);
+      await setTimeout(retryIntervalMs);
     }
   }
 

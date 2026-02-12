@@ -31,7 +31,7 @@ describe("withLock", () => {
     expect(result).toBe("ok");
   });
 
-  test("warns and proceeds without lock when lock is held", { timeout: 10000 }, async () => {
+  test("warns and proceeds without lock when lock is held", async () => {
     const lockFile = join(tempDir, "held.lock");
     await writeFile(lockFile, "held", "utf-8");
 
@@ -43,7 +43,7 @@ describe("withLock", () => {
       debug: () => {},
     });
 
-    const result = await withLock(lockFile, async () => "still works");
+    const result = await withLock(lockFile, async () => "still works", { maxRetries: 2, retryIntervalMs: 1 });
     expect(result).toBe("still works");
     expect(warnings.length).toBe(1);
     expect(warnings[0]).toContain("Lock acquisition failed for held.lock");
