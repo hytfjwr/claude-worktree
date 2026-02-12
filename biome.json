@@ -25,19 +25,38 @@
     "rules": {
       "recommended": true,
       "complexity": {
-        "noExcessiveCognitiveComplexity": "warn"
+        "noExcessiveCognitiveComplexity": {
+          "level": "warn",
+          "options": { "maxAllowedComplexity": 100 }
+        }
       },
       "style": {
         "useNodejsImportProtocol": "error",
         "useImportType": "error",
         "useExportType": "error",
-        "useConsistentBuiltinInstantiation": "error"
+        "useConsistentBuiltinInstantiation": "error",
+        "useConst": "error",
+        "useNamingConvention": {
+          "level": "error",
+          "options": {
+            "strictCase": false,
+            "conventions": [
+              {
+                "selector": { "kind": "const" },
+                "formats": ["camelCase", "CONSTANT_CASE", "PascalCase"]
+              }
+            ]
+          }
+        }
       },
       "suspicious": {
-        "noConsole": "warn"
+        "noExplicitAny": "warn",
+        "noImplicitAnyLet": "error"
       },
       "correctness": {
-        "noUnusedImports": "error"
+        "noUnusedImports": "error",
+        "noUnusedVariables": "error",
+        "noUnusedFunctionParameters": "error"
       }
     }
   },

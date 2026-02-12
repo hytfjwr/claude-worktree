@@ -46,8 +46,8 @@ describe("listWeztermPanes", () => {
 
   test("returns parsed panes (mock)", async () => {
     const mockPanes = [
-      { pane_id: 1, title: "claude", cwd: "/tmp/wt-1" },
-      { pane_id: 2, title: "shell", cwd: "/tmp/wt-2" },
+      { paneId: 1, title: "claude", cwd: "/tmp/wt-1" },
+      { paneId: 2, title: "shell", cwd: "/tmp/wt-2" },
     ];
     vi.doMock("./wezterm", async () => ({
       ...(await vi.importActual("./wezterm")),
@@ -57,7 +57,7 @@ describe("listWeztermPanes", () => {
     const { listWeztermPanes: mockedList } = await import("./wezterm.ts");
     const result = await mockedList();
     expect(result).toEqual(mockPanes);
-    expect(result?.[0].pane_id).toBe(1);
+    expect(result?.[0].paneId).toBe(1);
     expect(result?.[1].title).toBe("shell");
   });
 });

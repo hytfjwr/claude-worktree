@@ -50,7 +50,7 @@ describe("determineSessionStatus", () => {
       paneId: 42,
       startedAt: "2025-01-15T11:45:00Z",
     };
-    const panes: WeztermPane[] = [{ pane_id: 42, title: "claude", cwd: "/tmp" }];
+    const panes: WeztermPane[] = [{ paneId: 42, title: "claude", cwd: "/tmp" }];
     const result = determineSessionStatus(session, panes, now);
     expect(result.status).toBe("running");
     expect(result.paneId).toBe(42);
@@ -62,7 +62,7 @@ describe("determineSessionStatus", () => {
       paneId: 42,
       startedAt: "2025-01-15T11:45:00Z",
     };
-    const panes: WeztermPane[] = [{ pane_id: 99, title: "other", cwd: "/tmp" }];
+    const panes: WeztermPane[] = [{ paneId: 99, title: "other", cwd: "/tmp" }];
     const result = determineSessionStatus(session, panes, now);
     expect(result.status).toBe("done");
   });
@@ -94,7 +94,7 @@ describe("determineSessionStatus", () => {
       startedAt: "2025-01-15T11:45:00Z",
       completedAt: "2025-01-15T11:50:00Z",
     };
-    const panes: WeztermPane[] = [{ pane_id: 42, title: "claude", cwd: "/tmp" }];
+    const panes: WeztermPane[] = [{ paneId: 42, title: "claude", cwd: "/tmp" }];
     const result = determineSessionStatus(session, panes, now);
     expect(result.status).toBe("done");
   });

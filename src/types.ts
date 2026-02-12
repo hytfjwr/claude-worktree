@@ -74,7 +74,7 @@ export type PaneOptions = {
 };
 
 export type WeztermPane = {
-  pane_id: number;
+  paneId: number;
   title: string;
   cwd: string;
 };

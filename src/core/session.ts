@@ -81,7 +81,7 @@ export function determineSessionStatus(
 
   // pane mode: check if pane still exists (skip when panes is null = WezTerm unavailable)
   if (session.mode === "pane" && session.paneId != null && panes != null) {
-    const paneExists = panes.some((p) => p.pane_id === session.paneId);
+    const paneExists = panes.some((p) => p.paneId === session.paneId);
     return {
       status: paneExists ? "running" : "done",
       elapsedMs,

@@ -624,7 +624,7 @@ describe("executeList", () => {
           },
         };
       },
-      listWeztermPanes: async () => [{ pane_id: 42, title: "claude", cwd: "/tmp" }],
+      listWeztermPanes: async () => [{ paneId: 42, title: "claude", cwd: "/tmp" }],
     });
 
     const result = await executeList({ json: false, verbose: false, status: true }, deps);

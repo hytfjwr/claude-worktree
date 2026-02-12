@@ -3,16 +3,14 @@ import { spawn } from "node:child_process";
 import { exec } from "../core/exec.ts";
 import type { WeztermPane } from "../types.ts";
 
-function isWeztermPane(value: unknown): value is { pane_id: number; title: string; cwd: string } {
+function isRawWeztermPane(value: unknown): boolean {
+  const v = value as Record<string, unknown>;
   return (
     typeof value === "object" &&
     value !== null &&
-    "pane_id" in value &&
-    typeof (value as Record<string, unknown>).pane_id === "number" &&
-    "title" in value &&
-    typeof (value as Record<string, unknown>).title === "string" &&
-    "cwd" in value &&
-    typeof (value as Record<string, unknown>).cwd === "string"
+    typeof v.pane_id === "number" &&
+    typeof v.title === "string" &&
+    typeof v.cwd === "string"
   );
 }
 
@@ -25,11 +23,11 @@ export async function listWeztermPanes(): Promise<WeztermPane[] | null> {
     if (result.exitCode !== 0) return null;
     const parsed: unknown = JSON.parse(result.text());
     if (!Array.isArray(parsed)) return null;
-    if (!parsed.every(isWeztermPane)) return null;
-    return parsed.map((p) => ({
-      pane_id: p.pane_id,
-      title: p.title,
-      cwd: p.cwd,
+    if (!parsed.every(isRawWeztermPane)) return null;
+    return parsed.map((p: Record<string, unknown>) => ({
+      paneId: p.pane_id as number,
+      title: p.title as string,
+      cwd: p.cwd as string,
     }));
   } catch {
     return null;
