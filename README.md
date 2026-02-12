@@ -1,25 +1,37 @@
 # claude-worktree
 
-A CLI tool for parallel development using WezTerm + git worktree + Claude Code. It creates a git worktree and launches Claude Code. With the `-pane` option, it opens in a new WezTerm pane for parallel development.
+[![npm version](https://img.shields.io/npm/v/@hytfjwr/claude-worktree.svg)](https://www.npmjs.com/package/@hytfjwr/claude-worktree)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+A CLI tool that creates a git worktree and launches [Claude Code](https://docs.anthropic.com/en/docs/claude-code) with a prompt. With the `-pane` option, it opens in a new [WezTerm](https://wezfurlong.org/wezterm/) pane, enabling parallel development across multiple worktrees.
 
 ## Requirements
 
 - [Node.js](https://nodejs.org/) (v22+)
-- [pnpm](https://pnpm.io/)
 - [Git](https://git-scm.com/)
-- [Claude Code](https://claude.ai/code)
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
 - [WezTerm](https://wezfurlong.org/wezterm/) (optional, required only for `-pane`)
 
 ## Installation
 
 ```bash
-make install
+npm install -g @hytfjwr/claude-worktree
 ```
 
-Or link manually:
+Or run directly with npx:
 
 ```bash
-pnpm link --global
+npx @hytfjwr/claude-worktree feature/auth 'Implement authentication feature'
+```
+
+## Quick Start
+
+```bash
+# Create a worktree and start Claude Code
+claude-worktree feature/auth 'Implement authentication feature'
+
+# Open in a new WezTerm pane for parallel development
+claude-worktree feature/auth 'Implement authentication feature' -pane
 ```
 
 ## Usage
@@ -54,8 +66,8 @@ claude-worktree -help
 
 - `-p, -pane` - Open in a new WezTerm pane (default: run in current terminal)
 - `-plan <file>` - Read prompt from a file (cannot be used with inline prompt)
-- `-base <branch>` - Base branch for worktree (default: current branch)
-- `-danger` - Skip workspace warning (uses --dangerously-skip-permissions)
+- `-b, -base <branch>` - Specify base branch (default: current branch)
+- `-d, -danger` - Skip workspace warning (uses --dangerously-skip-permissions)
 - `-merge` - Auto-merge into base branch and cleanup after task completion
 - `-draft` - Auto-create Draft PR after task completion (cannot be used with -merge)
 - `-v, -verbose` - Show hook execution logs
@@ -73,53 +85,6 @@ claude-worktree -help
 - `-a, -all` - Show all worktrees for manual selection
 - `-n, -dry-run` - Preview targets without deleting
 - `-v, -verbose` - Show hook execution logs
-
-### JSON Output Schema
-
-When using `claude-worktree list -json`, the output follows this schema:
-
-```json
-{
-  "worktrees": [
-    {
-      "path": "/absolute/path/to/worktree",
-      "branch": "feature/auth",
-      "isMain": false,
-      "isLocked": false,
-      "isDirty": false,
-      "status": "Active",
-      "commit": {
-        "hash": "abc1234",
-        "message": "Commit message",
-        "date": "2025-01-15T10:00:00.000Z"
-      },
-      "aheadBehind": { "ahead": 2, "behind": 0 },
-      "session": {
-        "status": "running",
-        "elapsedMs": 900000,
-        "mode": "pane",
-        "paneId": 3
-      }
-    }
-  ]
-}
-```
-
-| Field | Type | Description |
-|---|---|---|
-| `path` | `string` | Absolute path to the worktree directory |
-| `branch` | `string \| null` | Branch name, or `null` for detached HEAD |
-| `isMain` | `boolean` | Whether this is the main worktree |
-| `isLocked` | `boolean` | Whether the worktree is locked |
-| `isDirty` | `boolean` | Whether the worktree has uncommitted changes |
-| `status` | `string` | One of: `"Main"`, `"Locked"`, `"Merged"`, `"Dirty"`, `"Active"` |
-| `commit` | `object \| null` | Latest commit info (`hash`, `message`, `date`) |
-| `aheadBehind` | `object \| null` | `{ ahead: number, behind: number }` relative to main branch |
-| `session` | `object \| undefined` | Claude session info (only with `-status` flag) |
-| `session.status` | `string` | `"running"` or `"done"` |
-| `session.elapsedMs` | `number` | Milliseconds since session started |
-| `session.mode` | `string` | `"pane"` or `"terminal"` |
-| `session.paneId` | `number \| undefined` | WezTerm pane ID (pane mode only) |
 
 ### Examples
 
@@ -170,6 +135,53 @@ claude-worktree clean -dry-run
 claude-worktree clean -all
 ```
 
+### JSON Output Schema
+
+When using `claude-worktree list -json`, the output follows this schema:
+
+```json
+{
+  "worktrees": [
+    {
+      "path": "/absolute/path/to/worktree",
+      "branch": "feature/auth",
+      "isMain": false,
+      "isLocked": false,
+      "isDirty": false,
+      "status": "Active",
+      "commit": {
+        "hash": "abc1234",
+        "message": "Commit message",
+        "date": "2025-01-15T10:00:00.000Z"
+      },
+      "aheadBehind": { "ahead": 2, "behind": 0 },
+      "session": {
+        "status": "running",
+        "elapsedMs": 900000,
+        "mode": "pane",
+        "paneId": 3
+      }
+    }
+  ]
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `path` | `string` | Absolute path to the worktree directory |
+| `branch` | `string \| null` | Branch name, or `null` for detached HEAD |
+| `isMain` | `boolean` | Whether this is the main worktree |
+| `isLocked` | `boolean` | Whether the worktree is locked |
+| `isDirty` | `boolean` | Whether the worktree has uncommitted changes |
+| `status` | `string` | One of: `"Main"`, `"Locked"`, `"Merged"`, `"Dirty"`, `"Active"` |
+| `commit` | `object \| null` | Latest commit info (`hash`, `message`, `date`) |
+| `aheadBehind` | `object \| null` | `{ ahead: number, behind: number }` relative to main branch |
+| `session` | `object \| undefined` | Claude session info (only with `-status` flag) |
+| `session.status` | `string` | `"running"` or `"done"` |
+| `session.elapsedMs` | `number` | Milliseconds since session started |
+| `session.mode` | `string` | `"pane"` or `"terminal"` |
+| `session.paneId` | `number \| undefined` | WezTerm pane ID (pane mode only) |
+
 ## Hook Configuration
 
 You can define project-specific hooks in `.claude-worktree.json` at the repository root:
@@ -216,22 +228,6 @@ Priority: hook-specific value > `hookTimeout` > default (600s)
 - `CLAUDE_WORKTREE_CACHE_DIR` — Override the slot cache directory (default: `~/.cache/claude-worktree`)
 - `NO_COLOR` — Disable colored output ([no-color.org](https://no-color.org/)). Colors are also automatically disabled when stdout is not a TTY (e.g., piped output).
 
-## Development
-
-```bash
-# Run in development mode
-make dev
-
-# Type check
-make typecheck
-
-# Lint (Biome)
-pnpm run lint
-
-# Check dependencies (node, git, wezterm, claude)
-make check
-```
-
 ## License
 
-MIT
+[MIT](LICENSE)

@@ -1,6 +1,6 @@
 {
-  "name": "claude-worktree",
-  "version": "1.0.0",
+  "name": "@hytfjwr/claude-worktree",
+  "version": "0.1.0",
   "description": "CLI for parallel development with WezTerm + git worktree + Claude Code",
   "type": "module",
   "main": "dist/src/index.js",
@@ -9,7 +9,8 @@
     "claude-worktree": "dist/bin/claude-worktree.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "LICENSE"
   ],
   "scripts": {
     "dev": "tsc -p tsconfig.build.json && node dist/bin/claude-worktree.js",
@@ -33,11 +34,21 @@
   },
   "keywords": [
     "claude",
+    "claude-code",
     "worktree",
+    "git-worktree",
     "wezterm",
     "cli",
-    "parallel-development"
+    "parallel-development",
+    "ai-development"
   ],
+  "author": "hytfjwr",
   "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "packageManager": "pnpm@10.29.1"
 }
