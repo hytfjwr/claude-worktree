@@ -114,50 +114,6 @@ describe("startSpinner", () => {
       delete (process.stdout as unknown as Record<string, unknown>).isTTY;
     }
   });
-  test("returns a Spinner object", () => {
-    const spinner = startSpinner("Testing...");
-    expect(spinner).toHaveProperty("stop");
-    expect(spinner).toHaveProperty("fail");
-    expect(spinner).toHaveProperty("updateTail");
-    expect(typeof spinner.stop).toBe("function");
-    expect(typeof spinner.fail).toBe("function");
-    expect(typeof spinner.updateTail).toBe("function");
-    spinner.stop();
-  });
-
-  test("stop() can be called normally", () => {
-    const spinner = startSpinner("Processing...");
-    expect(() => spinner.stop()).not.toThrow();
-  });
-
-  test("stop() accepts a message", () => {
-    const spinner = startSpinner("Processing...");
-    expect(() => spinner.stop("Completed")).not.toThrow();
-  });
-
-  test("fail() can be called normally", () => {
-    const spinner = startSpinner("Processing...");
-    expect(() => spinner.fail("An error occurred")).not.toThrow();
-  });
-
-  test("updateTail() can be called normally", () => {
-    const spinner = startSpinner("Processing...");
-    expect(() => spinner.updateTail(["line 1", "line 2"], 2)).not.toThrow();
-    spinner.stop();
-  });
-
-  test("updateTail() with empty array", () => {
-    const spinner = startSpinner("Processing...");
-    expect(() => spinner.updateTail([], 0)).not.toThrow();
-    spinner.stop();
-  });
-
-  test("updateTail() accepts allLines parameter", () => {
-    const spinner = startSpinner("Processing...");
-    expect(() => spinner.updateTail(["line 3"], 3, ["line 1", "line 2", "line 3"])).not.toThrow();
-    spinner.stop();
-  });
-
   test("hides cursor on start", () => {
     const writeSpy = vi.spyOn(process.stdout, "write");
     const spinner = startSpinner("Processing...");

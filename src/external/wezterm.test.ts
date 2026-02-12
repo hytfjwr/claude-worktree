@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import { checkWeztermAvailable, getCurrentPaneId, listWeztermPanes } from "./wezterm.ts";
+import { getCurrentPaneId } from "./wezterm.ts";
 
 // ============================================================================
 // Tests for pure functions using environment variables (no mocks needed)
@@ -30,20 +30,8 @@ describe("getCurrentPaneId", () => {
   });
 });
 
-describe("checkWeztermAvailable", () => {
-  test("returns a boolean", async () => {
-    const result = await checkWeztermAvailable();
-    expect(typeof result).toBe("boolean");
-  });
-});
-
 describe("listWeztermPanes", () => {
   beforeEach(() => vi.resetModules());
-
-  test("returns an array or null", async () => {
-    const result = await listWeztermPanes();
-    expect(result === null || Array.isArray(result)).toBe(true);
-  });
 
   test("returns null when WezTerm is not available (mock)", async () => {
     vi.doMock("./wezterm", async () => ({

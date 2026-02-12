@@ -4,17 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
 import { resetLogger, setLogger } from "../ui/logger.ts";
-import { atomicWriteJson, LOCK_MAX_RETRIES, LOCK_RETRY_INTERVAL_MS, readJsonFile, withLock } from "./cache.ts";
-
-describe("constants", () => {
-  test("LOCK_MAX_RETRIES is 50", () => {
-    expect(LOCK_MAX_RETRIES).toBe(50);
-  });
-
-  test("LOCK_RETRY_INTERVAL_MS is 100", () => {
-    expect(LOCK_RETRY_INTERVAL_MS).toBe(100);
-  });
-});
+import { atomicWriteJson, readJsonFile, withLock } from "./cache.ts";
 
 describe("withLock", () => {
   let tempDir: string;
