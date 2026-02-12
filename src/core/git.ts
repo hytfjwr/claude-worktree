@@ -225,7 +225,7 @@ export async function deleteLocalBranch(branchName: string, force = false): Prom
 }
 
 export async function getLastCommit(worktreePath: string): Promise<CommitInfo | null> {
-  const result = await exec("git", ["-C", worktreePath, "log", "-1", "--format=%h%x00%s%x00%aI"]).nothrow().quiet();
+  const result = await exec("git", ["-C", worktreePath, "log", "-1", "--format=%H%x00%s%x00%aI"]).nothrow().quiet();
   if (result.exitCode !== 0) {
     return null;
   }

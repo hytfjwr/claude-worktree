@@ -135,7 +135,7 @@ export function formatWorktreeEntry(entry: WorktreeListEntry, repoRoot: string, 
   // Line 2: commit hash (dim) + message + relative time (dim)
   let line2: string;
   if (commit) {
-    const hash = verbose ? commit.hash : commit.hash;
+    const hash = verbose ? commit.hash : commit.hash.slice(0, 7);
     const msg = verbose ? commit.message : truncate(commit.message, 50);
     const timeStr = formatRelativeTime(commit.date);
     line2 = `    ${d}${hash}${r}  ${msg}  ${d}${timeStr}${r}`;

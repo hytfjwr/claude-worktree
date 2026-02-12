@@ -8,6 +8,7 @@ import { buildHookCommand, loadProjectConfig, resolveHookTimeout } from "../core
 import { getErrorMessage, isNodeError } from "../core/errors.ts";
 import {
   branchExists,
+  buildWorktreeCommand,
   createWorktree,
   deleteLocalBranch,
   getGitContext,
@@ -548,7 +549,7 @@ export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps
   // Dry-run: preview what would happen and exit
   if (args.dryRun) {
     logInfo(`\n--- Dry Run ---`);
-    logInfo(`Git command: git worktree add -b ${branchName} "${worktreePath}" ${effectiveBaseBranch}`);
+    logInfo(`Git command: ${buildWorktreeCommand(branchName, worktreePath, effectiveBaseBranch)}`);
     logInfo(`Launch mode: ${pane ? "WezTerm pane" : "current terminal"}`);
     if (config?.postCreate) {
       const hookPreview = config.postCreate.replace("{path}", worktreePath).replace("{slot}", "<auto>");
