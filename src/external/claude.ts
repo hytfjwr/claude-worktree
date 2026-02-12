@@ -1,4 +1,4 @@
-import type { ClaudeOptions, DraftInstructions, MergeInstructions } from "../types.ts";
+import type { ClaudeOptions, DraftInstructions, MergeInstructions, ResumeCommandOptions } from "../types.ts";
 
 const DEFAULT_PROMPT_SUFFIX = "\n\nIf anything is unclear, always confirm with the user before proceeding.";
 
@@ -63,6 +63,21 @@ function escapeForHeredoc(str: string): string {
   // or string transformation would be needed.
   // In practice, PROMPT_END is unlikely to appear in a prompt.
   return str;
+}
+
+export function buildResumeCommand(options: ResumeCommandOptions): string {
+  const { prompt, dangerouslySkipPermissions = false } = options;
+
+  const dangerFlag = dangerouslySkipPermissions ? " --dangerously-skip-permissions" : "";
+
+  if (!prompt) {
+    return `claude --continue${dangerFlag}`;
+  }
+
+  const escapedPrompt = escapeForHeredoc(prompt);
+  return `claude --continue${dangerFlag} <<'PROMPT_END'
+${escapedPrompt}
+PROMPT_END`;
 }
 
 export function buildClaudeCommand(options: ClaudeOptions): string {

@@ -1,6 +1,6 @@
 import * as readline from "node:readline";
 
-import type { WorktreeStatus } from "../types.ts";
+import type { WorktreeInfo, WorktreeStatus } from "../types.ts";
 import { icons } from "./icons.ts";
 
 function createReadlineInterface(): readline.Interface {
@@ -24,6 +24,35 @@ export async function confirm(message: string): Promise<boolean> {
     const answer = await question(rl, `${message} (y/N): `);
     const input = answer.trim().toLowerCase();
     return input === "y" || input === "yes";
+  } finally {
+    rl.close();
+  }
+}
+
+export async function selectWorktree(worktrees: WorktreeInfo[]): Promise<WorktreeInfo | null> {
+  console.log("\nSelect a worktree to resume (enter number, empty to cancel):\n");
+
+  worktrees.forEach((wt, index) => {
+    const branch = wt.branch || "(detached)";
+    console.log(`  ${index + 1}. ${branch}`);
+    console.log(`     ${wt.path}`);
+  });
+
+  const rl = createReadlineInterface();
+  try {
+    const answer = await question(rl, "\nSelection: ");
+    const input = answer.trim();
+
+    if (!input) {
+      return null;
+    }
+
+    const idx = Number.parseInt(input, 10) - 1;
+    if (idx < 0 || idx >= worktrees.length || Number.isNaN(idx)) {
+      return null;
+    }
+
+    return worktrees[idx];
   } finally {
     rl.close();
   }

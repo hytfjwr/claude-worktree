@@ -1,9 +1,10 @@
 import { executeClean } from "./commands/clean.ts";
 import { runCreate } from "./commands/create.ts";
 import { executeList } from "./commands/list.ts";
+import { runResume } from "./commands/resume.ts";
 import { executeRunInPane, parseRunInPaneArgs } from "./commands/run-in-pane.ts";
 import { extractOptions } from "./options.ts";
-import type { CleanArgs, Command, CreateArgs, ListArgs } from "./types.ts";
+import type { CleanArgs, Command, CreateArgs, ListArgs, ResumeArgs } from "./types.ts";
 import { getVersion } from "./version.ts";
 
 export function showHelp(): void {
@@ -12,11 +13,13 @@ export function showHelp(): void {
 Usage:
   claude-worktree <branch-name> <prompt>
   claude-worktree <branch-name> -plan <file-path>
+  claude-worktree resume [<branch-name>] [<prompt>]
   claude-worktree list [options]
   claude-worktree clean [options]
 
 Commands:
   <branch-name>  Create a new worktree with Claude Code
+  resume         Resume a Claude session in an existing worktree
   list           List existing worktrees with status
   clean          Remove unnecessary worktrees
 
@@ -35,6 +38,11 @@ Options:
   -v, -verbose    Show hook execution logs
   -h, -help       Show this help
   -version, --version  Show version number
+
+Resume options:
+  -p, -pane      Open in a new WezTerm pane
+  -d, -danger    Skip workspace warning (uses --dangerously-skip-permissions)
+  -v, -verbose   Show verbose output
 
 List options:
   -j, -json      Output as JSON
@@ -57,6 +65,9 @@ Examples:
   claude-worktree feature/auth 'Implement authentication feature' -draft
   claude-worktree feature/auth 'Implement authentication feature' -draft -base main
   claude-worktree feature/auth 'Prompt' -dry-run
+  claude-worktree resume feature/auth
+  claude-worktree resume feature/auth 'Continue implementation'
+  claude-worktree resume
   claude-worktree list
   claude-worktree list -json
   claude-worktree clean
@@ -141,6 +152,32 @@ Examples:
   claude-worktree clean -dry-run
   claude-worktree clean -force
   claude-worktree clean -all`);
+}
+
+export function showResumeHelp(): void {
+  console.log(`claude-worktree resume - Resume a Claude session in an existing worktree
+
+Resumes a Claude Code session using --continue in an existing worktree.
+If no branch name is specified, an interactive selection prompt is shown.
+
+Usage:
+  claude-worktree resume [<branch-name>] [<prompt>]
+
+Arguments:
+  <branch-name>  Branch name of the worktree to resume (optional)
+  <prompt>       Additional prompt message for the resumed session (optional)
+
+Options:
+  -p, -pane      Open in a new WezTerm pane (requires WezTerm; default: run in current terminal)
+  -d, -danger    Skip workspace warning (uses --dangerously-skip-permissions)
+  -v, -verbose   Show verbose output
+  -h, -help      Show this help
+
+Examples:
+  claude-worktree resume feature/auth
+  claude-worktree resume feature/auth 'Continue the authentication implementation'
+  claude-worktree resume
+  claude-worktree resume feature/auth -pane`);
 }
 
 const CREATE_USAGE = "claude-worktree <branch-name> <prompt>\n" + "  claude-worktree <branch-name> -plan <file-path>";
@@ -277,6 +314,33 @@ export function parseCreateArgs(args: string[]): CreateArgs {
   };
 }
 
+export function parseResumeArgs(args: string[]): ResumeArgs {
+  const { booleans, remaining } = extractOptions(args, {
+    options: {
+      pane: { type: "boolean", flag: "-pane", alias: "-p" },
+      danger: { type: "boolean", flag: "-danger", alias: "-d" },
+      verbose: { type: "boolean", flag: "-verbose", alias: "-v" },
+    },
+    unknownHandling: "error",
+    ignoredFlags: ["-h", "-help"],
+    unknownErrorPrefix: "Unknown option for resume command",
+  });
+
+  const { pane, danger, verbose } = booleans;
+
+  // First remaining arg that doesn't start with - is branchName, rest is prompt
+  const branchName = remaining.length > 0 ? remaining[0] : undefined;
+  const prompt = remaining.length > 1 ? remaining.slice(1).join(" ").trim() || undefined : undefined;
+
+  return {
+    branchName,
+    prompt,
+    danger,
+    pane,
+    verbose,
+  };
+}
+
 export function parseCleanArgs(args: string[]): CleanArgs {
   const { booleans } = extractOptions(args, {
     options: {
@@ -317,6 +381,31 @@ export function parseListArgs(args: string[]): ListArgs {
   };
 }
 
+const KNOWN_COMMANDS = ["list", "clean", "resume"] as const;
+
+function hasHelpFlag(subArgs: string[]): boolean {
+  return subArgs.includes("-h") || subArgs.includes("-help");
+}
+
+function parseSubCommand(commandName: string, subArgs: string[]): Command | null {
+  switch (commandName) {
+    case "list":
+      return hasHelpFlag(subArgs)
+        ? { type: "help", commandHelp: "list" }
+        : { type: "list", args: parseListArgs(subArgs) };
+    case "clean":
+      return hasHelpFlag(subArgs)
+        ? { type: "help", commandHelp: "clean" }
+        : { type: "clean", args: parseCleanArgs(subArgs) };
+    case "resume":
+      return hasHelpFlag(subArgs)
+        ? { type: "help", commandHelp: "resume" }
+        : { type: "resume", args: parseResumeArgs(subArgs) };
+    default:
+      return null;
+  }
+}
+
 export function parseArgs(args: string[]): Command {
   // Internal sub-command: must be checked before help flags
   if (args[0] === "_run-in-pane") {
@@ -337,27 +426,17 @@ export function parseArgs(args: string[]): Command {
     return { type: "help" };
   }
 
-  // Per-command help: list -h, clean -h
-  if (args[0] === "list") {
-    const subArgs = args.slice(1);
-    if (subArgs.includes("-h") || subArgs.includes("-help")) {
-      return { type: "help", commandHelp: "list" };
-    }
-    return { type: "list", args: parseListArgs(subArgs) };
-  }
-
-  if (args[0] === "clean") {
-    const subArgs = args.slice(1);
-    if (subArgs.includes("-h") || subArgs.includes("-help")) {
-      return { type: "help", commandHelp: "clean" };
-    }
-    return { type: "clean", args: parseCleanArgs(subArgs) };
+  // Named sub-commands: list, clean, resume
+  const subCommand = parseSubCommand(args[0], args.slice(1));
+  if (subCommand) {
+    return subCommand;
   }
 
   // Global help flags (only when not a sub-command)
-  if (args.includes("-h") || args.includes("-help")) {
+  if (hasHelpFlag(args)) {
     // If the first arg looks like a branch name (create command), show create help
-    if (args.length >= 1 && !args[0].startsWith("-") && args[0] !== "list" && args[0] !== "clean") {
+    const isKnown = (KNOWN_COMMANDS as readonly string[]).includes(args[0]);
+    if (args.length >= 1 && !args[0].startsWith("-") && !isKnown) {
       return { type: "help", commandHelp: "create" };
     }
     return { type: "help" };
@@ -367,7 +446,7 @@ export function parseArgs(args: string[]): Command {
   if (args.length === 1 && !args[0].startsWith("-")) {
     throw new Error(
       `Unknown command: ${args[0]}\n\n` +
-        `Available commands: list, clean\n\n` +
+        `Available commands: ${KNOWN_COMMANDS.join(", ")}\n\n` +
         `To create a worktree:\n  ${CREATE_USAGE}`,
     );
   }
@@ -384,6 +463,8 @@ export async function run(command: Command): Promise<void> {
         showListHelp();
       } else if (command.commandHelp === "clean") {
         showCleanHelp();
+      } else if (command.commandHelp === "resume") {
+        showResumeHelp();
       } else {
         showHelp();
       }
@@ -393,6 +474,9 @@ export async function run(command: Command): Promise<void> {
       break;
     case "create":
       await runCreate(command.args);
+      break;
+    case "resume":
+      await runResume(command.args);
       break;
     case "list":
       await executeList(command.args);

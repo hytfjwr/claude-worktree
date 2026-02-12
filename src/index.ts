@@ -4,11 +4,13 @@
 export {
   parseArgs,
   parseListArgs,
+  parseResumeArgs,
   run,
   showCleanHelp,
   showCreateHelp,
   showHelp,
   showListHelp,
+  showResumeHelp,
   validateBranchName,
 } from "./cli.ts";
 // Clean command
@@ -19,6 +21,8 @@ export { buildClaudeOptions, readPlanFile, runCreate } from "./commands/create.t
 export { executeHookWithSpinner } from "./commands/hooks.ts";
 // List command
 export { executeList, formatSessionState } from "./commands/list.ts";
+// Resume command
+export { runResume } from "./commands/resume.ts";
 // Rollback utility
 export { performRollback } from "./commands/rollback.ts";
 // Run-in-pane command
@@ -62,7 +66,7 @@ export {
 // Slot utilities
 export { deleteSlot, findAvailableSlot, getCacheDir, isPortInUse, readSlot, saveSlot } from "./core/slot.ts";
 // Claude utilities
-export { buildClaudeCommand } from "./external/claude.ts";
+export { buildClaudeCommand, buildResumeCommand } from "./external/claude.ts";
 // WezTerm utilities
 export {
   checkWeztermAvailable,
@@ -112,6 +116,10 @@ export type {
   ParsedWorktree,
   // Config
   ProjectConfig,
+  // Resume
+  ResumeArgs,
+  ResumeCommandOptions,
+  ResumeDeps,
   // Rollback
   RollbackOptions,
   // RunInPane
@@ -136,7 +144,7 @@ export type { Logger } from "./ui/logger.ts";
 // Logger utilities
 export { createSilentLogger, logDebug, logError, logInfo, logWarn, resetLogger, setLogger } from "./ui/logger.ts";
 // Prompt utilities
-export { confirm, selectMultiple } from "./ui/prompt.ts";
+export { confirm, selectMultiple, selectWorktree } from "./ui/prompt.ts";
 // Spinner utilities
 export { startSpinner } from "./ui/spinner.ts";
 // Version

@@ -195,6 +195,19 @@ export type CreateArgs = {
   dryRun?: boolean;
 };
 
+export type ResumeArgs = {
+  branchName?: string;
+  prompt?: string;
+  danger?: boolean;
+  pane?: boolean;
+  verbose?: boolean;
+};
+
+export type ResumeCommandOptions = {
+  prompt?: string;
+  dangerouslySkipPermissions?: boolean;
+};
+
 export type RunInPaneArgs = {
   worktreePath: string;
   repoRoot: string;
@@ -210,9 +223,10 @@ export type RunInPaneArgs = {
 };
 
 export type Command =
-  | { type: "help"; commandHelp?: "create" | "list" | "clean" }
+  | { type: "help"; commandHelp?: "create" | "list" | "clean" | "resume" }
   | { type: "version" }
   | { type: "create"; args: CreateArgs }
+  | { type: "resume"; args: ResumeArgs }
   | { type: "clean"; args: CleanArgs }
   | { type: "list"; args: ListArgs }
   | { type: "_run-in-pane"; payloadPath: string };
@@ -350,4 +364,20 @@ export type CreateDeps = {
 
   // Rollback
   performRollback: (options: RollbackOptions) => Promise<void>;
+};
+
+// =============================================================================
+// Resume types
+// =============================================================================
+
+export type ResumeDeps = {
+  checkWeztermAvailable: () => Promise<boolean>;
+  getGitContext: () => Promise<GitContext>;
+  listWorktrees: () => Promise<ListWorktreesResult>;
+  saveSession: (worktreePath: string, session: SessionInfo) => Promise<void>;
+  completeSession: (worktreePath: string) => Promise<void>;
+  buildResumeCommand: (options: ResumeCommandOptions) => string;
+  createPane: (options?: PaneOptions) => Promise<string>;
+  sendCommand: (paneId: string, command: string) => Promise<void>;
+  selectWorktree: (worktrees: WorktreeInfo[]) => Promise<WorktreeInfo | null>;
 };

@@ -1,6 +1,13 @@
 import { describe, expect, test } from "vitest";
 
-import { parseArgs, parseCleanArgs, parseCreateArgs, parseListArgs, validateBranchName } from "./cli.ts";
+import {
+  parseArgs,
+  parseCleanArgs,
+  parseCreateArgs,
+  parseListArgs,
+  parseResumeArgs,
+  validateBranchName,
+} from "./cli.ts";
 
 describe("parseArgs", () => {
   describe("help", () => {
@@ -154,7 +161,7 @@ describe("parseArgs", () => {
     });
 
     test.each([
-      "Available commands: list, clean",
+      "Available commands: list, clean, resume",
       "claude-worktree <branch-name> <prompt>",
     ])('error message includes "%s"', (substring) => {
       expect(() => parseArgs(["ABC"])).toThrow(substring);
@@ -895,5 +902,172 @@ describe("parseArgs - per-command help", () => {
   test("bare -h returns global help", () => {
     const result = parseArgs(["-h"]);
     expect(result).toEqual({ type: "help" });
+  });
+
+  test("resume -h returns resume help", () => {
+    const result = parseArgs(["resume", "-h"]);
+    expect(result).toEqual({ type: "help", commandHelp: "resume" });
+  });
+
+  test("resume -help returns resume help", () => {
+    const result = parseArgs(["resume", "-help"]);
+    expect(result).toEqual({ type: "help", commandHelp: "resume" });
+  });
+});
+
+// ============================================================================
+// parseArgs - resume routing
+// ============================================================================
+
+describe("parseArgs - resume", () => {
+  test("resume with no args", () => {
+    const result = parseArgs(["resume"]);
+    expect(result).toEqual({
+      type: "resume",
+      args: {
+        branchName: undefined,
+        prompt: undefined,
+        danger: false,
+        pane: false,
+        verbose: false,
+      },
+    });
+  });
+
+  test("resume with branch name", () => {
+    const result = parseArgs(["resume", "feature/auth"]);
+    expect(result).toEqual({
+      type: "resume",
+      args: {
+        branchName: "feature/auth",
+        prompt: undefined,
+        danger: false,
+        pane: false,
+        verbose: false,
+      },
+    });
+  });
+
+  test("resume with branch name and prompt", () => {
+    const result = parseArgs(["resume", "feature/auth", "Continue work"]);
+    expect(result).toEqual({
+      type: "resume",
+      args: {
+        branchName: "feature/auth",
+        prompt: "Continue work",
+        danger: false,
+        pane: false,
+        verbose: false,
+      },
+    });
+  });
+
+  test("resume with options", () => {
+    const result = parseArgs(["resume", "feature/auth", "-pane", "-danger"]);
+    expect(result).toEqual({
+      type: "resume",
+      args: {
+        branchName: "feature/auth",
+        prompt: undefined,
+        danger: true,
+        pane: true,
+        verbose: false,
+      },
+    });
+  });
+});
+
+// ============================================================================
+// parseResumeArgs
+// ============================================================================
+
+describe("parseResumeArgs", () => {
+  test("no args - all undefined/false", () => {
+    const result = parseResumeArgs([]);
+    expect(result).toEqual({
+      branchName: undefined,
+      prompt: undefined,
+      danger: false,
+      pane: false,
+      verbose: false,
+    });
+  });
+
+  test("branch name only", () => {
+    const result = parseResumeArgs(["feature/test"]);
+    expect(result).toEqual({
+      branchName: "feature/test",
+      prompt: undefined,
+      danger: false,
+      pane: false,
+      verbose: false,
+    });
+  });
+
+  test("branch name + prompt", () => {
+    const result = parseResumeArgs(["feature/test", "Continue the work"]);
+    expect(result).toEqual({
+      branchName: "feature/test",
+      prompt: "Continue the work",
+      danger: false,
+      pane: false,
+      verbose: false,
+    });
+  });
+
+  test("multi-word prompt", () => {
+    const result = parseResumeArgs(["feature/test", "fix", "the", "bug"]);
+    expect(result.prompt).toBe("fix the bug");
+  });
+
+  test("-pane option", () => {
+    const result = parseResumeArgs(["feature/test", "-pane"]);
+    expect(result.pane).toBe(true);
+  });
+
+  test("-p option", () => {
+    const result = parseResumeArgs(["-p", "feature/test"]);
+    expect(result.pane).toBe(true);
+    expect(result.branchName).toBe("feature/test");
+  });
+
+  test("-danger option", () => {
+    const result = parseResumeArgs(["feature/test", "-danger"]);
+    expect(result.danger).toBe(true);
+  });
+
+  test("-d option", () => {
+    const result = parseResumeArgs(["feature/test", "-d"]);
+    expect(result.danger).toBe(true);
+  });
+
+  test("-verbose option", () => {
+    const result = parseResumeArgs(["feature/test", "-verbose"]);
+    expect(result.verbose).toBe(true);
+  });
+
+  test("-v option", () => {
+    const result = parseResumeArgs(["feature/test", "-v"]);
+    expect(result.verbose).toBe(true);
+  });
+
+  test("all options combined", () => {
+    const result = parseResumeArgs(["feature/test", "prompt", "-p", "-d", "-v"]);
+    expect(result).toEqual({
+      branchName: "feature/test",
+      prompt: "prompt",
+      pane: true,
+      danger: true,
+      verbose: true,
+    });
+  });
+
+  test("error: unknown option", () => {
+    expect(() => parseResumeArgs(["-unknown"])).toThrow("Unknown option for resume command: -unknown");
+  });
+
+  test("-h is ignored (does not throw)", () => {
+    const result = parseResumeArgs(["-h"]);
+    expect(result.branchName).toBeUndefined();
   });
 });

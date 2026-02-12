@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { buildClaudeCommand } from "./claude.ts";
+import { buildClaudeCommand, buildResumeCommand } from "./claude.ts";
 
 describe("buildClaudeCommand", () => {
   test("basic prompt - default permission mode and suffix are applied", () => {
@@ -338,6 +338,63 @@ PROMPT_END`);
     expect(result).toBe(`claude --permission-mode plan <<'PROMPT_END'
 It's a "test"
 path\\to\\file
+PROMPT_END`);
+  });
+});
+
+// ============================================================================
+// buildResumeCommand tests
+// ============================================================================
+
+describe("buildResumeCommand", () => {
+  test("no prompt - simple --continue", () => {
+    const result = buildResumeCommand({});
+    expect(result).toBe("claude --continue");
+  });
+
+  test("with prompt - heredoc format", () => {
+    const result = buildResumeCommand({ prompt: "Continue the work" });
+    expect(result).toBe(`claude --continue <<'PROMPT_END'
+Continue the work
+PROMPT_END`);
+  });
+
+  test("with dangerouslySkipPermissions - flag added", () => {
+    const result = buildResumeCommand({ dangerouslySkipPermissions: true });
+    expect(result).toBe("claude --continue --dangerously-skip-permissions");
+  });
+
+  test("with prompt and dangerouslySkipPermissions", () => {
+    const result = buildResumeCommand({
+      prompt: "Fix the bug",
+      dangerouslySkipPermissions: true,
+    });
+    expect(result).toBe(`claude --continue --dangerously-skip-permissions <<'PROMPT_END'
+Fix the bug
+PROMPT_END`);
+  });
+
+  test("dangerouslySkipPermissions false - flag not added", () => {
+    const result = buildResumeCommand({ dangerouslySkipPermissions: false });
+    expect(result).toBe("claude --continue");
+  });
+
+  test("empty prompt - treated as no prompt", () => {
+    const result = buildResumeCommand({ prompt: "" });
+    expect(result).toBe("claude --continue");
+  });
+
+  test("prompt with special characters - preserved in heredoc", () => {
+    const result = buildResumeCommand({ prompt: 'It\'s a "test" with $vars' });
+    expect(result).toContain('It\'s a "test" with $vars');
+    expect(result).toContain("<<'PROMPT_END'");
+  });
+
+  test("prompt with newlines - preserved", () => {
+    const result = buildResumeCommand({ prompt: "line1\nline2" });
+    expect(result).toBe(`claude --continue <<'PROMPT_END'
+line1
+line2
 PROMPT_END`);
   });
 });

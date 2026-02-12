@@ -32,6 +32,9 @@ claude-worktree feature/auth 'Implement authentication feature'
 
 # Open in a new WezTerm pane for parallel development
 claude-worktree feature/auth 'Implement authentication feature' -pane
+
+# Resume a session in an existing worktree
+claude-worktree resume feature/auth
 ```
 
 ## Usage
@@ -47,6 +50,12 @@ claude-worktree <branch-name> -plan <file-path>
 
 ```bash
 claude-worktree list [options]
+```
+
+### Resume Command
+
+```bash
+claude-worktree resume [<branch-name>] [<prompt>]
 ```
 
 ### Clean Command
@@ -82,6 +91,12 @@ claude-worktree --version
 - `-j, -json` - Output as JSON
 - `-s, -status` - Show Claude session status (Running/Done)
 - `-v, -verbose` - Show full paths and details
+
+### Resume Options
+
+- `-p, -pane` - Open in a new WezTerm pane (default: run in current terminal)
+- `-d, -danger` - Skip workspace warning (uses --dangerously-skip-permissions)
+- `-v, -verbose` - Show verbose output
 
 ### Clean Options
 
@@ -119,6 +134,15 @@ claude-worktree feature/auth 'Implement authentication feature' -draft
 
 # Draft PR with specific base branch
 claude-worktree feature/auth 'Implement authentication feature' -draft -base main
+
+# Resume a Claude session in an existing worktree
+claude-worktree resume feature/auth
+
+# Resume with an additional prompt
+claude-worktree resume feature/auth 'Continue the authentication implementation'
+
+# Interactive worktree selection
+claude-worktree resume
 
 # List worktrees with status
 claude-worktree list

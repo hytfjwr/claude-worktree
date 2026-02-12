@@ -37,6 +37,11 @@ make check
 claude-worktree <branch-name> <prompt>
 claude-worktree <branch-name> -plan <file-path>
 
+# Resume command
+claude-worktree resume <branch-name>            # Resume a Claude session
+claude-worktree resume <branch-name> '<prompt>'  # Resume with additional prompt
+claude-worktree resume                           # Interactive worktree selection
+
 # List command
 claude-worktree list [options]
 
@@ -58,6 +63,9 @@ claude-worktree feature/auth 'Implement authentication feature' -merge
 claude-worktree feature/auth 'Implement authentication feature' -draft
 claude-worktree feature/auth 'Implement authentication feature' -draft -base main
 claude-worktree feature/auth 'Implement authentication feature' -dry-run
+claude-worktree resume feature/auth
+claude-worktree resume feature/auth 'Continue implementation'
+claude-worktree resume
 claude-worktree list
 claude-worktree list -json
 claude-worktree list -status
@@ -77,6 +85,12 @@ claude-worktree clean -dry-run
 - `-n, -dry-run` - Preview what would be created without executing
 - `-v, -verbose` - Show hook execution logs
 - `-h, -help` - Show help
+
+### Resume Options
+
+- `-p, -pane` - Open in a new WezTerm pane (default: run in current terminal)
+- `-d, -danger` - Skip workspace warning (uses --dangerously-skip-permissions)
+- `-v, -verbose` - Show verbose output
 
 ### List Options
 
@@ -115,6 +129,8 @@ src/
     create.test.ts
     list.ts            # Worktree listing with rich display
     list.test.ts
+    resume.ts          # Resume command orchestration
+    resume.test.ts
     clean.ts           # Worktree cleanup orchestration
     clean.test.ts
   external/            # External tool integrations
