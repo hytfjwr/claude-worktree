@@ -1,13 +1,6 @@
 import { relative } from "node:path";
 
-import {
-  fetchAndPrune,
-  getAheadBehind,
-  getLastCommit,
-  getMainBranch,
-  getWorktreeStatuses,
-  listWorktrees,
-} from "../core/git.ts";
+import { fetchAndPrune, getAheadBehind, getLastCommit, getWorktreeStatuses, listWorktrees } from "../core/git.ts";
 import { determineSessionStatus, formatElapsed, readAllSessions } from "../core/session.ts";
 import { listWeztermPanes } from "../external/wezterm.ts";
 import type {
@@ -29,7 +22,6 @@ const defaultDeps: ListDeps = {
   getWorktreeStatuses,
   getLastCommit,
   getAheadBehind,
-  getMainBranch,
   startSpinner,
   readAllSessions,
   listWeztermPanes,
@@ -186,11 +178,10 @@ export async function executeList(args: ListArgs, deps: ListDeps = defaultDeps):
       // Silently continue
     }
 
-    const worktrees = await deps.listWorktrees();
+    const { worktrees, mainBranch } = await deps.listWorktrees();
 
     if (worktrees.length > 0) {
-      const statuses = await deps.getWorktreeStatuses(worktrees);
-      const mainBranch = await deps.getMainBranch();
+      const statuses = await deps.getWorktreeStatuses(worktrees, mainBranch);
 
       // Fetch panes and sessions once if -status is enabled
       const panes = args.status ? await deps.listWeztermPanes() : null;

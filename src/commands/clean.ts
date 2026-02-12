@@ -49,17 +49,18 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
   }
 
   const listSpinner = deps.startSpinner("Fetching worktree list...");
-  let worktrees: Awaited<ReturnType<CleanDeps["listWorktrees"]>>;
+  let worktrees: Awaited<ReturnType<CleanDeps["listWorktrees"]>>["worktrees"];
   let statuses: Awaited<ReturnType<CleanDeps["getWorktreeStatuses"]>>;
   try {
-    worktrees = await deps.listWorktrees();
+    const listResult = await deps.listWorktrees();
+    worktrees = listResult.worktrees;
 
     if (worktrees.length === 0) {
       listSpinner.stop("No worktrees found.");
       return result;
     }
 
-    statuses = await deps.getWorktreeStatuses(worktrees);
+    statuses = await deps.getWorktreeStatuses(worktrees, listResult.mainBranch);
     listSpinner.stop(`${icons.success()} Done fetching worktree list.`);
   } catch (error) {
     listSpinner.fail("Failed to fetch worktree list");

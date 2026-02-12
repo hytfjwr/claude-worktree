@@ -44,7 +44,7 @@ function makeSpinner() {
 function makeDeps(overrides: Partial<CleanDeps> = {}): CleanDeps {
   return {
     fetchAndPrune: async () => {},
-    listWorktrees: async () => [],
+    listWorktrees: async () => ({ worktrees: [], mainBranch: "main" }),
     getWorktreeStatuses: async () => [],
     removeWorktree: async () => {},
     deleteLocalBranch: async () => {},
@@ -86,7 +86,7 @@ describe("executeClean", () => {
   describe("when no worktrees exist", () => {
     test("returns empty result", async () => {
       const deps = makeDeps({
-        listWorktrees: async () => [],
+        listWorktrees: async () => ({ worktrees: [], mainBranch: "main" }),
       });
 
       const result = await executeClean(defaultArgs, deps);
@@ -99,7 +99,7 @@ describe("executeClean", () => {
     test("returns empty result when all are main worktrees", async () => {
       const mainWorktree = makeWorktree({ isMain: true, branch: "main" });
       const deps = makeDeps({
-        listWorktrees: async () => [mainWorktree],
+        listWorktrees: async () => ({ worktrees: [mainWorktree], mainBranch: "main" }),
         getWorktreeStatuses: async () => [makeStatus({ isMain: true, branch: "main" }, { reason: "Main worktree" })],
       });
 
@@ -113,7 +113,7 @@ describe("executeClean", () => {
     test("returns empty result when all canAutoClean are false", async () => {
       const worktree = makeWorktree();
       const deps = makeDeps({
-        listWorktrees: async () => [worktree],
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
         getWorktreeStatuses: async () => [makeStatus({}, { canAutoClean: false, reason: "Active" })],
       });
 
@@ -132,7 +132,7 @@ describe("executeClean", () => {
         { canAutoClean: true, branchMerged: true, reason: "Merged" },
       );
       const deps = makeDeps({
-        listWorktrees: async () => [worktree],
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status],
         confirm: async () => true,
       });
@@ -158,7 +158,7 @@ describe("executeClean", () => {
       const status2 = makeStatus({ path: "/tmp/repo-b", branch: "feature/b" }, { canAutoClean: true });
 
       const deps = makeDeps({
-        listWorktrees: async () => [wt1, wt2],
+        listWorktrees: async () => ({ worktrees: [wt1, wt2], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status1, status2],
         selectMultiple: async () => [status2],
         confirm: async () => true,
@@ -172,7 +172,7 @@ describe("executeClean", () => {
     test("does not delete when nothing selected via selectMultiple", async () => {
       const worktree = makeWorktree();
       const deps = makeDeps({
-        listWorktrees: async () => [worktree],
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
         getWorktreeStatuses: async () => [makeStatus()],
         selectMultiple: async () => [],
       });
@@ -195,7 +195,7 @@ describe("executeClean", () => {
       );
       let removeWorktreeCalled = false;
       const deps = makeDeps({
-        listWorktrees: async () => [worktree],
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status],
         removeWorktree: async () => {
           removeWorktreeCalled = true;
@@ -215,7 +215,7 @@ describe("executeClean", () => {
       const status = makeStatus({}, { canAutoClean: true, reason: "Merged" });
       let removeWorktreeCalled = false;
       const deps = makeDeps({
-        listWorktrees: async () => [worktree],
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status],
         confirm: async () => false,
         removeWorktree: async () => {
@@ -234,7 +234,7 @@ describe("executeClean", () => {
       const status = makeStatus({}, { canAutoClean: true, reason: "Merged" });
       let confirmCalled = false;
       const deps = makeDeps({
-        listWorktrees: async () => [worktree],
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status],
         confirm: async () => {
           confirmCalled = true;
@@ -255,7 +255,7 @@ describe("executeClean", () => {
       const status1 = makeStatus({ path: "/tmp/repo-a", branch: "feature/a" }, { canAutoClean: true });
       const status2 = makeStatus({ path: "/tmp/repo-b", branch: "feature/b" }, { canAutoClean: true });
       const deps = makeDeps({
-        listWorktrees: async () => [wt1, wt2],
+        listWorktrees: async () => ({ worktrees: [wt1, wt2], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status1, status2],
       });
 
@@ -272,7 +272,7 @@ describe("executeClean", () => {
       });
       const status = makeStatus({ path: "/tmp/repo-fail", branch: "feature/fail" }, { canAutoClean: true });
       const deps = makeDeps({
-        listWorktrees: async () => [worktree],
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status],
         removeWorktree: async () => {
           throw new Error("Permission denied");
@@ -297,7 +297,7 @@ describe("executeClean", () => {
       );
       let removedWithForce = false;
       const deps = makeDeps({
-        listWorktrees: async () => [worktree],
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status],
         removeWorktree: async (_path, force) => {
           removedWithForce = force === true;
@@ -323,7 +323,7 @@ describe("executeClean", () => {
       const status2 = makeStatus({ path: "/tmp/repo-fail", branch: "feature/fail" }, { canAutoClean: true });
       const status3 = makeStatus({ path: "/tmp/repo-ok2", branch: "feature/ok2" }, { canAutoClean: true });
       const deps = makeDeps({
-        listWorktrees: async () => [wt1, wt2, wt3],
+        listWorktrees: async () => ({ worktrees: [wt1, wt2, wt3], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status1, status2, status3],
         removeWorktree: async (path) => {
           if (path === "/tmp/repo-fail") {
@@ -347,7 +347,7 @@ describe("executeClean", () => {
         fetchAndPrune: async () => {
           throw new Error("Network error");
         },
-        listWorktrees: async () => [worktree],
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status],
       });
 
@@ -365,7 +365,7 @@ describe("executeClean", () => {
       let hookCommand = "";
       let hookCwd = "";
       const deps = makeDeps({
-        listWorktrees: async () => [worktree],
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status],
         loadProjectConfig: async () => ({
           preClean: "cd {path} && docker-compose down",
@@ -391,7 +391,7 @@ describe("executeClean", () => {
       const worktree = makeWorktree({ path: "/tmp/repo-hook-fail" });
       const status = makeStatus({ path: "/tmp/repo-hook-fail" }, { canAutoClean: true });
       const deps = makeDeps({
-        listWorktrees: async () => [worktree],
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status],
         loadProjectConfig: async () => ({
           preClean: "cd {path} && false",
@@ -412,7 +412,7 @@ describe("executeClean", () => {
       const status = makeStatus({}, { canAutoClean: true });
       let hookCalled = false;
       const deps = makeDeps({
-        listWorktrees: async () => [worktree],
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status],
         loadProjectConfig: async () => null,
         runHook: async () => {
@@ -430,7 +430,7 @@ describe("executeClean", () => {
       const status = makeStatus({ path: "/tmp/repo-timeout" }, { canAutoClean: true });
       let receivedTimeout: number | undefined;
       const deps = makeDeps({
-        listWorktrees: async () => [worktree],
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status],
         loadProjectConfig: async () => ({
           preClean: "cd {path} && docker-compose down",
@@ -451,7 +451,7 @@ describe("executeClean", () => {
       const status = makeStatus({ path: "/tmp/repo-global-timeout" }, { canAutoClean: true });
       let receivedTimeout: number | undefined;
       const deps = makeDeps({
-        listWorktrees: async () => [worktree],
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status],
         loadProjectConfig: async () => ({
           preClean: "cd {path} && docker-compose down",
@@ -472,7 +472,7 @@ describe("executeClean", () => {
       const status = makeStatus({}, { canAutoClean: true });
       let hookCalled = false;
       const deps = makeDeps({
-        listWorktrees: async () => [worktree],
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status],
         getGitContext: async () => {
           throw new Error("Not a git repo");
@@ -500,7 +500,7 @@ describe("executeClean", () => {
       let hookCommand = "";
       let hookCwd = "";
       const deps = makeDeps({
-        listWorktrees: async () => [worktree],
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status],
         loadProjectConfig: async () => ({
           postClean: "docker volume rm {path}-data || true",
@@ -532,7 +532,7 @@ describe("executeClean", () => {
       const worktree = makeWorktree({ path: "/tmp/repo-post-fail" });
       const status = makeStatus({ path: "/tmp/repo-post-fail" }, { canAutoClean: true });
       const deps = makeDeps({
-        listWorktrees: async () => [worktree],
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status],
         loadProjectConfig: async () => ({
           postClean: "false",
@@ -553,7 +553,7 @@ describe("executeClean", () => {
       const status = makeStatus({}, { canAutoClean: true });
       let hookCalled = false;
       const deps = makeDeps({
-        listWorktrees: async () => [worktree],
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status],
         loadProjectConfig: async () => null,
         runHook: async () => {
@@ -571,7 +571,7 @@ describe("executeClean", () => {
       const status = makeStatus({ path: "/tmp/repo-post-timeout" }, { canAutoClean: true });
       let receivedTimeout: number | undefined;
       const deps = makeDeps({
-        listWorktrees: async () => [worktree],
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status],
         loadProjectConfig: async () => ({
           postClean: "echo done",
@@ -592,7 +592,7 @@ describe("executeClean", () => {
       const status = makeStatus({ path: "/tmp/repo-both-hooks" }, { canAutoClean: true });
       const hookOrder: string[] = [];
       const deps = makeDeps({
-        listWorktrees: async () => [worktree],
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status],
         loadProjectConfig: async () => ({
           preClean: "echo pre",
@@ -617,7 +617,7 @@ describe("executeClean", () => {
       });
       const status = makeStatus({ path: "/tmp/repo-detached", branch: null }, { canAutoClean: true });
       const deps = makeDeps({
-        listWorktrees: async () => [worktree],
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status],
       });
 
@@ -633,7 +633,7 @@ describe("executeClean", () => {
       const status = makeStatus({ path: "/tmp/repo-slot" }, { canAutoClean: true });
       const hookCommands: string[] = [];
       const deps = makeDeps({
-        listWorktrees: async () => [worktree],
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status],
         loadProjectConfig: async () => ({
           preClean: "cd {path} && docker-compose -p app-{slot} down",
@@ -658,7 +658,7 @@ describe("executeClean", () => {
       const status = makeStatus({ path: "/tmp/repo-no-slot" }, { canAutoClean: true });
       const hookCommands: string[] = [];
       const deps = makeDeps({
-        listWorktrees: async () => [worktree],
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status],
         loadProjectConfig: async () => ({
           preClean: "cd {path} && docker-compose -p app-{slot} down",
@@ -679,7 +679,7 @@ describe("executeClean", () => {
       const status = makeStatus({ path: "/tmp/repo-delete-slot" }, { canAutoClean: true });
       const deletedSlotPaths: string[] = [];
       const deps = makeDeps({
-        listWorktrees: async () => [worktree],
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status],
         readSlot: async () => 5,
         deleteSlot: async (path) => {
@@ -697,7 +697,7 @@ describe("executeClean", () => {
       const status = makeStatus({ path: "/tmp/repo-same-slot" }, { canAutoClean: true });
       const receivedVars: Array<{ path: string; slot?: number }> = [];
       const deps = makeDeps({
-        listWorktrees: async () => [worktree],
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status],
         loadProjectConfig: async () => ({
           preClean: "pre {slot}",
@@ -726,7 +726,7 @@ describe("executeClean", () => {
       const status = makeStatus({ path: "/tmp/repo-session" }, { canAutoClean: true });
       const deletedSessionPaths: string[] = [];
       const deps = makeDeps({
-        listWorktrees: async () => [worktree],
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status],
         deleteSession: async (path) => {
           deletedSessionPaths.push(path);
@@ -743,7 +743,7 @@ describe("executeClean", () => {
       const status = makeStatus({ path: "/tmp/repo-dry-session" }, { canAutoClean: true });
       let deleteSessionCalled = false;
       const deps = makeDeps({
-        listWorktrees: async () => [worktree],
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status],
         deleteSession: async () => {
           deleteSessionCalled = true;
@@ -760,7 +760,7 @@ describe("executeClean", () => {
       const status = makeStatus({ path: "/tmp/repo-fail-session" }, { canAutoClean: true });
       let deleteSessionCalled = false;
       const deps = makeDeps({
-        listWorktrees: async () => [worktree],
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status],
         removeWorktree: async () => {
           throw new Error("Failed");
@@ -786,7 +786,7 @@ describe("executeClean", () => {
       let deletedBranch = "";
       let deletedWithForce = false;
       const deps = makeDeps({
-        listWorktrees: async () => [worktree],
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status],
         deleteLocalBranch: async (branch, force) => {
           deletedBranch = branch;
@@ -808,7 +808,7 @@ describe("executeClean", () => {
       const status = makeStatus({ path: "/tmp/repo-detached", branch: null }, { canAutoClean: true });
       let deleteLocalBranchCalled = false;
       const deps = makeDeps({
-        listWorktrees: async () => [worktree],
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status],
         deleteLocalBranch: async () => {
           deleteLocalBranchCalled = true;
@@ -830,7 +830,7 @@ describe("executeClean", () => {
         { canAutoClean: true },
       );
       const deps = makeDeps({
-        listWorktrees: async () => [worktree],
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status],
         deleteLocalBranch: async () => {
           throw new Error("Branch delete failed");
@@ -852,7 +852,7 @@ describe("executeClean", () => {
       const status = makeStatus({ path: "/tmp/repo-dry", branch: "feature/dry" }, { canAutoClean: true });
       let deleteLocalBranchCalled = false;
       const deps = makeDeps({
-        listWorktrees: async () => [worktree],
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status],
         deleteLocalBranch: async () => {
           deleteLocalBranchCalled = true;
@@ -872,7 +872,7 @@ describe("executeClean", () => {
       const status = makeStatus({ path: "/tmp/repo-wt-fail", branch: "feature/wt-fail" }, { canAutoClean: true });
       let deleteLocalBranchCalled = false;
       const deps = makeDeps({
-        listWorktrees: async () => [worktree],
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status],
         removeWorktree: async () => {
           throw new Error("Worktree remove failed");

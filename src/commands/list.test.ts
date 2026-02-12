@@ -90,11 +90,10 @@ const noopSpinner = (_message: string) => ({
 function makeListDeps(overrides: Partial<ListDeps> = {}): ListDeps {
   return {
     fetchAndPrune: async () => {},
-    listWorktrees: async () => [],
+    listWorktrees: async () => ({ worktrees: [], mainBranch: "main" }),
     getWorktreeStatuses: async () => [],
     getLastCommit: async () => makeCommitInfo(),
     getAheadBehind: async () => null,
-    getMainBranch: async () => "main",
     startSpinner: noopSpinner,
     readAllSessions: async () => ({}),
     listWeztermPanes: async () => null,
@@ -358,7 +357,7 @@ describe("formatWorktreeEntry", () => {
 describe("executeList", () => {
   test("empty worktree list", async () => {
     const deps = makeListDeps({
-      listWorktrees: async () => [],
+      listWorktrees: async () => ({ worktrees: [], mainBranch: "main" }),
     });
 
     const result = await executeList(defaultArgs, deps);
@@ -370,7 +369,7 @@ describe("executeList", () => {
     const mainWt = makeWorktree({ isMain: true, branch: "main", path: "/repo" });
     const mainStatus = makeStatus({ isMain: true, branch: "main", path: "/repo" }, { reason: "Main worktree" });
     const deps = makeListDeps({
-      listWorktrees: async () => [mainWt],
+      listWorktrees: async () => ({ worktrees: [mainWt], mainBranch: "main" }),
       getWorktreeStatuses: async () => [mainStatus],
       getLastCommit: async () => makeCommitInfo(),
     });
@@ -396,7 +395,7 @@ describe("executeList", () => {
     ];
 
     const deps = makeListDeps({
-      listWorktrees: async () => [mainWt, featureWt, dirtyWt],
+      listWorktrees: async () => ({ worktrees: [mainWt, featureWt, dirtyWt], mainBranch: "main" }),
       getWorktreeStatuses: async () => statuses,
       getLastCommit: async () => makeCommitInfo(),
       getAheadBehind: async () => ({ ahead: 2, behind: 0 }),
@@ -417,7 +416,7 @@ describe("executeList", () => {
     });
 
     const deps = makeListDeps({
-      listWorktrees: async () => [mainWt],
+      listWorktrees: async () => ({ worktrees: [mainWt], mainBranch: "main" }),
       getWorktreeStatuses: async () => [mainStatus],
       getLastCommit: async () => makeCommitInfo(),
     });
@@ -439,7 +438,7 @@ describe("executeList", () => {
       fetchAndPrune: async () => {
         throw new Error("Network error");
       },
-      listWorktrees: async () => [mainWt],
+      listWorktrees: async () => ({ worktrees: [mainWt], mainBranch: "main" }),
       getWorktreeStatuses: async () => [mainStatus],
       getLastCommit: async () => makeCommitInfo(),
     });
@@ -454,7 +453,7 @@ describe("executeList", () => {
     const status = makeStatus({ branch: "feature/new", path: "/repo-feature-new" });
 
     const deps = makeListDeps({
-      listWorktrees: async () => [wt],
+      listWorktrees: async () => ({ worktrees: [wt], mainBranch: "main" }),
       getWorktreeStatuses: async () => [status],
       getLastCommit: async () => null,
     });
@@ -471,7 +470,7 @@ describe("executeList", () => {
 
     let aheadBehindCalled = false;
     const deps = makeListDeps({
-      listWorktrees: async () => [mainWt],
+      listWorktrees: async () => ({ worktrees: [mainWt], mainBranch: "main" }),
       getWorktreeStatuses: async () => [mainStatus],
       getLastCommit: async () => makeCommitInfo(),
       getAheadBehind: async () => {
@@ -495,7 +494,7 @@ describe("executeList", () => {
     });
 
     const deps = makeListDeps({
-      listWorktrees: async () => [wt],
+      listWorktrees: async () => ({ worktrees: [wt], mainBranch: "main" }),
       getWorktreeStatuses: async () => [status],
       getLastCommit: async () => null,
     });
@@ -513,7 +512,7 @@ describe("executeList", () => {
     });
 
     const deps = makeListDeps({
-      listWorktrees: async () => [],
+      listWorktrees: async () => ({ worktrees: [], mainBranch: "main" }),
     });
 
     await executeList({ json: true, verbose: false, status: false }, deps);
@@ -547,7 +546,7 @@ describe("executeList", () => {
 
     let stopped = false;
     const deps = makeListDeps({
-      listWorktrees: async () => [mainWt],
+      listWorktrees: async () => ({ worktrees: [mainWt], mainBranch: "main" }),
       getWorktreeStatuses: async () => [mainStatus],
       getLastCommit: async () => makeCommitInfo(),
       startSpinner: (_message: string) => ({
@@ -592,7 +591,7 @@ describe("executeList", () => {
 
     let readAllSessionsCalled = false;
     const deps = makeListDeps({
-      listWorktrees: async () => [mainWt],
+      listWorktrees: async () => ({ worktrees: [mainWt], mainBranch: "main" }),
       getWorktreeStatuses: async () => [mainStatus],
       getLastCommit: async () => makeCommitInfo(),
       readAllSessions: async () => {
@@ -612,7 +611,7 @@ describe("executeList", () => {
 
     let readAllSessionsCalled = false;
     const deps = makeListDeps({
-      listWorktrees: async () => [featureWt],
+      listWorktrees: async () => ({ worktrees: [featureWt], mainBranch: "main" }),
       getWorktreeStatuses: async () => [featureStatus],
       getLastCommit: async () => makeCommitInfo(),
       readAllSessions: async () => {
@@ -640,7 +639,7 @@ describe("executeList", () => {
     const featureStatus = makeStatus({ branch: "feature/x", path: "/repo-feature-x" });
 
     const deps = makeListDeps({
-      listWorktrees: async () => [featureWt],
+      listWorktrees: async () => ({ worktrees: [featureWt], mainBranch: "main" }),
       getWorktreeStatuses: async () => [featureStatus],
       getLastCommit: async () => makeCommitInfo(),
       readAllSessions: async () => ({}),
@@ -661,7 +660,7 @@ describe("executeList", () => {
     });
 
     const deps = makeListDeps({
-      listWorktrees: async () => [featureWt],
+      listWorktrees: async () => ({ worktrees: [featureWt], mainBranch: "main" }),
       getWorktreeStatuses: async () => [featureStatus],
       getLastCommit: async () => makeCommitInfo(),
       readAllSessions: async () => ({
@@ -687,7 +686,7 @@ describe("executeList", () => {
 
     let panesCalled = false;
     const deps = makeListDeps({
-      listWorktrees: async () => [mainWt],
+      listWorktrees: async () => ({ worktrees: [mainWt], mainBranch: "main" }),
       getWorktreeStatuses: async () => [mainStatus],
       getLastCommit: async () => makeCommitInfo(),
       listWeztermPanes: async () => {

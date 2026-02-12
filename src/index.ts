@@ -102,6 +102,7 @@ export type {
   ListArgs,
   ListDeps,
   ListResult,
+  ListWorktreesResult,
   // Claude
   MergeInstructions,
   OptionDef,

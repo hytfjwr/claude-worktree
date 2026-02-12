@@ -26,6 +26,11 @@ export type WorktreeStatus = {
 
 export type ParsedWorktree = Omit<WorktreeInfo, "isDirty">;
 
+export type ListWorktreesResult = {
+  worktrees: WorktreeInfo[];
+  mainBranch: string;
+};
+
 export type CommitInfo = {
   hash: string;
   message: string;
@@ -237,11 +242,10 @@ export type ListResult = {
 
 export type ListDeps = {
   fetchAndPrune: () => Promise<void>;
-  listWorktrees: () => Promise<WorktreeInfo[]>;
-  getWorktreeStatuses: (worktrees: WorktreeInfo[]) => Promise<WorktreeStatus[]>;
+  listWorktrees: () => Promise<ListWorktreesResult>;
+  getWorktreeStatuses: (worktrees: WorktreeInfo[], mainBranch: string) => Promise<WorktreeStatus[]>;
   getLastCommit: (worktreePath: string) => Promise<CommitInfo | null>;
   getAheadBehind: (branch: string, baseBranch: string) => Promise<AheadBehind | null>;
-  getMainBranch: () => Promise<string>;
   startSpinner: (message: string) => Spinner;
   readAllSessions: () => Promise<Record<string, SessionInfo>>;
   listWeztermPanes: () => Promise<WeztermPane[] | null>;
@@ -266,8 +270,8 @@ export type CleanResult = {
 
 export type CleanDeps = {
   fetchAndPrune: () => Promise<void>;
-  listWorktrees: () => Promise<WorktreeInfo[]>;
-  getWorktreeStatuses: (worktrees: WorktreeInfo[]) => Promise<WorktreeStatus[]>;
+  listWorktrees: () => Promise<ListWorktreesResult>;
+  getWorktreeStatuses: (worktrees: WorktreeInfo[], mainBranch: string) => Promise<WorktreeStatus[]>;
   removeWorktree: (path: string, force?: boolean) => Promise<void>;
   deleteLocalBranch: (branchName: string, force?: boolean) => Promise<void>;
   getGitContext: () => Promise<GitContext>;
@@ -313,7 +317,7 @@ export type CreateDeps = {
   getGitContext: () => Promise<GitContext>;
   getWorktreePath: (repoRoot: string, repoName: string, branchName: string) => string;
   loadProjectConfig: (repoRoot: string) => Promise<ProjectConfig | null>;
-  listWorktrees: () => Promise<WorktreeInfo[]>;
+  listWorktrees: () => Promise<ListWorktreesResult>;
   branchExists: (branchName: string) => Promise<boolean>;
   verifyBranchRef: (ref: string) => Promise<boolean>;
   createWorktree: (branchName: string, worktreePath: string, baseBranch: string) => Promise<void>;

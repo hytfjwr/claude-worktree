@@ -364,11 +364,11 @@ describe("listWorktrees (mock)", () => {
 
     vi.doMock("./git", async () => ({
       ...(await vi.importActual("./git")),
-      listWorktrees: vi.fn(async () => mockWorktrees),
+      listWorktrees: vi.fn(async () => ({ worktrees: mockWorktrees, mainBranch: "main" })),
     }));
 
     const { listWorktrees } = await import("./git");
-    const worktrees = await listWorktrees();
+    const { worktrees } = await listWorktrees();
 
     expect(worktrees).toHaveLength(2);
     expect(worktrees[0].branch).toBe("main");
@@ -380,11 +380,11 @@ describe("listWorktrees (mock)", () => {
   test("empty worktree list", async () => {
     vi.doMock("./git", async () => ({
       ...(await vi.importActual("./git")),
-      listWorktrees: vi.fn(async () => []),
+      listWorktrees: vi.fn(async () => ({ worktrees: [], mainBranch: "main" })),
     }));
 
     const { listWorktrees } = await import("./git");
-    const worktrees = await listWorktrees();
+    const { worktrees } = await listWorktrees();
 
     expect(worktrees).toHaveLength(0);
   });
@@ -514,9 +514,6 @@ describe("getWorktreeStatuses", () => {
   // vi.doMock("./git") cannot intercept intra-module calls in Vitest, so we mock exec instead.
   function setExecMockForStatuses(config: { branchMerged: boolean; remoteBranchDeleted: boolean }) {
     mockExecImpl.current = createExecStub((_cmd, args) => {
-      if (args.includes("symbolic-ref")) {
-        return { stdout: "refs/remotes/origin/main\n" };
-      }
       if (args.includes("--merged")) {
         return { stdout: config.branchMerged ? "  main\n  feature/test\n" : "  main\n" };
       }
@@ -532,7 +529,7 @@ describe("getWorktreeStatuses", () => {
 
     const { getWorktreeStatuses } = await import("./git");
     const worktree = createWorktree({ isMain: true, branch: "main" });
-    const statuses = await getWorktreeStatuses([worktree]);
+    const statuses = await getWorktreeStatuses([worktree], "main");
 
     expect(statuses[0].canAutoClean).toBe(false);
     expect(statuses[0].reason).toBe("Main worktree");
@@ -543,7 +540,7 @@ describe("getWorktreeStatuses", () => {
 
     const { getWorktreeStatuses } = await import("./git");
     const worktree = createWorktree({ isLocked: true });
-    const statuses = await getWorktreeStatuses([worktree]);
+    const statuses = await getWorktreeStatuses([worktree], "main");
 
     expect(statuses[0].canAutoClean).toBe(false);
     expect(statuses[0].reason).toBe("Locked");
@@ -554,7 +551,7 @@ describe("getWorktreeStatuses", () => {
 
     const { getWorktreeStatuses } = await import("./git");
     const worktree = createWorktree({ isDirty: true });
-    const statuses = await getWorktreeStatuses([worktree]);
+    const statuses = await getWorktreeStatuses([worktree], "main");
 
     expect(statuses[0].canAutoClean).toBe(false);
     expect(statuses[0].reason).toBe("Has uncommitted changes");
@@ -567,12 +564,12 @@ describe("getWorktreeStatuses", () => {
 
     // isMain takes highest priority
     const mainAndLocked = createWorktree({ isMain: true, isLocked: true, isDirty: true });
-    const statusMain = await getWorktreeStatuses([mainAndLocked]);
+    const statusMain = await getWorktreeStatuses([mainAndLocked], "main");
     expect(statusMain[0].reason).toBe("Main worktree");
 
     // isLocked takes next priority
     const lockedAndDirty = createWorktree({ isLocked: true, isDirty: true });
-    const statusLocked = await getWorktreeStatuses([lockedAndDirty]);
+    const statusLocked = await getWorktreeStatuses([lockedAndDirty], "main");
     expect(statusLocked[0].reason).toBe("Locked");
   });
 
@@ -581,7 +578,7 @@ describe("getWorktreeStatuses", () => {
 
     const { getWorktreeStatuses } = await import("./git");
     const worktree = createWorktree({ branch: null });
-    const statuses = await getWorktreeStatuses([worktree]);
+    const statuses = await getWorktreeStatuses([worktree], "main");
 
     expect(statuses).toHaveLength(1);
     expect(statuses[0].branchMerged).toBe(false);
@@ -593,7 +590,7 @@ describe("getWorktreeStatuses", () => {
 
     const { getWorktreeStatuses } = await import("./git");
     const worktree = createWorktree();
-    const statuses = await getWorktreeStatuses([worktree]);
+    const statuses = await getWorktreeStatuses([worktree], "main");
 
     expect(statuses[0].canAutoClean).toBe(true);
     expect(statuses[0].reason).toBe("Merged");
@@ -604,7 +601,7 @@ describe("getWorktreeStatuses", () => {
 
     const { getWorktreeStatuses } = await import("./git");
     const worktree = createWorktree();
-    const statuses = await getWorktreeStatuses([worktree]);
+    const statuses = await getWorktreeStatuses([worktree], "main");
 
     expect(statuses[0].canAutoClean).toBe(true);
     expect(statuses[0].reason).toBe("Remote deleted");
@@ -615,7 +612,7 @@ describe("getWorktreeStatuses", () => {
 
     const { getWorktreeStatuses } = await import("./git");
     const worktree = createWorktree();
-    const statuses = await getWorktreeStatuses([worktree]);
+    const statuses = await getWorktreeStatuses([worktree], "main");
 
     expect(statuses[0].canAutoClean).toBe(true);
     expect(statuses[0].reason).toBe("Merged & remote deleted");
@@ -626,7 +623,7 @@ describe("getWorktreeStatuses", () => {
 
     const { getWorktreeStatuses } = await import("./git");
     const worktree = createWorktree();
-    const statuses = await getWorktreeStatuses([worktree]);
+    const statuses = await getWorktreeStatuses([worktree], "main");
 
     expect(statuses[0].canAutoClean).toBe(false);
     expect(statuses[0].reason).toBe("Active");

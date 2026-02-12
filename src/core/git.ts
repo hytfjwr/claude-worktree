@@ -1,7 +1,36 @@
 import { basename, join } from "node:path";
 
-import type { AheadBehind, CommitInfo, GitContext, ParsedWorktree, WorktreeInfo, WorktreeStatus } from "../types.ts";
+import type {
+  AheadBehind,
+  CommitInfo,
+  GitContext,
+  ListWorktreesResult,
+  ParsedWorktree,
+  WorktreeInfo,
+  WorktreeStatus,
+} from "../types.ts";
 import { exec } from "./exec.ts";
+
+const CONCURRENCY_LIMIT = 5;
+
+/**
+ * Run async task factories with a concurrency limit.
+ * Each element in `tasks` is a zero-arg function that returns a Promise.
+ */
+async function promiseAllSettledLimit<T>(tasks: Array<() => Promise<T>>, limit = CONCURRENCY_LIMIT): Promise<T[]> {
+  const results: T[] = new Array(tasks.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < tasks.length) {
+      const i = nextIndex++;
+      results[i] = await tasks[i]();
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, () => worker()));
+  return results;
+}
 
 export async function getGitContext(): Promise<GitContext> {
   let repoRoot: string;
@@ -119,26 +148,24 @@ export function parseWorktreePorcelain(output: string, mainBranch: string): Pars
   return worktrees;
 }
 
-export async function listWorktrees(): Promise<WorktreeInfo[]> {
+export async function listWorktrees(): Promise<ListWorktreesResult> {
   const result = await exec("git", ["worktree", "list", "--porcelain"]).nothrow().quiet();
   if (result.exitCode !== 0) {
     throw new Error("Failed to list worktrees. Are you in a git repository?");
   }
   const output = result.text().trim();
+  const mainBranch = await getMainBranch();
   if (!output) {
-    return [];
+    return { worktrees: [], mainBranch };
   }
 
-  const mainBranch = await getMainBranch();
   const parsed = parseWorktreePorcelain(output, mainBranch);
 
-  const worktrees: WorktreeInfo[] = [];
-  for (const p of parsed) {
-    const isDirty = await isWorktreeDirty(p.path);
-    worktrees.push({ ...p, isDirty });
-  }
+  const worktrees = await promiseAllSettledLimit(
+    parsed.map((p) => async () => ({ ...p, isDirty: await isWorktreeDirty(p.path) })),
+  );
 
-  return worktrees;
+  return { worktrees, mainBranch };
 }
 
 export async function isWorktreeDirty(worktreePath: string): Promise<boolean> {
@@ -184,7 +211,7 @@ export async function removeWorktree(worktreePath: string, force = false): Promi
 }
 
 export async function findWorktreeByBranch(branchName: string): Promise<WorktreeInfo | null> {
-  const worktrees = await listWorktrees();
+  const { worktrees } = await listWorktrees();
   return worktrees.find((w) => w.branch === branchName) || null;
 }
 
@@ -253,66 +280,63 @@ export async function verifyBranchRef(ref: string): Promise<boolean> {
   return result.exitCode === 0;
 }
 
-export async function getWorktreeStatuses(worktrees: WorktreeInfo[]): Promise<WorktreeStatus[]> {
-  const statuses: WorktreeStatus[] = [];
+export async function getWorktreeStatuses(worktrees: WorktreeInfo[], mainBranch: string): Promise<WorktreeStatus[]> {
+  return promiseAllSettledLimit(
+    worktrees.map((worktree) => async (): Promise<WorktreeStatus> => {
+      if (worktree.isMain) {
+        return {
+          worktree,
+          branchMerged: false,
+          branchDeletedOnRemote: false,
+          canAutoClean: false,
+          reason: "Main worktree",
+        };
+      }
 
-  for (const worktree of worktrees) {
-    if (worktree.isMain) {
-      statuses.push({
+      if (worktree.isLocked) {
+        return {
+          worktree,
+          branchMerged: false,
+          branchDeletedOnRemote: false,
+          canAutoClean: false,
+          reason: "Locked",
+        };
+      }
+
+      if (worktree.isDirty) {
+        return {
+          worktree,
+          branchMerged: false,
+          branchDeletedOnRemote: false,
+          canAutoClean: false,
+          reason: "Has uncommitted changes",
+        };
+      }
+
+      const [branchMerged, branchDeletedOnRemote] = await Promise.all([
+        worktree.branch ? isBranchMerged(worktree.branch, mainBranch) : false,
+        worktree.branch ? isRemoteBranchDeleted(worktree.branch) : false,
+      ]);
+      const canAutoClean = branchMerged || branchDeletedOnRemote;
+
+      let reason = "";
+      if (branchMerged && branchDeletedOnRemote) {
+        reason = "Merged & remote deleted";
+      } else if (branchMerged) {
+        reason = "Merged";
+      } else if (branchDeletedOnRemote) {
+        reason = "Remote deleted";
+      } else {
+        reason = "Active";
+      }
+
+      return {
         worktree,
-        branchMerged: false,
-        branchDeletedOnRemote: false,
-        canAutoClean: false,
-        reason: "Main worktree",
-      });
-      continue;
-    }
-
-    if (worktree.isLocked) {
-      statuses.push({
-        worktree,
-        branchMerged: false,
-        branchDeletedOnRemote: false,
-        canAutoClean: false,
-        reason: "Locked",
-      });
-      continue;
-    }
-
-    if (worktree.isDirty) {
-      statuses.push({
-        worktree,
-        branchMerged: false,
-        branchDeletedOnRemote: false,
-        canAutoClean: false,
-        reason: "Has uncommitted changes",
-      });
-      continue;
-    }
-
-    const branchMerged = worktree.branch ? await isBranchMerged(worktree.branch) : false;
-    const branchDeletedOnRemote = worktree.branch ? await isRemoteBranchDeleted(worktree.branch) : false;
-    const canAutoClean = branchMerged || branchDeletedOnRemote;
-
-    let reason = "";
-    if (branchMerged && branchDeletedOnRemote) {
-      reason = "Merged & remote deleted";
-    } else if (branchMerged) {
-      reason = "Merged";
-    } else if (branchDeletedOnRemote) {
-      reason = "Remote deleted";
-    } else {
-      reason = "Active";
-    }
-
-    statuses.push({
-      worktree,
-      branchMerged,
-      branchDeletedOnRemote,
-      canAutoClean,
-      reason,
-    });
-  }
-
-  return statuses;
+        branchMerged,
+        branchDeletedOnRemote,
+        canAutoClean,
+        reason,
+      };
+    }),
+  );
 }

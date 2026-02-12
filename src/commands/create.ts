@@ -513,7 +513,7 @@ export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps
   const config = await deps.loadProjectConfig(git.repoRoot);
 
   // Fetch worktrees once and reuse for both limit check and existing worktree detection
-  const worktrees = await deps.listWorktrees();
+  const { worktrees } = await deps.listWorktrees();
   const existingWorktree = worktrees.find((w) => w.branch === branchName) ?? null;
 
   // Check worktree limit
