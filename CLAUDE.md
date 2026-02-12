@@ -43,8 +43,9 @@ claude-worktree list [options]
 # Clean command
 claude-worktree clean [options]
 
-# Help
+# Help / Version
 claude-worktree -h / -help
+claude-worktree -version / --version
 
 # Examples
 claude-worktree feature/auth 'Implement authentication feature'
@@ -56,6 +57,7 @@ claude-worktree feature/auth 'Implement authentication feature' -danger
 claude-worktree feature/auth 'Implement authentication feature' -merge
 claude-worktree feature/auth 'Implement authentication feature' -draft
 claude-worktree feature/auth 'Implement authentication feature' -draft -base main
+claude-worktree feature/auth 'Implement authentication feature' -dry-run
 claude-worktree list
 claude-worktree list -json
 claude-worktree list -status
@@ -72,6 +74,7 @@ claude-worktree clean -dry-run
 - `-d, -danger` - Skip workspace warning (uses --dangerously-skip-permissions)
 - `-m, -merge` - Auto-merge into base branch and cleanup after task completion
 - `-draft` - Auto-create Draft PR after task completion (cannot be used with -merge)
+- `-n, -dry-run` - Preview what would be created without executing
 - `-v, -verbose` - Show hook execution logs
 - `-h, -help` - Show help
 
@@ -127,6 +130,8 @@ src/
   cli.test.ts
   options.ts           # CLI option extraction utility
   options.test.ts
+  version.ts           # Package version reader
+  version.test.ts
   types.ts             # Shared type definitions
   index.ts             # Public API (barrel exports)
 ```

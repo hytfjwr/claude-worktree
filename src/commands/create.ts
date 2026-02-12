@@ -31,6 +31,7 @@ import type {
   WorktreeInfo,
 } from "../types.ts";
 import { icons } from "../ui/icons.ts";
+import { logInfo } from "../ui/logger.ts";
 import { confirm } from "../ui/prompt.ts";
 import { executeHookWithSpinner } from "./hooks.ts";
 import { performRollback } from "./rollback.ts";
@@ -542,6 +543,29 @@ export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps
   }
   if (draft) {
     console.log(`${icons.memo()} Draft PR to: ${effectiveBaseBranch}`);
+  }
+
+  // Dry-run: preview what would happen and exit
+  if (args.dryRun) {
+    logInfo(`\n--- Dry Run ---`);
+    logInfo(`Git command: git worktree add -b ${branchName} "${worktreePath}" ${effectiveBaseBranch}`);
+    logInfo(`Launch mode: ${pane ? "WezTerm pane" : "current terminal"}`);
+    if (config?.postCreate) {
+      const hookPreview = config.postCreate.replace("{path}", worktreePath).replace("{slot}", "<auto>");
+      logInfo(`postCreate hook: ${hookPreview}`);
+    }
+    if (config?.preClean) {
+      const hookPreview = config.preClean.replace("{path}", worktreePath).replace("{slot}", "<auto>");
+      logInfo(`preClean hook: ${hookPreview}`);
+    }
+    if (config?.postClean) {
+      const hookPreview = config.postClean.replace("{path}", worktreePath).replace("{slot}", "<auto>");
+      logInfo(`postClean hook: ${hookPreview}`);
+    }
+    if (existingWorktree) {
+      logInfo(`\nNote: Existing worktree at ${existingWorktree.path} would be replaced.`);
+    }
+    return;
   }
 
   // Handle existing worktree

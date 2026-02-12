@@ -102,6 +102,7 @@ describe("parseArgs", () => {
           baseBranch: undefined,
           pane: false,
           verbose: false,
+          dryRun: false,
         },
       });
     });
@@ -127,6 +128,23 @@ describe("parseArgs", () => {
       // _run-in-pane is checked before help/-h and before the unknown-command guard
       const result = parseArgs(["_run-in-pane", "/tmp/payload.json"]);
       expect(result.type).toBe("_run-in-pane");
+    });
+  });
+
+  describe("version", () => {
+    test("-version flag - returns version", () => {
+      const result = parseArgs(["-version"]);
+      expect(result).toEqual({ type: "version" });
+    });
+
+    test("--version flag - returns version", () => {
+      const result = parseArgs(["--version"]);
+      expect(result).toEqual({ type: "version" });
+    });
+
+    test("-version is not matched when combined with other args", () => {
+      // -version only works as the sole argument to avoid false positives on positional args
+      expect(() => parseArgs(["feature/test", "-version"])).toThrow("Unknown option");
     });
   });
 
@@ -167,6 +185,7 @@ describe("parseCreateArgs", () => {
       baseBranch: undefined,
       pane: false,
       verbose: false,
+      dryRun: false,
     });
   });
 
@@ -182,6 +201,7 @@ describe("parseCreateArgs", () => {
       baseBranch: undefined,
       pane: false,
       verbose: false,
+      dryRun: false,
     });
   });
 
@@ -197,6 +217,7 @@ describe("parseCreateArgs", () => {
       baseBranch: undefined,
       pane: false,
       verbose: false,
+      dryRun: false,
     });
   });
 
@@ -212,6 +233,7 @@ describe("parseCreateArgs", () => {
       baseBranch: undefined,
       pane: false,
       verbose: false,
+      dryRun: false,
     });
   });
 
@@ -227,6 +249,7 @@ describe("parseCreateArgs", () => {
       baseBranch: undefined,
       pane: false,
       verbose: false,
+      dryRun: false,
     });
   });
 
@@ -242,6 +265,7 @@ describe("parseCreateArgs", () => {
       baseBranch: undefined,
       pane: false,
       verbose: false,
+      dryRun: false,
     });
   });
 
@@ -257,6 +281,7 @@ describe("parseCreateArgs", () => {
       baseBranch: undefined,
       pane: false,
       verbose: false,
+      dryRun: false,
     });
   });
 
@@ -272,6 +297,7 @@ describe("parseCreateArgs", () => {
       baseBranch: undefined,
       pane: false,
       verbose: false,
+      dryRun: false,
     });
   });
 
@@ -287,6 +313,7 @@ describe("parseCreateArgs", () => {
       baseBranch: undefined,
       pane: false,
       verbose: false,
+      dryRun: false,
     });
   });
 
@@ -302,6 +329,7 @@ describe("parseCreateArgs", () => {
       baseBranch: undefined,
       pane: false,
       verbose: false,
+      dryRun: false,
     });
   });
 
@@ -317,6 +345,7 @@ describe("parseCreateArgs", () => {
       baseBranch: "develop",
       pane: false,
       verbose: false,
+      dryRun: false,
     });
   });
 
@@ -332,6 +361,7 @@ describe("parseCreateArgs", () => {
       baseBranch: "develop",
       pane: false,
       verbose: false,
+      dryRun: false,
     });
   });
 
@@ -347,6 +377,7 @@ describe("parseCreateArgs", () => {
       baseBranch: "develop",
       pane: false,
       verbose: false,
+      dryRun: false,
     });
   });
 
@@ -362,6 +393,7 @@ describe("parseCreateArgs", () => {
       baseBranch: "develop",
       pane: false,
       verbose: false,
+      dryRun: false,
     });
   });
 
@@ -377,6 +409,7 @@ describe("parseCreateArgs", () => {
       baseBranch: "develop",
       pane: false,
       verbose: false,
+      dryRun: false,
     });
   });
 
@@ -392,6 +425,7 @@ describe("parseCreateArgs", () => {
       baseBranch: "develop",
       pane: false,
       verbose: false,
+      dryRun: false,
     });
   });
 
@@ -407,6 +441,7 @@ describe("parseCreateArgs", () => {
       baseBranch: undefined,
       pane: false,
       verbose: false,
+      dryRun: false,
     });
   });
 
@@ -422,6 +457,7 @@ describe("parseCreateArgs", () => {
       baseBranch: undefined,
       pane: false,
       verbose: false,
+      dryRun: false,
     });
   });
 
@@ -437,6 +473,7 @@ describe("parseCreateArgs", () => {
       baseBranch: "develop",
       pane: false,
       verbose: false,
+      dryRun: false,
     });
   });
 
@@ -452,6 +489,7 @@ describe("parseCreateArgs", () => {
       baseBranch: undefined,
       pane: false,
       verbose: false,
+      dryRun: false,
     });
   });
 
@@ -467,6 +505,7 @@ describe("parseCreateArgs", () => {
       baseBranch: undefined,
       pane: true,
       verbose: false,
+      dryRun: false,
     });
   });
 
@@ -482,6 +521,7 @@ describe("parseCreateArgs", () => {
       baseBranch: undefined,
       pane: true,
       verbose: false,
+      dryRun: false,
     });
   });
 
@@ -497,6 +537,7 @@ describe("parseCreateArgs", () => {
       baseBranch: undefined,
       pane: true,
       verbose: false,
+      dryRun: false,
     });
   });
 
@@ -512,7 +553,18 @@ describe("parseCreateArgs", () => {
       baseBranch: "develop",
       pane: true,
       verbose: false,
+      dryRun: false,
     });
+  });
+
+  test("-dry-run option", () => {
+    const result = parseCreateArgs(["feature/test", "Prompt", "-dry-run"]);
+    expect(result.dryRun).toBe(true);
+  });
+
+  test("-n option (alias for -dry-run)", () => {
+    const result = parseCreateArgs(["feature/test", "Prompt", "-n"]);
+    expect(result.dryRun).toBe(true);
   });
 
   test("-verbose option", () => {

@@ -5,7 +5,7 @@ export function isNodeError(err: unknown): err is NodeJS.ErrnoException {
   if (!(err instanceof Error)) {
     return false;
   }
-  if (!Object.prototype.hasOwnProperty.call(err, "code")) {
+  if (!Object.hasOwn(err, "code")) {
     return false;
   }
   const code = (err as { code?: unknown }).code;

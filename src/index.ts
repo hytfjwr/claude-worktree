@@ -139,3 +139,5 @@ export { createSilentLogger, logDebug, logError, logInfo, logWarn, resetLogger, 
 export { confirm, selectMultiple } from "./ui/prompt.ts";
 // Spinner utilities
 export { startSpinner } from "./ui/spinner.ts";
+// Version
+export { getVersion } from "./version.ts";

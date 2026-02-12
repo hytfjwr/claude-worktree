@@ -55,11 +55,13 @@ claude-worktree list [options]
 claude-worktree clean [options]
 ```
 
-### Help
+### Help / Version
 
 ```bash
 claude-worktree -h
 claude-worktree -help
+claude-worktree -version
+claude-worktree --version
 ```
 
 ### Options
@@ -70,8 +72,10 @@ claude-worktree -help
 - `-d, -danger` - Skip workspace warning (uses --dangerously-skip-permissions)
 - `-merge` - Auto-merge into base branch and cleanup after task completion
 - `-draft` - Auto-create Draft PR after task completion (cannot be used with -merge)
+- `-n, -dry-run` - Preview what would be created without executing
 - `-v, -verbose` - Show hook execution logs
 - `-h, -help` - Show help
+- `-version, --version` - Show version number
 
 ### List Options
 
@@ -133,6 +137,9 @@ claude-worktree clean -dry-run
 
 # Select from all worktrees manually
 claude-worktree clean -all
+
+# Preview what would be created (dry-run)
+claude-worktree feature/auth 'Implement authentication feature' -dry-run
 ```
 
 ### JSON Output Schema

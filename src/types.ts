@@ -192,6 +192,7 @@ export type CreateArgs = {
   baseBranch?: string;
   pane?: boolean;
   verbose?: boolean;
+  dryRun?: boolean;
 };
 
 export type RunInPaneArgs = {
@@ -210,6 +211,7 @@ export type RunInPaneArgs = {
 
 export type Command =
   | { type: "help"; commandHelp?: "create" | "list" | "clean" }
+  | { type: "version" }
   | { type: "create"; args: CreateArgs }
   | { type: "clean"; args: CleanArgs }
   | { type: "list"; args: ListArgs }

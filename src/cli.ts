@@ -4,6 +4,7 @@ import { executeList } from "./commands/list.ts";
 import { executeRunInPane, parseRunInPaneArgs } from "./commands/run-in-pane.ts";
 import { extractOptions } from "./options.ts";
 import type { CleanArgs, Command, CreateArgs, ListArgs } from "./types.ts";
+import { getVersion } from "./version.ts";
 
 export function showHelp(): void {
   console.log(`claude-worktree - CLI for parallel development with WezTerm + git worktree + Claude Code
@@ -30,8 +31,10 @@ Options:
   -d, -danger     Skip workspace warning (uses --dangerously-skip-permissions)
   -m, -merge      Auto-merge into base branch and cleanup after task completion
   -draft          Auto-create Draft PR after task completion (cannot be used with -merge)
+  -n, -dry-run    Preview what would be created without executing
   -v, -verbose    Show hook execution logs
   -h, -help       Show this help
+  -version, --version  Show version number
 
 List options:
   -j, -json      Output as JSON
@@ -53,6 +56,7 @@ Examples:
   claude-worktree feature/auth 'Implement authentication feature' -merge
   claude-worktree feature/auth 'Implement authentication feature' -draft
   claude-worktree feature/auth 'Implement authentication feature' -draft -base main
+  claude-worktree feature/auth 'Prompt' -dry-run
   claude-worktree list
   claude-worktree list -json
   claude-worktree clean
@@ -80,6 +84,7 @@ Options:
   -d, -danger          Skip workspace warning (uses --dangerously-skip-permissions)
   -m, -merge           Auto-merge into base branch and cleanup after task completion
   -draft               Auto-create Draft PR after task completion (cannot be used with -merge)
+  -n, -dry-run         Preview what would be created without executing
   -v, -verbose         Show hook execution logs
   -h, -help            Show this help
 
@@ -89,7 +94,8 @@ Examples:
   claude-worktree feature/auth -plan ./plan.md
   claude-worktree feature/auth 'Implement auth' -base develop
   claude-worktree feature/auth 'Implement auth' -merge
-  claude-worktree feature/auth 'Implement auth' -draft -base main`);
+  claude-worktree feature/auth 'Implement auth' -draft -base main
+  claude-worktree feature/auth 'Implement auth' -dry-run`);
 }
 
 export function showListHelp(): void {
@@ -214,6 +220,7 @@ export function parseCreateArgs(args: string[]): CreateArgs {
       danger: { type: "boolean", flag: "-danger", alias: "-d" },
       merge: { type: "boolean", flag: "-merge", alias: "-m" },
       draft: { type: "boolean", flag: "-draft" },
+      dryRun: { type: "boolean", flag: "-dry-run", alias: "-n" },
       verbose: { type: "boolean", flag: "-verbose", alias: "-v" },
       baseBranch: { type: "string", flag: "-base", alias: "-b", errorMessage: "-base requires a branch name argument" },
       planFile: { type: "string", flag: "-plan", errorMessage: "-plan requires a file path argument" },
@@ -223,7 +230,7 @@ export function parseCreateArgs(args: string[]): CreateArgs {
     unknownErrorPrefix: "Unknown option",
   });
 
-  const { pane, danger, merge, draft, verbose } = booleans;
+  const { pane, danger, merge, draft, dryRun, verbose } = booleans;
   const { baseBranch, planFile } = strings;
 
   // Check for unknown options
@@ -266,6 +273,7 @@ export function parseCreateArgs(args: string[]): CreateArgs {
     baseBranch,
     pane,
     verbose,
+    dryRun,
   };
 }
 
@@ -316,6 +324,12 @@ export function parseArgs(args: string[]): Command {
       throw new Error("_run-in-pane requires exactly one payload file path argument");
     }
     return { type: "_run-in-pane", payloadPath: args[1] };
+  }
+
+  // Version flag: checked before help and before empty-args check
+  // Only match when it's the sole argument to avoid false positives on positional args
+  if (args.length === 1 && (args[0] === "-version" || args[0] === "--version")) {
+    return { type: "version" };
   }
 
   // No args → global help
@@ -373,6 +387,9 @@ export async function run(command: Command): Promise<void> {
       } else {
         showHelp();
       }
+      break;
+    case "version":
+      console.log(getVersion());
       break;
     case "create":
       await runCreate(command.args);
