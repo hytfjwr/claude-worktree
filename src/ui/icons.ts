@@ -26,4 +26,8 @@ export const icons = {
   bullet: icon("\u2022", "*"),
   active: icon("\u25cf", "*"),
   inactive: icon("\u25cb", "o"),
+
+  cursor: icon("\u276f", ">"),
+  checked: icon("\u25fc", "[x]"),
+  unchecked: icon("\u25fb", "[ ]"),
 };

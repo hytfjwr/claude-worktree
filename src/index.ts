@@ -145,6 +145,9 @@ export type { Logger } from "./ui/logger.ts";
 export { createSilentLogger, logDebug, logError, logInfo, logWarn, resetLogger, setLogger } from "./ui/logger.ts";
 // Prompt utilities
 export { confirm, selectMultiple, selectWorktree } from "./ui/prompt.ts";
+export type { SelectItem } from "./ui/select.ts";
+// Select utilities
+export { selectMany, selectSingle } from "./ui/select.ts";
 // Spinner utilities
 export { startSpinner } from "./ui/spinner.ts";
 // Version

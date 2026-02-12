@@ -92,6 +92,16 @@ claude-worktree --version
 - `-s, -status` - Show Claude session status (Running/Done)
 - `-v, -verbose` - Show full paths and details
 
+When `resume` or `clean -all` is run without a branch name, an interactive TUI selector is displayed:
+
+- **↑/↓** or **j/k** — navigate items
+- **Enter** — confirm selection
+- **Space** — toggle item (multi-select only)
+- **a** — select/deselect all (multi-select only)
+- **q/Esc** — cancel
+
+When stdin is not a TTY (e.g., piped input), the selector falls back to a numbered-list prompt.
+
 ### Resume Options
 
 - `-p, -pane` - Open in a new WezTerm pane (default: run in current terminal)
@@ -141,7 +151,7 @@ claude-worktree resume feature/auth
 # Resume with an additional prompt
 claude-worktree resume feature/auth 'Continue the authentication implementation'
 
-# Interactive worktree selection
+# Interactive worktree selection (arrow-key TUI)
 claude-worktree resume
 
 # List worktrees with status
@@ -159,7 +169,7 @@ claude-worktree clean
 # Preview worktrees to be deleted
 claude-worktree clean -dry-run
 
-# Select from all worktrees manually
+# Select from all worktrees manually (arrow-key TUI)
 claude-worktree clean -all
 
 # Preview what would be created (dry-run)
