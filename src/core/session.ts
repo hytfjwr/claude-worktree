@@ -1,10 +1,8 @@
-import { mkdir, open, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { unlink } from "node:fs/promises";
 import { join } from "node:path";
-import { setTimeout } from "node:timers/promises";
 
 import type { SessionInfo, SessionState, WeztermPane } from "../types.ts";
-import { icons } from "../ui/icons.ts";
-import { isNodeError } from "./errors.ts";
+import { atomicWriteJson, readJsonFile, withLock } from "./cache.ts";
 import { getCacheDir } from "./slot.ts";
 
 type SessionCache = Record<string, SessionInfo>;
@@ -17,86 +15,37 @@ function getLockFile(): string {
   return join(getCacheDir(), "sessions.lock");
 }
 
-async function readCache(): Promise<SessionCache> {
-  try {
-    const data = await readFile(getSessionFile(), "utf-8");
-    return JSON.parse(data) as SessionCache;
-  } catch (err: unknown) {
-    if (isNodeError(err) && err.code === "ENOENT") {
-      return {};
-    }
-    throw err;
-  }
-}
-
-async function writeCache(cache: SessionCache): Promise<void> {
-  const sessionFile = getSessionFile();
-  const tempFile = `${sessionFile}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
-  await writeFile(tempFile, JSON.stringify(cache, null, 2), "utf-8");
-  await rename(tempFile, sessionFile);
-}
-
-async function withLock<T>(fn: () => Promise<T>): Promise<T> {
-  const cacheDir = getCacheDir();
-  await mkdir(cacheDir, { recursive: true });
-  const lockFile = getLockFile();
-  const maxRetries = 50;
-  let handle: Awaited<ReturnType<typeof open>> | undefined;
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      handle = await open(lockFile, "wx");
-      break;
-    } catch {
-      await setTimeout(100);
-    }
-  }
-  if (!handle) {
-    console.warn(`${icons.warning()}  Lock acquisition failed for sessions.lock, proceeding without lock`);
-    return fn();
-  }
-  try {
-    return await fn();
-  } finally {
-    await handle.close();
-    try {
-      await unlink(lockFile);
-    } catch {
-      // Lock file may already be removed
-    }
-  }
-}
-
 export async function saveSession(worktreePath: string, session: SessionInfo): Promise<void> {
-  await withLock(async () => {
-    const cache = await readCache();
+  await withLock(getLockFile(), async () => {
+    const cache = await readJsonFile<SessionCache>(getSessionFile(), {});
     cache[worktreePath] = session;
-    await writeCache(cache);
+    await atomicWriteJson(getSessionFile(), cache);
   });
 }
 
 export async function readSession(worktreePath: string): Promise<SessionInfo | undefined> {
-  const cache = await readCache();
+  const cache = await readJsonFile<SessionCache>(getSessionFile(), {});
   return cache[worktreePath];
 }
 
 export async function readAllSessions(): Promise<Record<string, SessionInfo>> {
-  return readCache();
+  return readJsonFile<SessionCache>(getSessionFile(), {});
 }
 
 export async function completeSession(worktreePath: string): Promise<void> {
-  await withLock(async () => {
-    const cache = await readCache();
+  await withLock(getLockFile(), async () => {
+    const cache = await readJsonFile<SessionCache>(getSessionFile(), {});
     if (!cache[worktreePath]) {
       return;
     }
     cache[worktreePath].completedAt = new Date().toISOString();
-    await writeCache(cache);
+    await atomicWriteJson(getSessionFile(), cache);
   });
 }
 
 export async function deleteSession(worktreePath: string): Promise<void> {
-  await withLock(async () => {
-    const cache = await readCache();
+  await withLock(getLockFile(), async () => {
+    const cache = await readJsonFile<SessionCache>(getSessionFile(), {});
 
     if (!Object.hasOwn(cache, worktreePath)) {
       return;
@@ -113,7 +62,7 @@ export async function deleteSession(worktreePath: string): Promise<void> {
       return;
     }
 
-    await writeCache(cache);
+    await atomicWriteJson(getSessionFile(), cache);
   });
 }
 

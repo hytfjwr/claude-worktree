@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { TextDecoder } from "node:util";
 
 import type { HookVars, ProjectConfig } from "../types.ts";
-import { icons } from "../ui/icons.ts";
+import { logWarn } from "../ui/logger.ts";
 import { getErrorMessage, isNodeError } from "./errors.ts";
 import { exec } from "./exec.ts";
 
@@ -25,7 +25,7 @@ export async function loadProjectConfig(repoRoot: string): Promise<ProjectConfig
     return JSON.parse(content) as ProjectConfig;
   } catch (error) {
     const message = getErrorMessage(error);
-    console.warn(`${icons.warning()}  Failed to parse .claude-worktree.json: ${message}`);
+    logWarn(`Failed to parse .claude-worktree.json: ${message}`);
     return null;
   }
 }

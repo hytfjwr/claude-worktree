@@ -23,6 +23,8 @@ export { executeList, formatSessionState } from "./commands/list.ts";
 export { performRollback } from "./commands/rollback.ts";
 // Run-in-pane command
 export { executeRunInPane } from "./commands/run-in-pane.ts";
+// Cache utilities
+export { LOCK_MAX_RETRIES, LOCK_RETRY_INTERVAL_MS } from "./core/cache.ts";
 // Config utilities
 export { buildHookCommand, loadProjectConfig, runHook } from "./core/config.ts";
 // Error utilities
@@ -129,6 +131,9 @@ export type {
 export { isColorEnabled, shouldUseColor } from "./ui/color.ts";
 // Icon utilities
 export { icons } from "./ui/icons.ts";
+export type { Logger } from "./ui/logger.ts";
+// Logger utilities
+export { createSilentLogger, logDebug, logError, logInfo, logWarn, resetLogger, setLogger } from "./ui/logger.ts";
 // Prompt utilities
 export { confirm, selectMultiple } from "./ui/prompt.ts";
 // Spinner utilities

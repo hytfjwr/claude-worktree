@@ -1,11 +1,9 @@
-import { mkdir, open, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { unlink } from "node:fs/promises";
 import { createServer } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { setTimeout } from "node:timers/promises";
 
-import { icons } from "../ui/icons.ts";
-import { isNodeError } from "./errors.ts";
+import { atomicWriteJson, readJsonFile, withLock } from "./cache.ts";
 
 export function isPortInUse(port: number): Promise<boolean> {
   return new Promise((resolve) => {
@@ -51,73 +49,22 @@ function getLockFile(): string {
 
 type SlotCache = Record<string, number>;
 
-async function readCache(): Promise<SlotCache> {
-  try {
-    const data = await readFile(getCacheFile(), "utf-8");
-    return JSON.parse(data) as SlotCache;
-  } catch (err: unknown) {
-    if (isNodeError(err) && err.code === "ENOENT") {
-      return {};
-    }
-    // Parse errors or other read errors: return empty cache
-    return {};
-  }
-}
-
-async function writeCache(cache: SlotCache): Promise<void> {
-  const cacheFile = getCacheFile();
-  const tempFile = `${cacheFile}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
-  await writeFile(tempFile, JSON.stringify(cache, null, 2), "utf-8");
-  await rename(tempFile, cacheFile);
-}
-
-async function withLock<T>(fn: () => Promise<T>): Promise<T> {
-  const cacheDir = getCacheDir();
-  await mkdir(cacheDir, { recursive: true });
-  const lockFile = getLockFile();
-  // Acquire exclusive lock via O_CREAT|O_EXCL
-  const maxRetries = 50;
-  let handle: Awaited<ReturnType<typeof open>> | undefined;
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      handle = await open(lockFile, "wx");
-      break;
-    } catch {
-      await setTimeout(100);
-    }
-  }
-  if (!handle) {
-    console.warn(`${icons.warning()}  Lock acquisition failed for slots.lock, proceeding without lock`);
-    return fn();
-  }
-  try {
-    return await fn();
-  } finally {
-    await handle.close();
-    try {
-      await unlink(lockFile);
-    } catch {
-      // Lock file may already be removed
-    }
-  }
-}
-
 export async function saveSlot(worktreePath: string, slot: number): Promise<void> {
-  await withLock(async () => {
-    const cache = await readCache();
+  await withLock(getLockFile(), async () => {
+    const cache = await readJsonFile<SlotCache>(getCacheFile(), {}, "fallback");
     cache[worktreePath] = slot;
-    await writeCache(cache);
+    await atomicWriteJson(getCacheFile(), cache);
   });
 }
 
 export async function readSlot(worktreePath: string): Promise<number | undefined> {
-  const cache = await readCache();
+  const cache = await readJsonFile<SlotCache>(getCacheFile(), {}, "fallback");
   return cache[worktreePath];
 }
 
 export async function deleteSlot(worktreePath: string): Promise<void> {
-  await withLock(async () => {
-    const cache = await readCache();
+  await withLock(getLockFile(), async () => {
+    const cache = await readJsonFile<SlotCache>(getCacheFile(), {}, "fallback");
 
     if (!Object.hasOwn(cache, worktreePath)) {
       return;
@@ -134,6 +81,6 @@ export async function deleteSlot(worktreePath: string): Promise<void> {
       return;
     }
 
-    await writeCache(cache);
+    await atomicWriteJson(getCacheFile(), cache);
   });
 }
