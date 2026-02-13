@@ -43,6 +43,17 @@ export function extractOptions(args: string[], schema: OptionSchema): ExtractRes
       }
     } else if (ignoredSet.has(arg)) {
       // consume and ignore
+    } else if (arg.startsWith("--")) {
+      const singleDash = `-${arg.slice(2)}`;
+      if (flagMap.has(singleDash) || ignoredSet.has(singleDash)) {
+        const prefix = schema.unknownErrorPrefix ?? "Unknown option";
+        throw new Error(`${prefix}: "${arg}" (did you mean "${singleDash}"?)`);
+      }
+      if (schema.unknownHandling === "error") {
+        const prefix = schema.unknownErrorPrefix ?? "Unknown option";
+        throw new Error(`${prefix}: ${arg}`);
+      }
+      remaining.push(arg);
     } else if (schema.unknownHandling === "error" && arg.startsWith("-")) {
       const prefix = schema.unknownErrorPrefix ?? "Unknown option";
       throw new Error(`${prefix}: ${arg}`);

@@ -693,6 +693,18 @@ describe("parseCreateArgs", () => {
   test("error: unknown option after prompt", () => {
     expect(() => parseCreateArgs(["feature/test", "Prompt", "-foo"])).toThrow("Unknown option: -foo");
   });
+
+  test("error: --pane → hint suggesting -pane", () => {
+    expect(() => parseCreateArgs(["feature/test", "Prompt", "--pane"])).toThrow(
+      'Unknown option: "--pane" (did you mean "-pane"?)',
+    );
+  });
+
+  test("error: --base → hint suggesting -base", () => {
+    expect(() => parseCreateArgs(["feature/test", "Prompt", "--base", "develop"])).toThrow(
+      'Unknown option: "--base" (did you mean "-base"?)',
+    );
+  });
 });
 
 describe("parseCleanArgs", () => {
@@ -759,6 +771,12 @@ describe("parseCleanArgs", () => {
   test("error: unknown option", () => {
     expect(() => parseCleanArgs(["-unknown"])).toThrow("Unknown option for clean command: -unknown");
   });
+
+  test("error: --force → hint suggesting -force", () => {
+    expect(() => parseCleanArgs(["--force"])).toThrow(
+      'Unknown option for clean command: "--force" (did you mean "-force"?)',
+    );
+  });
 });
 
 describe("parseListArgs", () => {
@@ -822,6 +840,12 @@ describe("parseListArgs", () => {
 
   test("error: unknown option", () => {
     expect(() => parseListArgs(["-unknown"])).toThrow("Unknown option for list command: -unknown");
+  });
+
+  test("error: --json → hint suggesting -json", () => {
+    expect(() => parseListArgs(["--json"])).toThrow(
+      'Unknown option for list command: "--json" (did you mean "-json"?)',
+    );
   });
 });
 
@@ -1126,6 +1150,12 @@ describe("parseResumeArgs", () => {
 
   test("error: unknown option", () => {
     expect(() => parseResumeArgs(["-unknown"])).toThrow("Unknown option for resume command: -unknown");
+  });
+
+  test("error: --pane → hint suggesting -pane", () => {
+    expect(() => parseResumeArgs(["--pane"])).toThrow(
+      'Unknown option for resume command: "--pane" (did you mean "-pane"?)',
+    );
   });
 
   test("-h is ignored (does not throw)", () => {

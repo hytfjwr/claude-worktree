@@ -153,6 +153,57 @@ describe("extractOptions", () => {
     });
   });
 
+  describe("double-dash hint", () => {
+    const schema: OptionSchema = {
+      options: {
+        force: { type: "boolean", flag: "-force", alias: "-f" },
+      },
+      unknownHandling: "error",
+      ignoredFlags: ["-h", "-help"],
+    };
+
+    test("--force → hint suggesting -force (known flag)", () => {
+      expect(() => extractOptions(["--force"], schema)).toThrow('Unknown option: "--force" (did you mean "-force"?)');
+    });
+
+    test("--f → hint suggesting -f (known alias)", () => {
+      expect(() => extractOptions(["--f"], schema)).toThrow('Unknown option: "--f" (did you mean "-f"?)');
+    });
+
+    test("--help → hint suggesting -help (ignored flag)", () => {
+      expect(() => extractOptions(["--help"], schema)).toThrow('Unknown option: "--help" (did you mean "-help"?)');
+    });
+
+    test("--unknown → regular error (no single-dash match)", () => {
+      expect(() => extractOptions(["--unknown"], schema)).toThrow("Unknown option: --unknown");
+    });
+
+    test("passthrough mode: --force → hint (still shows hint even in passthrough)", () => {
+      const passthroughSchema: OptionSchema = {
+        options: {
+          force: { type: "boolean", flag: "-force", alias: "-f" },
+        },
+        unknownHandling: "passthrough",
+      };
+      expect(() => extractOptions(["--force"], passthroughSchema)).toThrow(
+        'Unknown option: "--force" (did you mean "-force"?)',
+      );
+    });
+
+    test("uses unknownErrorPrefix when available", () => {
+      const prefixSchema: OptionSchema = {
+        options: {
+          force: { type: "boolean", flag: "-force" },
+        },
+        unknownHandling: "error",
+        unknownErrorPrefix: "Unknown option for test",
+      };
+      expect(() => extractOptions(["--force"], prefixSchema)).toThrow(
+        'Unknown option for test: "--force" (did you mean "-force"?)',
+      );
+    });
+  });
+
   describe("combined scenarios", () => {
     const schema: OptionSchema = {
       options: {
