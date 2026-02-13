@@ -1,9 +1,9 @@
-import { spawn } from "node:child_process";
 import { readFile, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, resolve } from "node:path";
 
 import { getErrorMessage, isNodeError } from "../core/errors.ts";
+import { spawnInteractive } from "../core/spawn.ts";
 import type { RunInPaneArgs } from "../types.ts";
 import { icons } from "../ui/icons.ts";
 import { executeHookWithSpinner } from "./hooks.ts";
@@ -114,14 +114,5 @@ export async function executeRunInPane(args: RunInPaneArgs): Promise<void> {
   }
 
   // Launch Claude Code
-  await new Promise<void>((resolve, reject) => {
-    const proc = spawn("sh", ["-c", claudeCommand], {
-      stdio: ["inherit", "inherit", "inherit"],
-      cwd: worktreePath,
-    });
-    proc.on("error", reject);
-    proc.on("close", () => {
-      resolve();
-    });
-  });
+  await spawnInteractive({ command: claudeCommand, cwd: worktreePath });
 }

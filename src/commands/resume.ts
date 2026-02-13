@@ -1,8 +1,8 @@
-import { spawn } from "node:child_process";
 import { access } from "node:fs/promises";
 
 import { getGitContext, listWorktrees } from "../core/git.ts";
 import { completeSession, saveSession } from "../core/session.ts";
+import { spawnInteractive } from "../core/spawn.ts";
 import { buildResumeCommand } from "../external/claude.ts";
 import { checkWeztermAvailable, createPane, sendCommand } from "../external/wezterm.ts";
 import type { ResumeArgs, ResumeDeps, WorktreeInfo } from "../types.ts";
@@ -58,44 +58,7 @@ async function launchResumeInTerminal(worktree: WorktreeInfo, claudeCommand: str
     startedAt: new Date().toISOString(),
   });
 
-  await new Promise<void>((res, rej) => {
-    const proc = spawn("sh", ["-c", claudeCommand], {
-      stdio: ["inherit", "inherit", "inherit"],
-      cwd: worktree.path,
-    });
-
-    const forwardSignal = (signal: NodeJS.Signals) => {
-      try {
-        proc.kill(signal);
-      } catch {
-        // Process may already be dead
-      }
-    };
-    const onSigint = () => {
-      process.removeListener("SIGINT", onSigint);
-      forwardSignal("SIGINT");
-    };
-    const onSigterm = () => {
-      process.removeListener("SIGTERM", onSigterm);
-      forwardSignal("SIGTERM");
-    };
-    process.on("SIGINT", onSigint);
-    process.on("SIGTERM", onSigterm);
-
-    const cleanup = () => {
-      process.removeListener("SIGINT", onSigint);
-      process.removeListener("SIGTERM", onSigterm);
-    };
-
-    proc.on("error", (err) => {
-      cleanup();
-      rej(err);
-    });
-    proc.on("close", () => {
-      cleanup();
-      res();
-    });
-  });
+  await spawnInteractive({ command: claudeCommand, cwd: worktree.path });
 
   await deps.completeSession(worktree.path);
 }

@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -19,6 +18,7 @@ import {
 } from "../core/git.ts";
 import { completeSession, deleteSession, saveSession } from "../core/session.ts";
 import { deleteSlot, findAvailableSlot, readSlot, saveSlot } from "../core/slot.ts";
+import { spawnInteractive } from "../core/spawn.ts";
 import { buildClaudeCommand } from "../external/claude.ts";
 import { checkWeztermAvailable, createPane, sendCommand } from "../external/wezterm.ts";
 import type {
@@ -410,7 +410,7 @@ async function launchClaudeInTerminal(
   // Launch Claude Code in current terminal
   console.log(`${icons.done()} Worktree created. Starting Claude Code...`);
 
-  const commands = [`cd "${worktreePath}"`, deps.buildClaudeCommand(claudeOptions)].join(" && ");
+  const claudeCommand = deps.buildClaudeCommand(claudeOptions);
 
   // Save session metadata before launching
   await deps.saveSession(worktreePath, {
@@ -418,45 +418,7 @@ async function launchClaudeInTerminal(
     startedAt: new Date().toISOString(),
   });
 
-  await new Promise<void>((res, rej) => {
-    const proc = spawn("sh", ["-c", commands], {
-      stdio: ["inherit", "inherit", "inherit"],
-    });
-
-    const forwardSignal = (signal: NodeJS.Signals) => {
-      try {
-        proc.kill(signal);
-      } catch {
-        // Process may already be dead
-      }
-    };
-    // Use self-removing handlers so that Node's default signal behavior
-    // is restored after the first forward (e.g., a second Ctrl+C terminates immediately)
-    const onSigint = () => {
-      process.removeListener("SIGINT", onSigint);
-      forwardSignal("SIGINT");
-    };
-    const onSigterm = () => {
-      process.removeListener("SIGTERM", onSigterm);
-      forwardSignal("SIGTERM");
-    };
-    process.on("SIGINT", onSigint);
-    process.on("SIGTERM", onSigterm);
-
-    const cleanup = () => {
-      process.removeListener("SIGINT", onSigint);
-      process.removeListener("SIGTERM", onSigterm);
-    };
-
-    proc.on("error", (err) => {
-      cleanup();
-      rej(err);
-    });
-    proc.on("close", () => {
-      cleanup();
-      res();
-    });
-  });
+  await spawnInteractive({ command: claudeCommand, cwd: worktreePath });
 
   // Mark session as completed after process exits
   await deps.completeSession(worktreePath);

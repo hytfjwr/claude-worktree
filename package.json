@@ -1,6 +1,6 @@
 {
   "name": "@hytfjwr/claude-worktree",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "CLI for parallel development with WezTerm + git worktree + Claude Code",
   "type": "module",
   "main": "dist/src/index.js",

@@ -65,6 +65,9 @@ export {
 } from "./core/session.ts";
 // Slot utilities
 export { deleteSlot, findAvailableSlot, getCacheDir, isPortInUse, readSlot, saveSlot } from "./core/slot.ts";
+export type { SpawnInteractiveOptions } from "./core/spawn.ts";
+// Spawn utilities
+export { spawnInteractive } from "./core/spawn.ts";
 // Claude utilities
 export { buildClaudeCommand, buildResumeCommand } from "./external/claude.ts";
 // WezTerm utilities
