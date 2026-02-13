@@ -190,6 +190,7 @@ export type CreateArgs = {
   merge?: boolean;
   draft?: boolean;
   baseBranch?: string;
+  pull?: boolean;
   pane?: boolean;
   verbose?: boolean;
   dryRun?: boolean;
@@ -336,6 +337,7 @@ export type CreateDeps = {
   listWorktrees: () => Promise<ListWorktreesResult>;
   branchExists: (branchName: string) => Promise<boolean>;
   verifyBranchRef: (ref: string) => Promise<boolean>;
+  fetchOrigin: (branch?: string) => Promise<void>;
   createWorktree: (branchName: string, worktreePath: string, baseBranch: string) => Promise<void>;
   removeWorktree: (path: string, force?: boolean) => Promise<void>;
   deleteLocalBranch: (branchName: string, force?: boolean) => Promise<void>;

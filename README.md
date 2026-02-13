@@ -81,6 +81,7 @@ claude-worktree --version
 - `-d, -danger` - Skip workspace warning (uses --dangerously-skip-permissions)
 - `-merge` - Auto-merge into base branch and cleanup after task completion
 - `-draft` - Auto-create Draft PR after task completion (cannot be used with -merge)
+- `-pull` - Fetch latest base branch from remote before creating worktree
 - `-n, -dry-run` - Preview what would be created without executing
 - `-v, -verbose` - Show hook execution logs
 - `-h, -help` - Show help
@@ -144,6 +145,12 @@ claude-worktree feature/auth 'Implement authentication feature' -draft
 
 # Draft PR with specific base branch
 claude-worktree feature/auth 'Implement authentication feature' -draft -base main
+
+# Fetch latest remote before creating worktree
+claude-worktree feature/auth 'Implement authentication feature' -pull
+
+# Fetch latest remote with specific base branch
+claude-worktree feature/auth 'Implement authentication feature' -pull -base main
 
 # Resume a Claude session in an existing worktree
 claude-worktree resume feature/auth

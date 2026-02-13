@@ -62,6 +62,8 @@ claude-worktree feature/auth 'Implement authentication feature' -danger
 claude-worktree feature/auth 'Implement authentication feature' -merge
 claude-worktree feature/auth 'Implement authentication feature' -draft
 claude-worktree feature/auth 'Implement authentication feature' -draft -base main
+claude-worktree feature/auth 'Implement authentication feature' -pull
+claude-worktree feature/auth 'Implement authentication feature' -pull -base main
 claude-worktree feature/auth 'Implement authentication feature' -dry-run
 claude-worktree resume feature/auth
 claude-worktree resume feature/auth 'Continue implementation'
@@ -82,6 +84,7 @@ claude-worktree clean -dry-run
 - `-d, -danger` - Skip workspace warning (uses --dangerously-skip-permissions)
 - `-m, -merge` - Auto-merge into base branch and cleanup after task completion
 - `-draft` - Auto-create Draft PR after task completion (cannot be used with -merge)
+- `-pull` - Fetch latest base branch from remote before creating worktree
 - `-n, -dry-run` - Preview what would be created without executing
 - `-v, -verbose` - Show hook execution logs
 - `-h, -help` - Show help

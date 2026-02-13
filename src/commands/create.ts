@@ -10,6 +10,7 @@ import {
   buildWorktreeCommand,
   createWorktree,
   deleteLocalBranch,
+  fetchOrigin,
   getGitContext,
   getWorktreePath,
   listWorktrees,
@@ -32,7 +33,7 @@ import type {
   WorktreeInfo,
 } from "../types.ts";
 import { icons } from "../ui/icons.ts";
-import { logInfo } from "../ui/logger.ts";
+import { logInfo, logWarn } from "../ui/logger.ts";
 import { confirm } from "../ui/prompt.ts";
 import { executeHookWithSpinner } from "./hooks.ts";
 import { performRollback } from "./rollback.ts";
@@ -49,6 +50,7 @@ const defaultDeps: CreateDeps = {
   listWorktrees,
   branchExists,
   verifyBranchRef,
+  fetchOrigin,
   createWorktree,
   removeWorktree,
   deleteLocalBranch,
@@ -474,6 +476,24 @@ export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps
     }
   }
 
+  // Fetch and resolve remote base branch when -pull is specified
+  let worktreeBaseBranch = effectiveBaseBranch;
+  if (args.pull) {
+    if (args.dryRun) {
+      // In dry-run, assume remote ref would be used (no network call)
+      worktreeBaseBranch = `origin/${effectiveBaseBranch}`;
+    } else {
+      await deps.fetchOrigin(effectiveBaseBranch);
+      const remoteRef = `origin/${effectiveBaseBranch}`;
+      const remoteExists = await deps.verifyBranchRef(remoteRef);
+      if (remoteExists) {
+        worktreeBaseBranch = remoteRef;
+      } else {
+        logWarn(`Remote branch not found: ${remoteRef} (using local branch)`);
+      }
+    }
+  }
+
   const config = await deps.loadProjectConfig(git.repoRoot);
 
   // Fetch worktrees once and reuse for both limit check and existing worktree detection
@@ -507,11 +527,18 @@ export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps
   if (draft) {
     console.log(`${icons.memo()} Draft PR to: ${effectiveBaseBranch}`);
   }
+  if (args.pull) {
+    console.log(`${icons.sparkle()} Pull: fetch latest from remote`);
+  }
 
   // Dry-run: preview what would happen and exit
   if (args.dryRun) {
     logInfo(`\n--- Dry Run ---`);
-    logInfo(`Git command: ${buildWorktreeCommand(branchName, worktreePath, effectiveBaseBranch)}`);
+    if (args.pull) {
+      logInfo(`Fetch: git fetch origin ${effectiveBaseBranch}`);
+      logInfo(`Worktree base: ${worktreeBaseBranch} (remote)`);
+    }
+    logInfo(`Git command: ${buildWorktreeCommand(branchName, worktreePath, worktreeBaseBranch)}`);
     logInfo(`Launch mode: ${pane ? "WezTerm pane" : "current terminal"}`);
     if (config?.postCreate) {
       const hookPreview = config.postCreate.replace("{path}", worktreePath).replace("{slot}", "<auto>");
@@ -551,7 +578,7 @@ export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps
   }
 
   // Create worktree
-  await deps.createWorktree(branchName, worktreePath, effectiveBaseBranch);
+  await deps.createWorktree(branchName, worktreePath, worktreeBaseBranch);
 
   // Allocate and persist slot if any hook uses {slot}
   let slot: number | undefined;

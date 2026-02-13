@@ -264,6 +264,15 @@ export async function fetchAndPrune(): Promise<void> {
   await exec("git", ["fetch", "--prune"]).quiet();
 }
 
+export async function fetchOrigin(branch?: string): Promise<void> {
+  const args = branch ? ["fetch", "origin", branch] : ["fetch", "origin"];
+  const result = await exec("git", args).nothrow().quiet();
+  if (result.exitCode !== 0) {
+    const stderr = result.stderr.toString().trim();
+    throw new Error(`Failed to fetch from origin: ${stderr}`);
+  }
+}
+
 export async function branchExists(branchName: string): Promise<boolean> {
   const result = await exec("git", ["show-ref", "--verify", "--quiet", `refs/heads/${branchName}`])
     .nothrow()

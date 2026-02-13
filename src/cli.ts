@@ -34,6 +34,7 @@ Options:
   -d, -danger     Skip workspace warning (uses --dangerously-skip-permissions)
   -m, -merge      Auto-merge into base branch and cleanup after task completion
   -draft          Auto-create Draft PR after task completion (cannot be used with -merge)
+  -pull           Fetch latest base branch from remote before creating worktree
   -n, -dry-run    Preview what would be created without executing
   -v, -verbose    Show hook execution logs
   -h, -help       Show this help
@@ -95,6 +96,7 @@ Options:
   -d, -danger          Skip workspace warning (uses --dangerously-skip-permissions)
   -m, -merge           Auto-merge into base branch and cleanup after task completion
   -draft               Auto-create Draft PR after task completion (cannot be used with -merge)
+  -pull                Fetch latest base branch from remote before creating worktree
   -n, -dry-run         Preview what would be created without executing
   -v, -verbose         Show hook execution logs
   -h, -help            Show this help
@@ -257,6 +259,7 @@ export function parseCreateArgs(args: string[]): CreateArgs {
       danger: { type: "boolean", flag: "-danger", alias: "-d" },
       merge: { type: "boolean", flag: "-merge", alias: "-m" },
       draft: { type: "boolean", flag: "-draft" },
+      pull: { type: "boolean", flag: "-pull" },
       dryRun: { type: "boolean", flag: "-dry-run", alias: "-n" },
       verbose: { type: "boolean", flag: "-verbose", alias: "-v" },
       baseBranch: { type: "string", flag: "-base", alias: "-b", errorMessage: "-base requires a branch name argument" },
@@ -267,7 +270,7 @@ export function parseCreateArgs(args: string[]): CreateArgs {
     unknownErrorPrefix: "Unknown option",
   });
 
-  const { pane, danger, merge, draft, dryRun, verbose } = booleans;
+  const { pane, danger, merge, draft, pull, dryRun, verbose } = booleans;
   const { baseBranch, planFile } = strings;
 
   // Check for unknown options
@@ -307,6 +310,7 @@ export function parseCreateArgs(args: string[]): CreateArgs {
     danger,
     merge,
     draft,
+    pull,
     baseBranch,
     pane,
     verbose,

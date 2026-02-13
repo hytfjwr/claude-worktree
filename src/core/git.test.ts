@@ -724,6 +724,60 @@ describe("deleteLocalBranch", () => {
   });
 });
 
+describe("fetchOrigin", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    mockExecImpl.current = null;
+  });
+  afterEach(() => {
+    mockExecImpl.current = null;
+  });
+
+  test("fetches specific branch from origin", async () => {
+    let capturedArgs: string[] = [];
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("fetch")) {
+        capturedArgs = args;
+        return { stdout: "" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { fetchOrigin } = await import("./git.ts");
+    await fetchOrigin("main");
+
+    expect(capturedArgs).toEqual(["fetch", "origin", "main"]);
+  });
+
+  test("fetches all from origin when no branch specified", async () => {
+    let capturedArgs: string[] = [];
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("fetch")) {
+        capturedArgs = args;
+        return { stdout: "" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { fetchOrigin } = await import("./git.ts");
+    await fetchOrigin();
+
+    expect(capturedArgs).toEqual(["fetch", "origin"]);
+  });
+
+  test("throws error when fetch fails", async () => {
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("fetch")) {
+        return { stdout: "", stderr: "fatal: could not read from remote", exitCode: 128 };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { fetchOrigin } = await import("./git.ts");
+    await expect(fetchOrigin("main")).rejects.toThrow("Failed to fetch from origin");
+  });
+});
+
 describe("branchExists", () => {
   beforeEach(() => {
     vi.resetModules();
