@@ -22,6 +22,7 @@ vi.mock("../ui/icons.ts", () => ({
   icons: {
     success: () => "\u2713",
     fail: () => "\u2717",
+    warning: () => "\u26A0",
   },
 }));
 

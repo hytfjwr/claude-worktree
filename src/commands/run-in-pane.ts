@@ -5,7 +5,7 @@ import { basename, dirname, resolve } from "node:path";
 import { getErrorMessage, isNodeError } from "../core/errors.ts";
 import { spawnInteractive } from "../core/spawn.ts";
 import type { RunInPaneArgs } from "../types.ts";
-import { icons } from "../ui/icons.ts";
+import { logError } from "../ui/logger.ts";
 import { executeHookWithSpinner } from "./hooks.ts";
 import { performRollback } from "./rollback.ts";
 
@@ -97,7 +97,7 @@ export async function executeRunInPane(args: RunInPaneArgs): Promise<void> {
       timeout: args.postCreateTimeout,
     });
     if (!result.success) {
-      console.error(`${icons.error()} postCreate hook failed: ${result.message}`);
+      logError(`postCreate hook failed: ${result.message}`);
       await performRollback({
         worktreePath,
         repoRoot,

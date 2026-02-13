@@ -12,6 +12,7 @@ import { deleteSession } from "../core/session.ts";
 import { deleteSlot, readSlot } from "../core/slot.ts";
 import type { CleanArgs, CleanDeps, CleanResult, ProjectConfig, WorktreeStatus } from "../types.ts";
 import { icons } from "../ui/icons.ts";
+import { logDebug, logInfo, logWarn } from "../ui/logger.ts";
 import { confirm, selectMultiple } from "../ui/prompt.ts";
 import { createTailUpdater, startSpinner } from "../ui/spinner.ts";
 
@@ -73,7 +74,7 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
   const cleanableStatuses = statuses.filter((s) => !s.worktree.isMain);
 
   if (cleanableStatuses.length === 0) {
-    console.log("No cleanable worktrees found.");
+    logInfo("No cleanable worktrees found.");
     return result;
   }
 
@@ -87,42 +88,42 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
     const autoCleanable = cleanableStatuses.filter((s) => s.canAutoClean);
 
     if (autoCleanable.length === 0) {
-      console.log(`\n${icons.sparkle()} No unnecessary worktrees detected.`);
-      console.log("Hint: use -all option to show all worktrees.");
+      logInfo(`\n${icons.sparkle()} No unnecessary worktrees detected.`);
+      logInfo("Hint: use -all option to show all worktrees.");
       return result;
     }
 
-    console.log(`\n${icons.trash()}  Deletion candidates:`);
+    logInfo(`\n${icons.trash()}  Deletion candidates:`);
     for (const status of autoCleanable) {
       const branch = status.worktree.branch || "(detached)";
-      console.log(`  ${icons.bullet()} ${branch}`);
-      console.log(`    Path: ${status.worktree.path}`);
-      console.log(`    Reason: ${status.reason}`);
+      logInfo(`  ${icons.bullet()} ${branch}`);
+      logInfo(`    Path: ${status.worktree.path}`);
+      logInfo(`    Reason: ${status.reason}`);
     }
 
     toDelete = autoCleanable;
   }
 
   if (toDelete.length === 0) {
-    console.log("\nNo targets to delete.");
+    logInfo("\nNo targets to delete.");
     return result;
   }
 
   // Dry run mode
   if (args.dryRun) {
-    console.log("\n[dry-run] The following worktrees would be deleted:");
+    logInfo("\n[dry-run] The following worktrees would be deleted:");
     for (const status of toDelete) {
-      console.log(`  ${icons.bullet()} ${status.worktree.branch || status.worktree.path}`);
+      logInfo(`  ${icons.bullet()} ${status.worktree.branch || status.worktree.path}`);
     }
     return result;
   }
 
   // Confirmation
   if (!args.force) {
-    console.log("");
+    logInfo("");
     const confirmed = await deps.confirm(`Delete ${toDelete.length} worktree(s)?`);
     if (!confirmed) {
-      console.log("Cancelled.");
+      logInfo("Cancelled.");
       return result;
     }
   }
@@ -136,11 +137,11 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
     config = await deps.loadProjectConfig(repoRoot);
   } catch (error) {
     const message = getErrorMessage(error);
-    console.debug(`preClean hooks will be skipped: failed to get git context or load project config: ${message}`);
+    logDebug(`preClean hooks will be skipped: failed to get git context or load project config: ${message}`);
   }
 
   // Execute deletion
-  console.log("");
+  logInfo("");
   for (const status of toDelete) {
     const { worktree } = status;
     const label = worktree.branch || worktree.path;
@@ -160,7 +161,7 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
           });
         } catch (error) {
           const message = getErrorMessage(error);
-          console.warn(`  ${icons.warning()}  preClean hook failed (continuing): ${message}`);
+          logWarn(`  preClean hook failed (continuing): ${message}`);
         }
       }
 
@@ -172,7 +173,7 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
           await deps.deleteLocalBranch(worktree.branch, true);
         } catch (error) {
           const branchError = getErrorMessage(error);
-          console.warn(`  ${icons.warning()}  Failed to delete branch ${worktree.branch}: ${branchError}`);
+          logWarn(`  Failed to delete branch ${worktree.branch}: ${branchError}`);
         }
       }
 
@@ -187,7 +188,7 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
           });
         } catch (error) {
           const message = getErrorMessage(error);
-          console.warn(`  ${icons.warning()}  postClean hook failed (continuing): ${message}`);
+          logWarn(`  postClean hook failed (continuing): ${message}`);
         }
       }
 
@@ -205,12 +206,12 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
   }
 
   // Summary
-  console.log("");
+  logInfo("");
   if (result.deleted.length > 0) {
-    console.log(`${icons.done()} Deleted ${result.deleted.length} worktree(s).`);
+    logInfo(`${icons.done()} Deleted ${result.deleted.length} worktree(s).`);
   }
   if (result.errors.length > 0) {
-    console.log(`${icons.warning()}  Failed to delete ${result.errors.length} worktree(s).`);
+    logInfo(`${icons.warning()}  Failed to delete ${result.errors.length} worktree(s).`);
   }
 
   return result;

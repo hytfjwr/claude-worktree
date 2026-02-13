@@ -2,6 +2,7 @@ import * as readline from "node:readline";
 
 import { rawCode } from "./color.ts";
 import { icons } from "./icons.ts";
+import { logInfo } from "./logger.ts";
 import { stripAnsi } from "./spinner.ts";
 
 // =============================================================================
@@ -138,11 +139,11 @@ function question(rl: readline.Interface, prompt: string): Promise<string> {
 }
 
 async function fallbackSingle<T>(options: SelectOptions<T>): Promise<T | null> {
-  console.log(`\n${options.message}\n`);
+  logInfo(`\n${options.message}\n`);
   for (let i = 0; i < options.items.length; i++) {
     const item = options.items[i];
     const desc = item.description ? `  ${item.description}` : "";
-    console.log(`  ${i + 1}. ${item.label}${desc}`);
+    logInfo(`  ${i + 1}. ${item.label}${desc}`);
   }
 
   const rl = createRl();
@@ -159,12 +160,12 @@ async function fallbackSingle<T>(options: SelectOptions<T>): Promise<T | null> {
 }
 
 async function fallbackMany<T>(options: SelectOptions<T>): Promise<T[]> {
-  console.log(`\n${options.message}`);
-  console.log("Enter numbers separated by spaces, 'all' to select all, empty to cancel\n");
+  logInfo(`\n${options.message}`);
+  logInfo("Enter numbers separated by spaces, 'all' to select all, empty to cancel\n");
   for (let i = 0; i < options.items.length; i++) {
     const item = options.items[i];
     const hint = item.hint ? `  (${item.hint})` : "";
-    console.log(`  ${i + 1}. ${item.label}${hint}`);
+    logInfo(`  ${i + 1}. ${item.label}${hint}`);
   }
 
   const rl = createRl();

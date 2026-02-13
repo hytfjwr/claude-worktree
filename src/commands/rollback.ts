@@ -5,6 +5,7 @@ import { deleteSession } from "../core/session.ts";
 import { deleteSlot } from "../core/slot.ts";
 import type { RollbackOptions } from "../types.ts";
 import { icons } from "../ui/icons.ts";
+import { logInfo, logWarn } from "../ui/logger.ts";
 import { createTailUpdater, startSpinner } from "../ui/spinner.ts";
 
 type StepResult = { name: string; success: boolean; error?: string };
@@ -13,7 +14,7 @@ export async function performRollback(options: RollbackOptions): Promise<void> {
   const { worktreePath, repoRoot, verbose } = options;
   const steps: StepResult[] = [];
 
-  console.log("Rolling back...");
+  logInfo("Rolling back...");
 
   // Step 1: preClean hook
   if (options.preCleanCommand) {
@@ -25,7 +26,7 @@ export async function performRollback(options: RollbackOptions): Promise<void> {
       steps.push({ name: "preClean", success: true });
     } catch (err) {
       const message = getErrorMessage(err);
-      if (verbose) console.warn(`  preClean failed: ${message}`);
+      if (verbose) logWarn(`  preClean failed: ${message}`);
       steps.push({ name: "preClean", success: false, error: message });
     }
   }
@@ -36,7 +37,7 @@ export async function performRollback(options: RollbackOptions): Promise<void> {
     steps.push({ name: "worktree removal", success: true });
   } catch (err) {
     const message = getErrorMessage(err);
-    if (verbose) console.warn(`  worktree removal failed: ${message}`);
+    if (verbose) logWarn(`  worktree removal failed: ${message}`);
     steps.push({ name: "worktree removal", success: false, error: message });
   }
 
@@ -56,7 +57,7 @@ export async function performRollback(options: RollbackOptions): Promise<void> {
     } catch (err) {
       const message = getErrorMessage(err);
       spinner?.fail("postClean hook failed during rollback");
-      if (verbose) console.warn(`  postClean failed: ${message}`);
+      if (verbose) logWarn(`  postClean failed: ${message}`);
       steps.push({ name: "postClean", success: false, error: message });
     }
   }
@@ -68,7 +69,7 @@ export async function performRollback(options: RollbackOptions): Promise<void> {
       steps.push({ name: "slot cleanup", success: true });
     } catch (err) {
       const message = getErrorMessage(err);
-      if (verbose) console.warn(`  slot cleanup failed: ${message}`);
+      if (verbose) logWarn(`  slot cleanup failed: ${message}`);
       steps.push({ name: "slot cleanup", success: false, error: message });
     }
   }
@@ -80,7 +81,7 @@ export async function performRollback(options: RollbackOptions): Promise<void> {
       steps.push({ name: "session cleanup", success: true });
     } catch (err) {
       const message = getErrorMessage(err);
-      if (verbose) console.warn(`  session cleanup failed: ${message}`);
+      if (verbose) logWarn(`  session cleanup failed: ${message}`);
       steps.push({ name: "session cleanup", success: false, error: message });
     }
   }
@@ -88,12 +89,12 @@ export async function performRollback(options: RollbackOptions): Promise<void> {
   // Print summary only when any step fails
   const hasFailure = steps.some((s) => !s.success);
   if (hasFailure) {
-    console.log("\nRollback Summary:");
+    logInfo("\nRollback Summary:");
     for (const step of steps) {
       const marker = step.success ? icons.success() : icons.fail();
       const detail = step.error ? ` (${step.error})` : "";
-      console.log(`  ${marker} ${step.name}${detail}`);
+      logInfo(`  ${marker} ${step.name}${detail}`);
     }
-    console.warn("WARNING: Rollback incomplete. Manual cleanup may be required.");
+    logWarn("WARNING: Rollback incomplete. Manual cleanup may be required.");
   }
 }
