@@ -37,14 +37,14 @@ export async function findAvailableSlot(basePort: number = 8880, maxSlots: numbe
 /**
  * Find an available slot and reserve it for the given worktree path.
  *
- * Uses a best-effort file lock to read existing assignments, check port
- * availability (skipping already-assigned slots), and write the updated cache.
+ * Uses a file lock to read existing assignments, check port availability
+ * (skipping already-assigned slots), and write the updated cache.
  * If the worktree already has an assigned slot, the existing slot is returned
  * without modification (idempotent).
  *
- * Note: if {@link withLock} cannot acquire the lock after retries it proceeds
- * without holding it, so under heavy contention the operation is not strictly
- * atomic and a TOCTOU race is still theoretically possible.
+ * Throws {@link LockAcquisitionError} if the lock cannot be acquired after
+ * retries. Stale locks (left by crashed processes) are automatically detected
+ * and removed.
  */
 export async function assignSlot(worktreePath: string, basePort: number = 8880, maxSlots: number = 9): Promise<number> {
   if (!Number.isInteger(basePort) || basePort < 1 || basePort > 65535) {

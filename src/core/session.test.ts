@@ -244,24 +244,13 @@ describe("session file I/O", () => {
     expect(existsSync(join(tempDir, "sessions.json"))).toBe(false);
   });
 
-  test("lock acquisition failure emits warning and operation still succeeds", async () => {
-    // Create the lock file manually to simulate a held lock
+  test("lock acquisition failure throws LockAcquisitionError", async () => {
+    // Create the lock file with current PID to simulate a held lock
     const lockFile = join(tempDir, "sessions.lock");
-    await writeFile(lockFile, "held", "utf-8");
+    await writeFile(lockFile, String(process.pid), "utf-8");
 
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    try {
-      const session: SessionInfo = { mode: "terminal", startedAt: "2025-01-15T11:00:00Z" };
-      await saveSession("/tmp/wt-lock-test", session);
-
-      // Warning should have been emitted
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("Lock acquisition failed for sessions.lock"));
-
-      // Operation should still succeed
-      const result = await readSession("/tmp/wt-lock-test");
-      expect(result).toEqual(session);
-    } finally {
-      warnSpy.mockRestore();
-    }
+    const { LockAcquisitionError } = await import("./errors.ts");
+    const session: SessionInfo = { mode: "terminal", startedAt: "2025-01-15T11:00:00Z" };
+    await expect(saveSession("/tmp/wt-lock-test", session)).rejects.toThrow(LockAcquisitionError);
   });
 });

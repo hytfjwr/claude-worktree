@@ -1,10 +1,10 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
-import { resetLogger, setLogger } from "../ui/logger.ts";
-import { atomicWriteJson, readJsonFile, withLock } from "./cache.ts";
+import { atomicWriteJson, readJsonFile, STALE_LOCK_THRESHOLD_MS, withLock } from "./cache.ts";
+import { LockAcquisitionError } from "./errors.ts";
 
 describe("withLock", () => {
   let tempDir: string;
@@ -15,7 +15,6 @@ describe("withLock", () => {
   });
 
   afterEach(async () => {
-    resetLogger();
     await rm(tempDir, { recursive: true, force: true });
   });
 
@@ -31,22 +30,65 @@ describe("withLock", () => {
     expect(result).toBe("ok");
   });
 
-  test("warns and proceeds without lock when lock is held", async () => {
-    const lockFile = join(tempDir, "held.lock");
-    await writeFile(lockFile, "held", "utf-8");
-
-    const warnings: string[] = [];
-    setLogger({
-      log: () => {},
-      warn: (msg) => warnings.push(msg),
-      error: () => {},
-      debug: () => {},
+  test("writes PID to lock file during execution", async () => {
+    const lockFile = join(tempDir, "pid.lock");
+    let lockContent = "";
+    await withLock(lockFile, async () => {
+      lockContent = await readFile(lockFile, "utf-8");
     });
+    expect(lockContent.trim()).toBe(String(process.pid));
+  });
 
-    const result = await withLock(lockFile, async () => "still works", { maxRetries: 2, retryIntervalMs: 1 });
-    expect(result).toBe("still works");
-    expect(warnings.length).toBe(1);
-    expect(warnings[0]).toContain("Lock acquisition failed for held.lock");
+  test("throws LockAcquisitionError when lock is held by a live process", async () => {
+    const lockFile = join(tempDir, "held.lock");
+    // Write current PID so the lock appears to be held by a live process
+    await writeFile(lockFile, String(process.pid), "utf-8");
+
+    await expect(withLock(lockFile, async () => "unreachable", { maxRetries: 3, retryIntervalMs: 1 })).rejects.toThrow(
+      LockAcquisitionError,
+    );
+  });
+
+  test("removes stale lock from dead process and acquires lock", async () => {
+    const lockFile = join(tempDir, "stale.lock");
+    // PID 999999 is extremely unlikely to be running
+    await writeFile(lockFile, "999999", "utf-8");
+    // Backdate the mtime to exceed stale threshold
+    const old = new Date(Date.now() - STALE_LOCK_THRESHOLD_MS - 1000);
+    await utimes(lockFile, old, old);
+
+    const result = await withLock(lockFile, async () => "recovered", { maxRetries: 3, retryIntervalMs: 1 });
+    expect(result).toBe("recovered");
+  });
+
+  test("removes stale lock with invalid PID content and acquires lock", async () => {
+    const lockFile = join(tempDir, "invalid-pid.lock");
+    await writeFile(lockFile, "not-a-pid", "utf-8");
+    const old = new Date(Date.now() - STALE_LOCK_THRESHOLD_MS - 1000);
+    await utimes(lockFile, old, old);
+
+    const result = await withLock(lockFile, async () => "recovered", { maxRetries: 3, retryIntervalMs: 1 });
+    expect(result).toBe("recovered");
+  });
+
+  test("acquires lock after stale lock removal on final retry", async () => {
+    const lockFile = join(tempDir, "final-retry.lock");
+    await writeFile(lockFile, "999999", "utf-8");
+    const old = new Date(Date.now() - STALE_LOCK_THRESHOLD_MS - 1000);
+    await utimes(lockFile, old, old);
+
+    // maxRetries: 2 → stale check triggers at i >= 0 (maxRetries - 2), covering the final iteration
+    const result = await withLock(lockFile, async () => "final-ok", { maxRetries: 2, retryIntervalMs: 1 });
+    expect(result).toBe("final-ok");
+  });
+
+  test("cleans up lock file after successful execution", async () => {
+    const lockFile = join(tempDir, "cleanup.lock");
+    await withLock(lockFile, async () => "done");
+
+    // The lock file should be removed after withLock completes
+    const { existsSync } = await import("node:fs");
+    expect(existsSync(lockFile)).toBe(false);
   });
 });
 

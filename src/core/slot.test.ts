@@ -104,24 +104,13 @@ describe("slot cache", () => {
     expect(await readSlot("/tmp/repo-a")).toBe(7);
   });
 
-  test("lock acquisition failure emits warning and operation still succeeds", async () => {
-    // Create the lock file manually to simulate a held lock
+  test("lock acquisition failure throws LockAcquisitionError", async () => {
+    // Create the lock file with current PID to simulate a held lock
     const lockFile = join(tempDir, "slots.lock");
-    writeFileSync(lockFile, "held", "utf-8");
+    writeFileSync(lockFile, String(process.pid), "utf-8");
 
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    try {
-      await saveSlot("/tmp/repo-lock-test", 4);
-
-      // Warning should have been emitted
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("Lock acquisition failed for slots.lock"));
-
-      // Operation should still succeed
-      const slot = await readSlot("/tmp/repo-lock-test");
-      expect(slot).toBe(4);
-    } finally {
-      warnSpy.mockRestore();
-    }
+    const { LockAcquisitionError } = await import("./errors.ts");
+    await expect(saveSlot("/tmp/repo-lock-test", 4)).rejects.toThrow(LockAcquisitionError);
   });
 });
 
