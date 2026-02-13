@@ -26,29 +26,41 @@ vi.mock("./exec.ts", async (importOriginal) => {
  * Create a fake ExecBuilder that mirrors the real exec() return type contract.
  * - Awaiting returns ExecResult (with sync .text())
  * - .text() on builder returns Promise<string>
- * - .nothrow() / .quiet() are chainable no-ops
+ * - .nothrow() suppresses rejection on non-zero exitCode (matching real ExecBuilder)
+ * - .quiet() is a chainable no-op
  * Throws for unhandled commands to catch regressions early.
  */
-function createExecStub(handler: (cmd: string, args: string[]) => { stdout: string; exitCode?: number }) {
+function createExecStub(
+  handler: (cmd: string, args: string[]) => { stdout: string; stderr?: string; exitCode?: number },
+) {
   return (cmd: string, args: string[]) => {
-    const { stdout, exitCode = 0 } = handler(cmd, args);
+    const { stdout, stderr = "", exitCode = 0 } = handler(cmd, args);
     const result: ExecResult = {
       exitCode,
       stdout: Buffer.from(stdout),
-      stderr: Buffer.alloc(0),
+      stderr: Buffer.from(stderr),
       text: () => stdout,
     };
+    let shouldThrow = true;
+    function rejectIfNeeded<T>(fallback: () => Promise<T>): Promise<T> {
+      if (exitCode !== 0 && shouldThrow) {
+        const msg = `Command failed with exit code ${exitCode}: ${cmd} ${args.join(" ")}${stderr ? `\n${stderr}` : ""}`;
+        return Promise.reject(new Error(msg));
+      }
+      return fallback();
+    }
     const builder = {
       nothrow() {
+        shouldThrow = false;
         return this;
       },
       quiet() {
         return this;
       },
-      text: () => Promise.resolve(stdout),
+      text: () => rejectIfNeeded(() => Promise.resolve(stdout)),
       // biome-ignore lint/suspicious/noThenProperty: intentional PromiseLike implementation for exec stub
       then(resolve?: ((value: ExecResult) => unknown) | null, reject?: ((reason: unknown) => unknown) | null) {
-        return Promise.resolve(result).then(resolve, reject);
+        return rejectIfNeeded(() => Promise.resolve(result)).then(resolve, reject);
       },
     };
     return builder;
@@ -207,18 +219,25 @@ detached`;
 // Tests for functions using shell commands (using mocks)
 // ============================================================================
 
-describe("getGitContext (mock)", () => {
-  beforeEach(() => vi.resetModules());
+describe("getGitContext", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    mockExecImpl.current = null;
+  });
+  afterEach(() => {
+    mockExecImpl.current = null;
+  });
 
   test("correctly retrieves repository info", async () => {
-    vi.doMock("./git", async () => ({
-      ...(await vi.importActual("./git")),
-      getGitContext: vi.fn(async () => ({
-        repoRoot: "/path/to/my-repo",
-        repoName: "my-repo",
-        currentBranch: "feature/test",
-      })),
-    }));
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("--show-toplevel")) {
+        return { stdout: "/path/to/my-repo\n" };
+      }
+      if (args.includes("--show-current")) {
+        return { stdout: "feature/test\n" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
 
     const { getGitContext } = await import("./git.ts");
     const context = await getGitContext();
@@ -227,16 +246,51 @@ describe("getGitContext (mock)", () => {
     expect(context.repoName).toBe("my-repo");
     expect(context.currentBranch).toBe("feature/test");
   });
+
+  test("throws error when not in a git repository", async () => {
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("--show-toplevel")) {
+        return { stdout: "", stderr: "fatal: not a git repository", exitCode: 128 };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { getGitContext } = await import("./git.ts");
+    await expect(getGitContext()).rejects.toThrow("Not in a git repository");
+  });
+
+  test("throws error on detached HEAD", async () => {
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("--show-toplevel")) {
+        return { stdout: "/path/to/repo\n" };
+      }
+      if (args.includes("--show-current")) {
+        return { stdout: "\n" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { getGitContext } = await import("./git.ts");
+    await expect(getGitContext()).rejects.toThrow("detached HEAD");
+  });
 });
 
-describe("getMainBranch (mock)", () => {
-  beforeEach(() => vi.resetModules());
+describe("getMainBranch", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    mockExecImpl.current = null;
+  });
+  afterEach(() => {
+    mockExecImpl.current = null;
+  });
 
-  test("returns main branch", async () => {
-    vi.doMock("./git", async () => ({
-      ...(await vi.importActual("./git")),
-      getMainBranch: vi.fn(async () => "main"),
-    }));
+  test("returns main from symbolic-ref", async () => {
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("symbolic-ref")) {
+        return { stdout: "refs/remotes/origin/main\n" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
 
     const { getMainBranch } = await import("./git.ts");
     const mainBranch = await getMainBranch();
@@ -244,27 +298,57 @@ describe("getMainBranch (mock)", () => {
     expect(mainBranch).toBe("main");
   });
 
-  test("returns master branch", async () => {
-    vi.doMock("./git", async () => ({
-      ...(await vi.importActual("./git")),
-      getMainBranch: vi.fn(async () => "master"),
-    }));
+  test("falls back to master when symbolic-ref fails and no main branch", async () => {
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("symbolic-ref")) {
+        return { stdout: "", exitCode: 128 };
+      }
+      if (args.includes("-a")) {
+        return { stdout: "  remotes/origin/master\n" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
 
     const { getMainBranch } = await import("./git.ts");
     const mainBranch = await getMainBranch();
 
     expect(mainBranch).toBe("master");
   });
+
+  test("detects main from branch list when symbolic-ref fails", async () => {
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("symbolic-ref")) {
+        return { stdout: "", exitCode: 128 };
+      }
+      if (args.includes("-a")) {
+        return { stdout: "  remotes/origin/main\n  remotes/origin/develop\n" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { getMainBranch } = await import("./git.ts");
+    const mainBranch = await getMainBranch();
+
+    expect(mainBranch).toBe("main");
+  });
 });
 
-describe("isWorktreeDirty (mock)", () => {
-  beforeEach(() => vi.resetModules());
+describe("isWorktreeDirty", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    mockExecImpl.current = null;
+  });
+  afterEach(() => {
+    mockExecImpl.current = null;
+  });
 
   test("clean worktree - false", async () => {
-    vi.doMock("./git", async () => ({
-      ...(await vi.importActual("./git")),
-      isWorktreeDirty: vi.fn(async () => false),
-    }));
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("--porcelain") && args.includes("status")) {
+        return { stdout: "" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
 
     const { isWorktreeDirty } = await import("./git.ts");
     const isDirty = await isWorktreeDirty("/path/to/worktree");
@@ -273,54 +357,129 @@ describe("isWorktreeDirty (mock)", () => {
   });
 
   test("dirty worktree - true", async () => {
-    vi.doMock("./git", async () => ({
-      ...(await vi.importActual("./git")),
-      isWorktreeDirty: vi.fn(async () => true),
-    }));
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("--porcelain") && args.includes("status")) {
+        return { stdout: " M src/index.ts\n" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
 
     const { isWorktreeDirty } = await import("./git.ts");
     const isDirty = await isWorktreeDirty("/path/to/worktree");
 
     expect(isDirty).toBe(true);
   });
+
+  test("treats as dirty when git status fails", async () => {
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("--porcelain") && args.includes("status")) {
+        return { stdout: "", exitCode: 128 };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { isWorktreeDirty } = await import("./git.ts");
+    const isDirty = await isWorktreeDirty("/path/to/worktree");
+
+    expect(isDirty).toBe(true);
+  });
+
+  test("passes worktree path via -C flag", async () => {
+    let capturedArgs: string[] = [];
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("status")) {
+        capturedArgs = args;
+        return { stdout: "" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { isWorktreeDirty } = await import("./git.ts");
+    await isWorktreeDirty("/my/worktree");
+
+    expect(capturedArgs).toContain("-C");
+    expect(capturedArgs).toContain("/my/worktree");
+  });
 });
 
-describe("isBranchMerged (mock)", () => {
-  beforeEach(() => vi.resetModules());
+describe("isBranchMerged", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    mockExecImpl.current = null;
+  });
+  afterEach(() => {
+    mockExecImpl.current = null;
+  });
 
   test("merged branch - true", async () => {
-    vi.doMock("./git", async () => ({
-      ...(await vi.importActual("./git")),
-      isBranchMerged: vi.fn(async () => true),
-    }));
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("--merged")) {
+        return { stdout: "  main\n  feature/completed\n" };
+      }
+      // getMainBranch fallback
+      if (args.includes("symbolic-ref")) {
+        return { stdout: "refs/remotes/origin/main\n" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
 
     const { isBranchMerged } = await import("./git.ts");
-    const isMerged = await isBranchMerged("feature/completed");
+    const isMerged = await isBranchMerged("feature/completed", "main");
 
     expect(isMerged).toBe(true);
   });
 
   test("unmerged branch - false", async () => {
-    vi.doMock("./git", async () => ({
-      ...(await vi.importActual("./git")),
-      isBranchMerged: vi.fn(async () => false),
-    }));
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("--merged")) {
+        return { stdout: "  main\n" };
+      }
+      if (args.includes("symbolic-ref")) {
+        return { stdout: "refs/remotes/origin/main\n" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
 
     const { isBranchMerged } = await import("./git.ts");
-    const isMerged = await isBranchMerged("feature/in-progress");
+    const isMerged = await isBranchMerged("feature/in-progress", "main");
+
+    expect(isMerged).toBe(false);
+  });
+
+  test("returns false when git command fails", async () => {
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("--merged")) {
+        return { stdout: "", exitCode: 128 };
+      }
+      if (args.includes("symbolic-ref")) {
+        return { stdout: "refs/remotes/origin/main\n" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { isBranchMerged } = await import("./git.ts");
+    const isMerged = await isBranchMerged("feature/test", "main");
 
     expect(isMerged).toBe(false);
   });
 });
 
-describe("isRemoteBranchDeleted (mock)", () => {
-  beforeEach(() => vi.resetModules());
+describe("isRemoteBranchDeleted", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    mockExecImpl.current = null;
+  });
+  afterEach(() => {
+    mockExecImpl.current = null;
+  });
 
   test("branch exists on remote - false", async () => {
-    vi.doMock("./git", async () => ({
-      ...(await vi.importActual("./git")),
-      isRemoteBranchDeleted: vi.fn(async () => false),
-    }));
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("ls-remote")) {
+        return { stdout: "abc123\trefs/heads/main\n" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
 
     const { isRemoteBranchDeleted } = await import("./git.ts");
     const isDeleted = await isRemoteBranchDeleted("main");
@@ -329,47 +488,73 @@ describe("isRemoteBranchDeleted (mock)", () => {
   });
 
   test("branch deleted from remote - true", async () => {
-    vi.doMock("./git", async () => ({
-      ...(await vi.importActual("./git")),
-      isRemoteBranchDeleted: vi.fn(async () => true),
-    }));
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("ls-remote")) {
+        return { stdout: "" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
 
     const { isRemoteBranchDeleted } = await import("./git.ts");
     const isDeleted = await isRemoteBranchDeleted("feature/deleted");
 
     expect(isDeleted).toBe(true);
   });
+
+  test("assumes deleted when ls-remote fails", async () => {
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("ls-remote")) {
+        return { stdout: "", exitCode: 128 };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { isRemoteBranchDeleted } = await import("./git.ts");
+    const isDeleted = await isRemoteBranchDeleted("feature/test");
+
+    expect(isDeleted).toBe(true);
+  });
 });
 
-describe("listWorktrees (mock)", () => {
-  beforeEach(() => vi.resetModules());
+describe("listWorktrees", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    mockExecImpl.current = null;
+  });
+  afterEach(() => {
+    mockExecImpl.current = null;
+  });
 
-  test("retrieves worktree list", async () => {
-    const mockWorktrees: WorktreeInfo[] = [
-      {
-        path: "/path/to/repo",
-        branch: "main",
-        isLocked: false,
-        isDirty: false,
-        isMain: true,
-      },
-      {
-        path: "/path/to/repo-feature",
-        branch: "feature/test",
-        isLocked: false,
-        isDirty: false,
-        isMain: false,
-      },
-    ];
+  test("retrieves and parses worktree list", async () => {
+    const porcelainOutput = [
+      "worktree /path/to/repo",
+      "HEAD abc123",
+      "branch refs/heads/main",
+      "",
+      "worktree /path/to/repo-feature",
+      "HEAD def456",
+      "branch refs/heads/feature/test",
+    ].join("\n");
 
-    vi.doMock("./git", async () => ({
-      ...(await vi.importActual("./git")),
-      listWorktrees: vi.fn(async () => ({ worktrees: mockWorktrees, mainBranch: "main" })),
-    }));
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("--porcelain") && args.includes("list")) {
+        return { stdout: porcelainOutput };
+      }
+      // getMainBranch
+      if (args.includes("symbolic-ref")) {
+        return { stdout: "refs/remotes/origin/main\n" };
+      }
+      // isWorktreeDirty
+      if (args.includes("status")) {
+        return { stdout: "" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
 
     const { listWorktrees } = await import("./git.ts");
-    const { worktrees } = await listWorktrees();
+    const { worktrees, mainBranch } = await listWorktrees();
 
+    expect(mainBranch).toBe("main");
     expect(worktrees).toHaveLength(2);
     expect(worktrees[0].branch).toBe("main");
     expect(worktrees[0].isMain).toBe(true);
@@ -378,47 +563,91 @@ describe("listWorktrees (mock)", () => {
   });
 
   test("empty worktree list", async () => {
-    vi.doMock("./git", async () => ({
-      ...(await vi.importActual("./git")),
-      listWorktrees: vi.fn(async () => ({ worktrees: [], mainBranch: "main" })),
-    }));
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("--porcelain") && args.includes("list")) {
+        return { stdout: "" };
+      }
+      if (args.includes("symbolic-ref")) {
+        return { stdout: "refs/remotes/origin/main\n" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
 
     const { listWorktrees } = await import("./git.ts");
     const { worktrees } = await listWorktrees();
 
     expect(worktrees).toHaveLength(0);
   });
+
+  test("throws when git worktree list fails", async () => {
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("--porcelain") && args.includes("list")) {
+        return { stdout: "", exitCode: 128 };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { listWorktrees } = await import("./git.ts");
+    await expect(listWorktrees()).rejects.toThrow("Failed to list worktrees");
+  });
 });
 
-describe("findWorktreeByBranch (mock)", () => {
-  beforeEach(() => vi.resetModules());
+describe("findWorktreeByBranch", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    mockExecImpl.current = null;
+  });
+  afterEach(() => {
+    mockExecImpl.current = null;
+  });
 
   test("finds existing branch", async () => {
-    const mockWorktree: WorktreeInfo = {
-      path: "/path/to/repo-feature",
-      branch: "feature/test",
-      isLocked: false,
-      isDirty: false,
-      isMain: false,
-    };
+    const porcelainOutput = [
+      "worktree /path/to/repo",
+      "HEAD abc123",
+      "branch refs/heads/main",
+      "",
+      "worktree /path/to/repo-feature",
+      "HEAD def456",
+      "branch refs/heads/feature/test",
+    ].join("\n");
 
-    vi.doMock("./git", async () => ({
-      ...(await vi.importActual("./git")),
-      findWorktreeByBranch: vi.fn(async () => mockWorktree),
-    }));
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("--porcelain") && args.includes("list")) {
+        return { stdout: porcelainOutput };
+      }
+      if (args.includes("symbolic-ref")) {
+        return { stdout: "refs/remotes/origin/main\n" };
+      }
+      if (args.includes("status")) {
+        return { stdout: "" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
 
     const { findWorktreeByBranch } = await import("./git.ts");
     const worktree = await findWorktreeByBranch("feature/test");
 
     expect(worktree).not.toBeNull();
     expect(worktree?.branch).toBe("feature/test");
+    expect(worktree?.path).toBe("/path/to/repo-feature");
   });
 
   test("non-existent branch returns null", async () => {
-    vi.doMock("./git", async () => ({
-      ...(await vi.importActual("./git")),
-      findWorktreeByBranch: vi.fn(async () => null),
-    }));
+    const porcelainOutput = ["worktree /path/to/repo", "HEAD abc123", "branch refs/heads/main"].join("\n");
+
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("--porcelain") && args.includes("list")) {
+        return { stdout: porcelainOutput };
+      }
+      if (args.includes("symbolic-ref")) {
+        return { stdout: "refs/remotes/origin/main\n" };
+      }
+      if (args.includes("status")) {
+        return { stdout: "" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
 
     const { findWorktreeByBranch } = await import("./git.ts");
     const worktree = await findWorktreeByBranch("nonexistent-branch");
@@ -427,44 +656,90 @@ describe("findWorktreeByBranch (mock)", () => {
   });
 });
 
-describe("deleteLocalBranch (mock)", () => {
-  beforeEach(() => vi.resetModules());
+describe("deleteLocalBranch", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    mockExecImpl.current = null;
+  });
+  afterEach(() => {
+    mockExecImpl.current = null;
+  });
 
   test("branch deletion succeeds", async () => {
-    const mockDeleteLocalBranch = vi.fn(async () => undefined);
-
-    vi.doMock("./git", async () => ({
-      ...(await vi.importActual("./git")),
-      deleteLocalBranch: mockDeleteLocalBranch,
-    }));
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("-d") || args.includes("-D")) {
+        return { stdout: "Deleted branch feature/old\n" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
 
     const { deleteLocalBranch } = await import("./git.ts");
-
     await expect(deleteLocalBranch("feature/old")).resolves.toBeUndefined();
   });
 
   test("deleting non-existent branch throws error", async () => {
-    vi.doMock("./git", async () => ({
-      ...(await vi.importActual("./git")),
-      deleteLocalBranch: vi.fn(async () => {
-        throw new Error("Failed to delete branch nonexistent-branch: error: branch 'nonexistent-branch' not found.");
-      }),
-    }));
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("-d") || args.includes("-D")) {
+        return { stdout: "", exitCode: 1 };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
 
     const { deleteLocalBranch } = await import("./git.ts");
-
     await expect(deleteLocalBranch("nonexistent-branch")).rejects.toThrow("Failed to delete branch");
+  });
+
+  test("uses -d flag by default", async () => {
+    let capturedArgs: string[] = [];
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("-d") || args.includes("-D")) {
+        capturedArgs = args;
+        return { stdout: "" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { deleteLocalBranch } = await import("./git.ts");
+    await deleteLocalBranch("feature/old");
+
+    expect(capturedArgs).toContain("-d");
+    expect(capturedArgs).not.toContain("-D");
+  });
+
+  test("uses -D flag when force is true", async () => {
+    let capturedArgs: string[] = [];
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("-d") || args.includes("-D")) {
+        capturedArgs = args;
+        return { stdout: "" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { deleteLocalBranch } = await import("./git.ts");
+    await deleteLocalBranch("feature/old", true);
+
+    expect(capturedArgs).toContain("-D");
+    expect(capturedArgs).not.toContain("-d");
   });
 });
 
-describe("branchExists (mock)", () => {
-  beforeEach(() => vi.resetModules());
+describe("branchExists", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    mockExecImpl.current = null;
+  });
+  afterEach(() => {
+    mockExecImpl.current = null;
+  });
 
   test("returns true when branch exists", async () => {
-    vi.doMock("./git", async () => ({
-      ...(await vi.importActual("./git")),
-      branchExists: vi.fn(async () => true),
-    }));
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("show-ref")) {
+        return { stdout: "" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
 
     const { branchExists } = await import("./git.ts");
     const exists = await branchExists("main");
@@ -473,15 +748,33 @@ describe("branchExists (mock)", () => {
   });
 
   test("returns false for non-existent branch", async () => {
-    vi.doMock("./git", async () => ({
-      ...(await vi.importActual("./git")),
-      branchExists: vi.fn(async () => false),
-    }));
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("show-ref")) {
+        return { stdout: "", exitCode: 1 };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
 
     const { branchExists } = await import("./git.ts");
     const exists = await branchExists("nonexistent-branch");
 
     expect(exists).toBe(false);
+  });
+
+  test("passes correct ref path", async () => {
+    let capturedArgs: string[] = [];
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("show-ref")) {
+        capturedArgs = args;
+        return { stdout: "" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { branchExists } = await import("./git.ts");
+    await branchExists("feature/test");
+
+    expect(capturedArgs).toContain("refs/heads/feature/test");
   });
 });
 
