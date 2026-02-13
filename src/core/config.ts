@@ -4,9 +4,47 @@ import { join } from "node:path";
 import { TextDecoder } from "node:util";
 
 import type { HookVars, ProjectConfig } from "../types.ts";
+import { projectConfigFields } from "../types.ts";
 import { logWarn } from "../ui/logger.ts";
 import { getErrorMessage, isNodeError } from "./errors.ts";
 import { exec } from "./exec.ts";
+
+function checkField(field: string, value: unknown, expected: typeof Number | typeof String): string | null {
+  if (expected === Number) {
+    if (field === "maxWorktrees") {
+      if (typeof value !== "number" || !Number.isFinite(value) || !Number.isInteger(value) || value < 0) {
+        return `${field} must be a non-negative integer, got ${JSON.stringify(value)}`;
+      }
+    } else {
+      if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+        return `${field} must be a positive number, got ${JSON.stringify(value)}`;
+      }
+    }
+  } else if (expected === String) {
+    if (typeof value !== "string") {
+      return `${field} must be a string, got ${JSON.stringify(value)}`;
+    }
+  }
+  return null;
+}
+
+export function validateProjectConfig(value: unknown): string[] {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return ["Config must be a JSON object"];
+  }
+
+  const obj = value as Record<string, unknown>;
+  const errors: string[] = [];
+
+  for (const [field, expected] of Object.entries(projectConfigFields)) {
+    if (obj[field] !== undefined) {
+      const error = checkField(field, obj[field], expected);
+      if (error) errors.push(error);
+    }
+  }
+
+  return errors;
+}
 
 export async function loadProjectConfig(repoRoot: string): Promise<ProjectConfig | null> {
   const configPath = join(repoRoot, ".claude-worktree.json");
@@ -21,13 +59,24 @@ export async function loadProjectConfig(repoRoot: string): Promise<ProjectConfig
     throw error;
   }
 
+  let parsed: unknown;
   try {
-    return JSON.parse(content) as ProjectConfig;
+    parsed = JSON.parse(content);
   } catch (error) {
     const message = getErrorMessage(error);
     logWarn(`Failed to parse .claude-worktree.json: ${message}`);
     return null;
   }
+
+  const errors = validateProjectConfig(parsed);
+  if (errors.length > 0) {
+    for (const error of errors) {
+      logWarn(`Invalid .claude-worktree.json: ${error}`);
+    }
+    return null;
+  }
+
+  return parsed as ProjectConfig;
 }
 
 /**

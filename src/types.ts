@@ -114,6 +114,17 @@ export type ProjectConfig = {
   postCleanTimeout?: number; // Timeout in seconds for the postClean hook
 };
 
+export const projectConfigFields = {
+  maxWorktrees: Number,
+  hookTimeout: Number,
+  postCreateTimeout: Number,
+  preCleanTimeout: Number,
+  postCleanTimeout: Number,
+  postCreate: String,
+  preClean: String,
+  postClean: String,
+} satisfies Record<keyof Required<ProjectConfig>, typeof Number | typeof String>;
+
 export type HookVars = {
   path: string;
   slot?: number;

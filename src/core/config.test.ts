@@ -2,7 +2,13 @@ import { tmpdir } from "node:os";
 import { describe, expect, test } from "vitest";
 
 import type { ProjectConfig } from "../types.ts";
-import { buildHookCommand, DEFAULT_HOOK_TIMEOUT, resolveHookTimeout, runHook } from "./config.ts";
+import {
+  buildHookCommand,
+  DEFAULT_HOOK_TIMEOUT,
+  resolveHookTimeout,
+  runHook,
+  validateProjectConfig,
+} from "./config.ts";
 
 const testCwd = tmpdir();
 
@@ -165,6 +171,91 @@ describe("resolveHookTimeout", () => {
     expect(resolveHookTimeout("postCreate", null)).toBe(DEFAULT_HOOK_TIMEOUT);
     expect(resolveHookTimeout("preClean", null)).toBe(DEFAULT_HOOK_TIMEOUT);
     expect(resolveHookTimeout("postClean", null)).toBe(DEFAULT_HOOK_TIMEOUT);
+  });
+});
+
+describe("validateProjectConfig", () => {
+  test("returns no errors for valid empty config", () => {
+    expect(validateProjectConfig({})).toEqual([]);
+  });
+
+  test("returns no errors for valid full config", () => {
+    const config = {
+      maxWorktrees: 5,
+      hookTimeout: 600,
+      postCreate: "cd {path} && make setup",
+      postCreateTimeout: 300,
+      preClean: "cd {path} && make teardown",
+      preCleanTimeout: 120,
+      postClean: "echo done",
+      postCleanTimeout: 60,
+    };
+    expect(validateProjectConfig(config)).toEqual([]);
+  });
+
+  test("rejects non-object values", () => {
+    expect(validateProjectConfig(null)).toEqual(["Config must be a JSON object"]);
+    expect(validateProjectConfig("string")).toEqual(["Config must be a JSON object"]);
+    expect(validateProjectConfig(42)).toEqual(["Config must be a JSON object"]);
+    expect(validateProjectConfig([])).toEqual(["Config must be a JSON object"]);
+  });
+
+  test("rejects non-integer maxWorktrees", () => {
+    expect(validateProjectConfig({ maxWorktrees: 1.5 })).toEqual([
+      "maxWorktrees must be a non-negative integer, got 1.5",
+    ]);
+  });
+
+  test("rejects non-number maxWorktrees", () => {
+    expect(validateProjectConfig({ maxWorktrees: "five" })).toEqual([
+      'maxWorktrees must be a non-negative integer, got "five"',
+    ]);
+  });
+
+  test("allows zero maxWorktrees", () => {
+    expect(validateProjectConfig({ maxWorktrees: 0 })).toEqual([]);
+  });
+
+  test("rejects negative maxWorktrees", () => {
+    expect(validateProjectConfig({ maxWorktrees: -1 })).toEqual([
+      "maxWorktrees must be a non-negative integer, got -1",
+    ]);
+  });
+
+  test("rejects non-number timeout fields", () => {
+    const errors = validateProjectConfig({ hookTimeout: "slow", postCreateTimeout: true });
+    expect(errors).toContain('hookTimeout must be a positive number, got "slow"');
+    expect(errors).toContain("postCreateTimeout must be a positive number, got true");
+  });
+
+  test("rejects zero and negative timeout fields", () => {
+    expect(validateProjectConfig({ hookTimeout: 0 })).toEqual(["hookTimeout must be a positive number, got 0"]);
+    expect(validateProjectConfig({ preCleanTimeout: -10 })).toEqual([
+      "preCleanTimeout must be a positive number, got -10",
+    ]);
+  });
+
+  test("rejects non-string hook commands", () => {
+    const errors = validateProjectConfig({ postCreate: 123, preClean: false });
+    expect(errors).toContain("postCreate must be a string, got 123");
+    expect(errors).toContain("preClean must be a string, got false");
+  });
+
+  test("collects multiple errors at once", () => {
+    const errors = validateProjectConfig({
+      maxWorktrees: "many",
+      hookTimeout: null,
+      postCreate: 42,
+    });
+    expect(errors).toHaveLength(3);
+  });
+
+  test("allows maxWorktrees of 1", () => {
+    expect(validateProjectConfig({ maxWorktrees: 1 })).toEqual([]);
+  });
+
+  test("allows fractional timeout values", () => {
+    expect(validateProjectConfig({ hookTimeout: 0.5 })).toEqual([]);
   });
 });
 
