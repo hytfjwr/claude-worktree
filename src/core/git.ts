@@ -17,7 +17,7 @@ const CONCURRENCY_LIMIT = 5;
  * Run async task factories with a concurrency limit.
  * Each element in `tasks` is a zero-arg function that returns a Promise.
  */
-async function promiseAllSettledLimit<T>(tasks: Array<() => Promise<T>>, limit = CONCURRENCY_LIMIT): Promise<T[]> {
+async function promiseAllLimit<T>(tasks: Array<() => Promise<T>>, limit = CONCURRENCY_LIMIT): Promise<T[]> {
   const results: T[] = new Array(tasks.length);
   let nextIndex = 0;
 
@@ -161,7 +161,7 @@ export async function listWorktrees(): Promise<ListWorktreesResult> {
 
   const parsed = parseWorktreePorcelain(output, mainBranch);
 
-  const worktrees = await promiseAllSettledLimit(
+  const worktrees = await promiseAllLimit(
     parsed.map((p) => async () => ({ ...p, isDirty: await isWorktreeDirty(p.path) })),
   );
 
@@ -290,7 +290,7 @@ export async function verifyBranchRef(ref: string): Promise<boolean> {
 }
 
 export async function getWorktreeStatuses(worktrees: WorktreeInfo[], mainBranch: string): Promise<WorktreeStatus[]> {
-  return promiseAllSettledLimit(
+  return promiseAllLimit(
     worktrees.map((worktree) => async (): Promise<WorktreeStatus> => {
       if (worktree.isMain) {
         return {
