@@ -155,14 +155,14 @@ describe("parseArgs", () => {
     });
   });
 
-  describe("unknown command", () => {
-    test.each(["ABC", "status", "hotfix"])('single word "%s" - throws unknown command error', (input) => {
-      expect(() => parseArgs([input])).toThrow(`Unknown command: ${input}`);
+  describe("missing prompt for branch", () => {
+    test.each(["ABC", "status", "hotfix"])('single word "%s" - throws missing prompt error', (input) => {
+      expect(() => parseArgs([input])).toThrow(`Missing prompt for branch "${input}"`);
     });
 
     test.each([
-      "Available commands: list, clean, resume",
-      "claude-worktree <branch-name> <prompt>",
+      "claude-worktree ABC '<prompt>'",
+      "claude-worktree ABC -plan <file-path>",
     ])('error message includes "%s"', (substring) => {
       expect(() => parseArgs(["ABC"])).toThrow(substring);
     });

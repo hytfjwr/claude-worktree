@@ -442,12 +442,11 @@ export function parseArgs(args: string[]): Command {
     return { type: "help" };
   }
 
-  // Single non-flag argument that isn't a known command → unknown command error
+  // Single non-flag argument that isn't a known command → missing prompt for branch
   if (args.length === 1 && !args[0].startsWith("-")) {
     throw new Error(
-      `Unknown command: ${args[0]}\n\n` +
-        `Available commands: ${KNOWN_COMMANDS.join(", ")}\n\n` +
-        `To create a worktree:\n  ${CREATE_USAGE}`,
+      `Missing prompt for branch "${args[0]}".\n\n` +
+        `Usage:\n  claude-worktree ${args[0]} '<prompt>'\n  claude-worktree ${args[0]} -plan <file-path>`,
     );
   }
 
