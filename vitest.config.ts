@@ -5,11 +5,19 @@ export default defineConfig({
     include: ["src/**/*.test.ts"],
     coverage: {
       provider: "v8",
-      exclude: ["bin/**", "scripts/**", "src/index.ts", "src/types.ts"],
+      exclude: [
+        "bin/**",
+        "dist/**",
+        "scripts/**",
+        "vitest.config.ts",
+        "src/index.ts",
+        "src/types.ts",
+      ],
       thresholds: {
-        lines: 65,
-        functions: 70,
-        branches: 65,
+        statements: 75,
+        lines: 75,
+        functions: 80,
+        branches: 90,
       },
     },
   },
