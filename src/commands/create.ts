@@ -21,7 +21,7 @@ import { completeSession, deleteSession, saveSession } from "../core/session.ts"
 import { assignSlot, deleteSlot, readSlot } from "../core/slot.ts";
 import { spawnInteractive } from "../core/spawn.ts";
 import { buildClaudeCommand } from "../external/claude.ts";
-import { checkWeztermAvailable, createPane, sendCommand } from "../external/wezterm.ts";
+import { checkWeztermAvailable, createPane, ensureWeztermAvailable, sendCommand } from "../external/wezterm.ts";
 import type {
   ClaudeOptions,
   CreateArgs,
@@ -435,22 +435,7 @@ export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps
 
   // Check WezTerm availability when -pane is specified
   if (pane) {
-    const available = await deps.checkWeztermAvailable();
-    if (!available) {
-      const installHint =
-        process.platform === "darwin"
-          ? "  brew install --cask wezterm    # macOS (Homebrew)"
-          : process.platform === "linux"
-            ? "  https://wezfurlong.org/wezterm/install/linux.html"
-            : "  https://wezfurlong.org/wezterm/installation.html";
-
-      throw new Error(
-        "WezTerm CLI is not installed. The -pane option requires WezTerm.\n\n" +
-          `Install WezTerm:\n${installHint}\n\n` +
-          "Or run without -pane to use the current terminal:\n" +
-          `  claude-worktree ${branchName} '...'`,
-      );
-    }
+    await ensureWeztermAvailable(deps.checkWeztermAvailable, `claude-worktree ${branchName} '...'`);
   }
 
   // Read prompt from plan file

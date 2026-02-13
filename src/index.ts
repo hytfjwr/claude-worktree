@@ -81,6 +81,7 @@ export { buildClaudeCommand, buildResumeCommand } from "./external/claude.ts";
 export {
   checkWeztermAvailable,
   createPane,
+  ensureWeztermAvailable,
   listWeztermPanes,
   sendCommand,
   sendText,

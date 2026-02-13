@@ -43,6 +43,25 @@ export async function checkWeztermAvailable(): Promise<boolean> {
   }
 }
 
+export async function ensureWeztermAvailable(checkFn: () => Promise<boolean>, usageHint: string): Promise<void> {
+  const available = await checkFn();
+  if (!available) {
+    const installHint =
+      process.platform === "darwin"
+        ? "  brew install --cask wezterm    # macOS (Homebrew)"
+        : process.platform === "linux"
+          ? "  https://wezfurlong.org/wezterm/install/linux.html"
+          : "  https://wezfurlong.org/wezterm/installation.html";
+
+    throw new Error(
+      "WezTerm CLI is not installed. The -pane option requires WezTerm.\n\n" +
+        `Install WezTerm:\n${installHint}\n\n` +
+        "Or run without -pane to use the current terminal:\n" +
+        `  ${usageHint}`,
+    );
+  }
+}
+
 import type { PaneOptions } from "../types.ts";
 
 export async function splitPaneRight(): Promise<string> {

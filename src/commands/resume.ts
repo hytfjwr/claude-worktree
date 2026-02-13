@@ -4,7 +4,7 @@ import { getGitContext, listWorktrees } from "../core/git.ts";
 import { completeSession, saveSession } from "../core/session.ts";
 import { spawnInteractive } from "../core/spawn.ts";
 import { buildResumeCommand } from "../external/claude.ts";
-import { checkWeztermAvailable, createPane, sendCommand } from "../external/wezterm.ts";
+import { checkWeztermAvailable, createPane, ensureWeztermAvailable, sendCommand } from "../external/wezterm.ts";
 import type { ResumeArgs, ResumeDeps, WorktreeInfo } from "../types.ts";
 import { icons } from "../ui/icons.ts";
 import { logDebug } from "../ui/logger.ts";
@@ -67,25 +67,6 @@ async function launchResumeInTerminal(worktree: WorktreeInfo, claudeCommand: str
 // Validation helpers
 // =============================================================================
 
-async function ensureWeztermAvailable(deps: ResumeDeps): Promise<void> {
-  const available = await deps.checkWeztermAvailable();
-  if (!available) {
-    const installHint =
-      process.platform === "darwin"
-        ? "  brew install --cask wezterm    # macOS (Homebrew)"
-        : process.platform === "linux"
-          ? "  https://wezfurlong.org/wezterm/install/linux.html"
-          : "  https://wezfurlong.org/wezterm/installation.html";
-
-    throw new Error(
-      "WezTerm CLI is not installed. The -pane option requires WezTerm.\n\n" +
-        `Install WezTerm:\n${installHint}\n\n` +
-        "Or run without -pane to use the current terminal:\n" +
-        "  claude-worktree resume <branch-name>",
-    );
-  }
-}
-
 async function resolveTargetWorktree(
   branchName: string | undefined,
   worktrees: WorktreeInfo[],
@@ -111,7 +92,7 @@ export async function runResume(args: ResumeArgs, deps: ResumeDeps = defaultDeps
   const { branchName, prompt, pane, verbose } = args;
 
   if (pane) {
-    await ensureWeztermAvailable(deps);
+    await ensureWeztermAvailable(deps.checkWeztermAvailable, "claude-worktree resume <branch-name>");
   }
 
   // Get worktree list
