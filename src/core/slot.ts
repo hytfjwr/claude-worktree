@@ -1,9 +1,8 @@
 import { unlink } from "node:fs/promises";
 import { createServer } from "node:net";
-import { homedir } from "node:os";
 import { join } from "node:path";
 
-import { atomicWriteJson, readJsonFile, withLock } from "./cache.ts";
+import { atomicWriteJson, getCacheDir, readJsonFile, withLock } from "./cache.ts";
 
 export function isPortInUse(port: number): Promise<boolean> {
   return new Promise((resolve) => {
@@ -81,11 +80,6 @@ export async function assignSlot(worktreePath: string, basePort: number = 8880, 
     await atomicWriteJson(getCacheFile(), cache);
     return slot;
   });
-}
-
-// Slot cache: persists worktree path → slot number mappings
-export function getCacheDir(): string {
-  return join(process.env.CLAUDE_WORKTREE_CACHE_DIR || join(homedir(), ".cache", "claude-worktree"));
 }
 
 function getCacheFile(): string {

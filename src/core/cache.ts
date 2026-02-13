@@ -1,9 +1,14 @@
 import { mkdir, open, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
 import { setTimeout } from "node:timers/promises";
 
 import { logDebug } from "../ui/logger.ts";
 import { isNodeError, LockAcquisitionError } from "./errors.ts";
+
+export function getCacheDir(): string {
+  return join(process.env.CLAUDE_WORKTREE_CACHE_DIR || join(homedir(), ".cache", "claude-worktree"));
+}
 
 export const LOCK_MAX_RETRIES = 50;
 export const LOCK_RETRY_INTERVAL_MS = 100;

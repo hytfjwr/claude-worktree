@@ -28,7 +28,7 @@ export { performRollback } from "./commands/rollback.ts";
 // Run-in-pane command
 export { executeRunInPane } from "./commands/run-in-pane.ts";
 // Cache utilities
-export { LOCK_MAX_RETRIES, LOCK_RETRY_INTERVAL_MS } from "./core/cache.ts";
+export { getCacheDir, LOCK_MAX_RETRIES, LOCK_RETRY_INTERVAL_MS } from "./core/cache.ts";
 // Config utilities
 export { buildHookCommand, loadProjectConfig, runHook } from "./core/config.ts";
 // Error utilities
@@ -68,7 +68,6 @@ export {
   assignSlot,
   deleteSlot,
   findAvailableSlot,
-  getCacheDir,
   isPortInUse,
   readSlot,
   saveSlot,

@@ -15,7 +15,8 @@ vi.mock("./cache.ts", async (importOriginal) => {
 
 import { createServer } from "node:net";
 
-import { assignSlot, deleteSlot, findAvailableSlot, getCacheDir, isPortInUse, readSlot, saveSlot } from "./slot.ts";
+import { getCacheDir } from "./cache.ts";
+import { assignSlot, deleteSlot, findAvailableSlot, isPortInUse, readSlot, saveSlot } from "./slot.ts";
 
 describe("slot cache", () => {
   let tempDir: string;
@@ -40,10 +41,6 @@ describe("slot cache", () => {
     } catch {
       // Ignore cleanup errors
     }
-  });
-
-  test("getCacheDir respects CLAUDE_WORKTREE_CACHE_DIR env var", () => {
-    expect(getCacheDir()).toBe(tempDir);
   });
 
   test("saveSlot and readSlot: basic save and read", async () => {

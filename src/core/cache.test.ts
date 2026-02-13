@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
-import { atomicWriteJson, readJsonFile, STALE_LOCK_THRESHOLD_MS, withLock } from "./cache.ts";
+import { atomicWriteJson, getCacheDir, readJsonFile, STALE_LOCK_THRESHOLD_MS, withLock } from "./cache.ts";
 import { LockAcquisitionError } from "./errors.ts";
 
 describe("withLock", () => {
@@ -160,5 +160,32 @@ describe("readJsonFile", () => {
 
     const result = await readJsonFile(filePath, { fallback: true }, "fallback");
     expect(result).toEqual({ fallback: true });
+  });
+});
+
+describe("getCacheDir", () => {
+  let originalEnv: string | undefined;
+
+  beforeEach(() => {
+    originalEnv = process.env.CLAUDE_WORKTREE_CACHE_DIR;
+  });
+
+  afterEach(() => {
+    if (originalEnv !== undefined) {
+      process.env.CLAUDE_WORKTREE_CACHE_DIR = originalEnv;
+    } else {
+      delete process.env.CLAUDE_WORKTREE_CACHE_DIR;
+    }
+  });
+
+  test("respects CLAUDE_WORKTREE_CACHE_DIR env var", () => {
+    process.env.CLAUDE_WORKTREE_CACHE_DIR = "/tmp/custom-cache";
+    expect(getCacheDir()).toBe("/tmp/custom-cache");
+  });
+
+  test("falls back to ~/.cache/claude-worktree", () => {
+    delete process.env.CLAUDE_WORKTREE_CACHE_DIR;
+    const { homedir } = require("node:os");
+    expect(getCacheDir()).toBe(join(homedir(), ".cache", "claude-worktree"));
   });
 });
