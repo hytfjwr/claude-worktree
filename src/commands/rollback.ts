@@ -3,7 +3,7 @@ import { getErrorMessage } from "../core/errors.ts";
 import { removeWorktree } from "../core/git.ts";
 import { deleteSession } from "../core/session.ts";
 import { deleteSlot } from "../core/slot.ts";
-import type { RollbackOptions } from "../types.ts";
+import type { RollbackOptions } from "../types/index.ts";
 import { icons } from "../ui/icons.ts";
 import { logInfo, logWarn } from "../ui/logger.ts";
 import { createTailUpdater, startSpinner } from "../ui/spinner.ts";

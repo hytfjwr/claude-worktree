@@ -10,7 +10,7 @@ import {
 } from "../core/git.ts";
 import { deleteSession } from "../core/session.ts";
 import { deleteSlot, readSlot } from "../core/slot.ts";
-import type { CleanArgs, CleanDeps, CleanResult, ProjectConfig, WorktreeStatus } from "../types.ts";
+import type { CleanArgs, CleanDeps, CleanResult, ProjectConfig, WorktreeStatus } from "../types/index.ts";
 import { icons } from "../ui/icons.ts";
 import { logDebug, logInfo, logWarn } from "../ui/logger.ts";
 import { confirm, selectMultiple } from "../ui/prompt.ts";

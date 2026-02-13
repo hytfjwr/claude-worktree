@@ -11,7 +11,7 @@ import type {
   SessionState,
   WorktreeListEntry,
   WorktreeStatus,
-} from "../types.ts";
+} from "../types/index.ts";
 import { rawCode } from "../ui/color.ts";
 import { icons } from "../ui/icons.ts";
 import { logInfo } from "../ui/logger.ts";

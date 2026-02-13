@@ -1,7 +1,7 @@
 import { tmpdir } from "node:os";
 import { describe, expect, test } from "vitest";
 
-import type { ProjectConfig } from "../types.ts";
+import type { ProjectConfig } from "../types/index.ts";
 import {
   buildHookCommand,
   DEFAULT_HOOK_TIMEOUT,

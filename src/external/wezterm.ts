@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 
 import { exec } from "../core/exec.ts";
-import type { WeztermPane } from "../types.ts";
+import type { WeztermPane } from "../types/index.ts";
 
 function isRawWeztermPane(value: unknown): boolean {
   const v = value as Record<string, unknown>;
@@ -62,7 +62,7 @@ export async function ensureWeztermAvailable(checkFn: () => Promise<boolean>, us
   }
 }
 
-import type { PaneOptions } from "../types.ts";
+import type { PaneOptions } from "../types/index.ts";
 
 export async function splitPaneRight(): Promise<string> {
   return (await exec("wezterm", ["cli", "split-pane", "--right"]).text()).trim();

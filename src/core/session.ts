@@ -1,7 +1,7 @@
 import { unlink } from "node:fs/promises";
 import { join } from "node:path";
 
-import type { SessionInfo, SessionState, WeztermPane } from "../types.ts";
+import type { SessionInfo, SessionState, WeztermPane } from "../types/index.ts";
 import { atomicWriteJson, getCacheDir, readJsonFile, withLock } from "./cache.ts";
 
 type SessionCache = Record<string, SessionInfo>;

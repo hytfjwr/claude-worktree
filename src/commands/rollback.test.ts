@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import type { RollbackOptions } from "../types.ts";
+import type { RollbackOptions } from "../types/index.ts";
 
 vi.mock("../core/config.ts", () => ({
   runHook: vi.fn(),

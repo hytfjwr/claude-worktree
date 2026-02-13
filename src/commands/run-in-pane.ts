@@ -4,7 +4,7 @@ import { basename, dirname, resolve } from "node:path";
 
 import { getErrorMessage, isNodeError } from "../core/errors.ts";
 import { spawnInteractive } from "../core/spawn.ts";
-import type { RunInPaneArgs } from "../types.ts";
+import type { RunInPaneArgs } from "../types/index.ts";
 import { logError } from "../ui/logger.ts";
 import { executeHookWithSpinner } from "./hooks.ts";
 import { performRollback } from "./rollback.ts";

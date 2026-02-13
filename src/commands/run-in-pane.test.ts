@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 
-import type { RunInPaneArgs } from "../types.ts";
+import type { RunInPaneArgs } from "../types/index.ts";
 import { parseRunInPaneArgs } from "./run-in-pane.ts";
 
 async function writePayload(obj: unknown): Promise<string> {

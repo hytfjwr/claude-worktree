@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { afterAll, afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { spawnInteractive } from "../core/spawn.ts";
-import type { CreateArgs, CreateDeps, ProjectConfig, WorktreeInfo } from "../types.ts";
+import type { CreateArgs, CreateDeps, ProjectConfig, WorktreeInfo } from "../types/index.ts";
 import { checkWorktreeLimit, getSelfCommand, readPlanFile, runCreate } from "./create.ts";
 
 // Mock spawnInteractive to avoid spawning real processes in terminal mode

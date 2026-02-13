@@ -1,6 +1,6 @@
 import * as readline from "node:readline";
 
-import type { WorktreeInfo, WorktreeStatus } from "../types.ts";
+import type { WorktreeInfo, WorktreeStatus } from "../types/index.ts";
 import { selectMany as selectManyUI, selectSingle } from "./select.ts";
 
 function createReadlineInterface(): readline.Interface {

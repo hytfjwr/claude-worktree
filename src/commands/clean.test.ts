@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
-import type { CleanArgs, CleanDeps, WorktreeInfo, WorktreeStatus } from "../types.ts";
+import type { CleanArgs, CleanDeps, WorktreeInfo, WorktreeStatus } from "../types/index.ts";
 import { executeClean } from "./clean.ts";
 
 // ============================================================================

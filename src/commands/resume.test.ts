@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
-import type { ResumeDeps, WorktreeInfo } from "../types.ts";
+import type { ResumeDeps, WorktreeInfo } from "../types/index.ts";
 import { runResume } from "./resume.ts";
 
 // ============================================================================

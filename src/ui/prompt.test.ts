@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 
-import type { WorktreeInfo, WorktreeStatus } from "../types.ts";
+import type { WorktreeInfo, WorktreeStatus } from "../types/index.ts";
 
 // =============================================================================
 // Mocks

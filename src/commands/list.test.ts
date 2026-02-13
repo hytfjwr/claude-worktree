@@ -18,7 +18,7 @@ import type {
   WorktreeInfo,
   WorktreeListEntry,
   WorktreeStatus,
-} from "../types.ts";
+} from "../types/index.ts";
 import {
   executeList,
   formatAheadBehind,

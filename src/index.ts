@@ -20,5 +20,5 @@ export type {
   WorktreeInfo,
   WorktreeListEntry,
   WorktreeStatus,
-} from "./types.ts";
+} from "./types/index.ts";
 export { getVersion } from "./version.ts";

@@ -4,7 +4,7 @@ import { executeList } from "./commands/list.ts";
 import { runResume } from "./commands/resume.ts";
 import { executeRunInPane, parseRunInPaneArgs } from "./commands/run-in-pane.ts";
 import { extractOptions } from "./options.ts";
-import type { CleanArgs, Command, CreateArgs, ListArgs, ResumeArgs } from "./types.ts";
+import type { CleanArgs, Command, CreateArgs, ListArgs, ResumeArgs } from "./types/index.ts";
 import { logInfo } from "./ui/logger.ts";
 import { getVersion } from "./version.ts";
 

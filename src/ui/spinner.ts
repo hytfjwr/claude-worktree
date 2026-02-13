@@ -1,4 +1,4 @@
-import type { Spinner } from "../types.ts";
+import type { Spinner } from "../types/index.ts";
 import { isColorEnabled } from "./color.ts";
 import { icons } from "./icons.ts";
 

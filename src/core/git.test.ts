@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import type { WorktreeInfo } from "../types.ts";
+import type { WorktreeInfo } from "../types/index.ts";
 import type { ExecResult } from "./exec.ts";
 import { buildWorktreeCommand, getWorktreePath, parseWorktreePorcelain } from "./git.ts";
 

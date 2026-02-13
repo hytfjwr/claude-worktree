@@ -8,7 +8,7 @@ import type {
   ParsedWorktree,
   WorktreeInfo,
   WorktreeStatus,
-} from "../types.ts";
+} from "../types/index.ts";
 import { exec } from "./exec.ts";
 
 const CONCURRENCY_LIMIT = 5;

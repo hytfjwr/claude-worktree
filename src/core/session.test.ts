@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import type { SessionInfo, WeztermPane } from "../types.ts";
+import type { SessionInfo, WeztermPane } from "../types/index.ts";
 
 // Speed up lock acquisition failure tests by using minimal retries
 vi.mock("./cache.ts", async (importOriginal) => {

@@ -1,4 +1,4 @@
-import type { ClaudeOptions, DraftInstructions, MergeInstructions, ResumeCommandOptions } from "../types.ts";
+import type { ClaudeOptions, DraftInstructions, MergeInstructions, ResumeCommandOptions } from "../types/index.ts";
 
 const DEFAULT_PROMPT_SUFFIX = "\n\nIf anything is unclear, always confirm with the user before proceeding.";
 

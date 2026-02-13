@@ -31,7 +31,7 @@ import type {
   RollbackOptions,
   RunInPaneArgs,
   WorktreeInfo,
-} from "../types.ts";
+} from "../types/index.ts";
 import { icons } from "../ui/icons.ts";
 import { logError, logInfo, logWarn } from "../ui/logger.ts";
 import { confirm } from "../ui/prompt.ts";

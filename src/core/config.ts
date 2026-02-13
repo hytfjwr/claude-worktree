@@ -3,8 +3,8 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { TextDecoder } from "node:util";
 
-import type { HookVars, ProjectConfig } from "../types.ts";
-import { projectConfigFields } from "../types.ts";
+import type { HookVars, ProjectConfig } from "../types/index.ts";
+import { projectConfigFields } from "../types/index.ts";
 import { logWarn } from "../ui/logger.ts";
 import { getErrorMessage, isNodeError } from "./errors.ts";
 import { exec } from "./exec.ts";

@@ -1,6 +1,6 @@
 import { runHook } from "../core/config.ts";
 import { getErrorMessage } from "../core/errors.ts";
-import type { HookExecOptions, HookExecResult } from "../types.ts";
+import type { HookExecOptions, HookExecResult } from "../types/index.ts";
 import { icons } from "../ui/icons.ts";
 import { createTailUpdater, startSpinner } from "../ui/spinner.ts";
 

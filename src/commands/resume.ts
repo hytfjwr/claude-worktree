@@ -5,7 +5,7 @@ import { completeSession, saveSession } from "../core/session.ts";
 import { spawnInteractive } from "../core/spawn.ts";
 import { buildResumeCommand } from "../external/claude.ts";
 import { checkWeztermAvailable, createPane, ensureWeztermAvailable, sendCommand } from "../external/wezterm.ts";
-import type { ResumeArgs, ResumeDeps, WorktreeInfo } from "../types.ts";
+import type { ResumeArgs, ResumeDeps, WorktreeInfo } from "../types/index.ts";
 import { icons } from "../ui/icons.ts";
 import { logDebug, logInfo } from "../ui/logger.ts";
 import { selectWorktree } from "../ui/prompt.ts";
