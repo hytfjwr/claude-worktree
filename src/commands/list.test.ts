@@ -101,7 +101,7 @@ function makeListDeps(overrides: Partial<ListDeps> = {}): ListDeps {
   };
 }
 
-const defaultArgs: ListArgs = { json: false, verbose: false, status: false };
+const defaultArgs: ListArgs = { json: false, verbose: false, noStatus: false };
 
 // Suppress console output
 beforeEach(() => {
@@ -421,7 +421,7 @@ describe("executeList", () => {
       getLastCommit: async () => makeCommitInfo(),
     });
 
-    const result = await executeList({ json: true, verbose: false, status: false }, deps);
+    const result = await executeList({ json: true, verbose: false, noStatus: true }, deps);
 
     expect(result.entries).toHaveLength(1);
     const parsed = JSON.parse(jsonOutput);
@@ -499,7 +499,7 @@ describe("executeList", () => {
       getLastCommit: async () => null,
     });
 
-    await executeList({ json: true, verbose: false, status: false }, deps);
+    await executeList({ json: true, verbose: false, noStatus: true }, deps);
 
     const parsed = JSON.parse(jsonOutput);
     expect(parsed.worktrees[0].commit).toBeNull();
@@ -515,7 +515,7 @@ describe("executeList", () => {
       listWorktrees: async () => ({ worktrees: [], mainBranch: "main" }),
     });
 
-    await executeList({ json: true, verbose: false, status: false }, deps);
+    await executeList({ json: true, verbose: false, noStatus: true }, deps);
 
     const parsed = JSON.parse(jsonOutput);
     expect(parsed.worktrees).toEqual([]);
@@ -535,7 +535,7 @@ describe("executeList", () => {
       },
     });
 
-    await executeList({ json: true, verbose: false, status: false }, deps);
+    await executeList({ json: true, verbose: false, noStatus: true }, deps);
 
     expect(spinnerStarted).toBe(false);
   });
@@ -585,7 +585,7 @@ describe("executeList", () => {
     expect(failMessage).toBe("Failed to fetch worktree information");
   });
 
-  test("sessions are not fetched when status flag is false", async () => {
+  test("sessions are not fetched when noStatus flag is true", async () => {
     const mainWt = makeWorktree({ isMain: true, branch: "main", path: "/repo" });
     const mainStatus = makeStatus({ isMain: true, branch: "main", path: "/repo" });
 
@@ -600,12 +600,12 @@ describe("executeList", () => {
       },
     });
 
-    await executeList(defaultArgs, deps);
+    await executeList({ json: false, verbose: false, noStatus: true }, deps);
 
     expect(readAllSessionsCalled).toBe(false);
   });
 
-  test("session status is fetched when status flag is true", async () => {
+  test("session status is fetched by default", async () => {
     const featureWt = makeWorktree({ branch: "feature/auth", path: "/repo-feature-auth" });
     const featureStatus = makeStatus({ branch: "feature/auth", path: "/repo-feature-auth" });
 
@@ -627,7 +627,7 @@ describe("executeList", () => {
       listWeztermPanes: async () => [{ paneId: 42, title: "claude", cwd: "/tmp" }],
     });
 
-    const result = await executeList({ json: false, verbose: false, status: true }, deps);
+    const result = await executeList(defaultArgs, deps);
 
     expect(readAllSessionsCalled).toBe(true);
     expect(result.entries[0].session).toBeDefined();
@@ -645,12 +645,12 @@ describe("executeList", () => {
       readAllSessions: async () => ({}),
     });
 
-    const result = await executeList({ json: false, verbose: false, status: true }, deps);
+    const result = await executeList(defaultArgs, deps);
 
     expect(result.entries[0].session).toBeUndefined();
   });
 
-  test("JSON output includes session when status flag is true", async () => {
+  test("JSON output includes session by default", async () => {
     const featureWt = makeWorktree({ branch: "feature/auth", path: "/repo-feature-auth" });
     const featureStatus = makeStatus({ branch: "feature/auth", path: "/repo-feature-auth" });
 
@@ -672,7 +672,7 @@ describe("executeList", () => {
       }),
     });
 
-    await executeList({ json: true, verbose: false, status: true }, deps);
+    await executeList({ json: true, verbose: false, noStatus: false }, deps);
 
     const parsed = JSON.parse(jsonOutput);
     expect(parsed.worktrees[0].session).toBeDefined();
@@ -680,7 +680,7 @@ describe("executeList", () => {
     expect(parsed.worktrees[0].session.mode).toBe("terminal");
   });
 
-  test("listWeztermPanes is not called when status flag is false", async () => {
+  test("listWeztermPanes is not called when noStatus flag is true", async () => {
     const mainWt = makeWorktree({ isMain: true, branch: "main", path: "/repo" });
     const mainStatus = makeStatus({ isMain: true, branch: "main", path: "/repo" });
 
@@ -695,7 +695,7 @@ describe("executeList", () => {
       },
     });
 
-    await executeList(defaultArgs, deps);
+    await executeList({ json: false, verbose: false, noStatus: true }, deps);
 
     expect(panesCalled).toBe(false);
   });

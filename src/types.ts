@@ -241,7 +241,7 @@ export type CliArgs = CreateArgs;
 export type ListArgs = {
   json: boolean;
   verbose: boolean;
-  status: boolean;
+  noStatus: boolean;
 };
 
 export type WorktreeListEntry = {

@@ -68,7 +68,7 @@ claude-worktree resume feature/auth 'Continue implementation'
 claude-worktree resume
 claude-worktree list
 claude-worktree list -json
-claude-worktree list -status
+claude-worktree list -no-status
 claude-worktree list -v
 claude-worktree clean
 claude-worktree clean -dry-run
@@ -95,7 +95,7 @@ claude-worktree clean -dry-run
 ### List Options
 
 - `-j, -json` - Output as JSON
-- `-s, -status` - Show Claude session status (Running/Done)
+- `-no-status` - Hide Claude session status (shown by default)
 - `-v, -verbose` - Show full paths and details
 
 ### Clean Options
@@ -180,7 +180,7 @@ src/
 
 **Session Tracking (`~/.cache/claude-worktree/sessions.json`):**
 - Worktree 作成時にセッションメタデータ (pane ID, mode, startedAt) を保存
-- `list -status` で各 worktree の Claude セッション状態 (Running/Done) を表示
+- `list` で各 worktree の Claude セッション状態 (Running/Done) をデフォルト表示 (`-no-status` で無効化)
 - pane モード: WezTerm pane の存在で Running/Done を判定
 - terminal モード: プロセス終了時に `completedAt` を設定して Done 判定
 - `clean` 実行時にセッションデータも自動削除

@@ -183,9 +183,9 @@ export async function executeList(args: ListArgs, deps: ListDeps = defaultDeps):
     if (worktrees.length > 0) {
       const statuses = await deps.getWorktreeStatuses(worktrees, mainBranch);
 
-      // Fetch panes and sessions once if -status is enabled
-      const panes = args.status ? await deps.listWeztermPanes() : null;
-      const sessions = args.status ? await deps.readAllSessions() : {};
+      // Fetch panes and sessions by default (skip with -no-status)
+      const panes = args.noStatus ? null : await deps.listWeztermPanes();
+      const sessions = args.noStatus ? {} : await deps.readAllSessions();
 
       // Build entries (parallelize per-worktree git operations)
       result.entries = await Promise.all(
@@ -198,7 +198,7 @@ export async function executeList(args: ListArgs, deps: ListDeps = defaultDeps):
           ]);
 
           let session: SessionState | undefined;
-          if (args.status) {
+          if (!args.noStatus) {
             const sessionInfo = sessions[status.worktree.path];
             if (sessionInfo) {
               session = determineSessionStatus(sessionInfo, panes);

@@ -45,9 +45,9 @@ Resume options:
   -v, -verbose   Show verbose output
 
 List options:
-  -j, -json      Output as JSON
-  -s, -status    Show Claude session status (Running/Done)
-  -v, -verbose   Show full paths and details
+  -j, -json        Output as JSON
+  -no-status       Hide Claude session status (shown by default)
+  -v, -verbose     Show full paths and details
 
 Clean options:
   -f, -force     Skip confirmation prompt
@@ -119,14 +119,14 @@ Usage:
   claude-worktree list [options]
 
 Options:
-  -j, -json      Output as JSON (machine-readable format)
-  -s, -status    Show Claude session status (Running/Done)
-  -v, -verbose   Show full paths and details
-  -h, -help      Show this help
+  -j, -json        Output as JSON (machine-readable format)
+  -no-status       Hide Claude session status (shown by default)
+  -v, -verbose     Show full paths and details
+  -h, -help        Show this help
 
 Examples:
   claude-worktree list
-  claude-worktree list -status
+  claude-worktree list -no-status
   claude-worktree list -json
   claude-worktree list -verbose`);
 }
@@ -366,7 +366,7 @@ export function parseListArgs(args: string[]): ListArgs {
   const { booleans } = extractOptions(args, {
     options: {
       json: { type: "boolean", flag: "-json", alias: "-j" },
-      status: { type: "boolean", flag: "-status", alias: "-s" },
+      noStatus: { type: "boolean", flag: "-no-status" },
       verbose: { type: "boolean", flag: "-verbose", alias: "-v" },
     },
     unknownHandling: "error",
@@ -377,7 +377,7 @@ export function parseListArgs(args: string[]): ListArgs {
   return {
     json: booleans.json,
     verbose: booleans.verbose,
-    status: booleans.status,
+    noStatus: booleans.noStatus,
   };
 }
 
