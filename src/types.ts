@@ -348,8 +348,7 @@ export type CreateDeps = {
   executeHookWithSpinner: (options: HookExecOptions) => Promise<HookExecResult>;
 
   // Session/slot
-  findAvailableSlot: () => Promise<number>;
-  saveSlot: (worktreePath: string, slot: number) => Promise<void>;
+  assignSlot: (worktreePath: string) => Promise<number>;
   readSlot: (worktreePath: string) => Promise<number | undefined>;
   deleteSlot: (worktreePath: string) => Promise<void>;
   saveSession: (worktreePath: string, session: SessionInfo) => Promise<void>;

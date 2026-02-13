@@ -64,7 +64,15 @@ export {
   saveSession,
 } from "./core/session.ts";
 // Slot utilities
-export { deleteSlot, findAvailableSlot, getCacheDir, isPortInUse, readSlot, saveSlot } from "./core/slot.ts";
+export {
+  assignSlot,
+  deleteSlot,
+  findAvailableSlot,
+  getCacheDir,
+  isPortInUse,
+  readSlot,
+  saveSlot,
+} from "./core/slot.ts";
 export type { SpawnInteractiveOptions } from "./core/spawn.ts";
 // Spawn utilities
 export { spawnInteractive } from "./core/spawn.ts";

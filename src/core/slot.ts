@@ -34,6 +34,55 @@ export async function findAvailableSlot(basePort: number = 8880, maxSlots: numbe
   throw new Error(`No available slots (all ports ${basePort + 1}-${basePort + maxSlots} are in use)`);
 }
 
+/**
+ * Find an available slot and reserve it for the given worktree path.
+ *
+ * Uses a best-effort file lock to read existing assignments, check port
+ * availability (skipping already-assigned slots), and write the updated cache.
+ * If the worktree already has an assigned slot, the existing slot is returned
+ * without modification (idempotent).
+ *
+ * Note: if {@link withLock} cannot acquire the lock after retries it proceeds
+ * without holding it, so under heavy contention the operation is not strictly
+ * atomic and a TOCTOU race is still theoretically possible.
+ */
+export async function assignSlot(worktreePath: string, basePort: number = 8880, maxSlots: number = 9): Promise<number> {
+  if (!Number.isInteger(basePort) || basePort < 1 || basePort > 65535) {
+    throw new Error(`Invalid basePort: ${basePort}. Must be an integer between 1 and 65535`);
+  }
+  if (!Number.isInteger(maxSlots) || maxSlots < 1 || maxSlots > 65535 - basePort) {
+    throw new Error(`Invalid maxSlots: ${maxSlots}. Must be a positive integer and basePort + maxSlots <= 65535`);
+  }
+
+  return withLock(getLockFile(), async () => {
+    const cache = await readJsonFile<SlotCache>(getCacheFile(), {}, "fallback");
+
+    // Return existing assignment if present (idempotent)
+    if (Object.hasOwn(cache, worktreePath)) {
+      return cache[worktreePath];
+    }
+
+    const assignedSlots = new Set(Object.values(cache));
+
+    // Check ports in parallel, but only for slots not already assigned in cache
+    const candidates = Array.from({ length: maxSlots }, (_, i) => i + 1).filter((s) => !assignedSlots.has(s));
+    if (candidates.length === 0) {
+      throw new Error(`No available slots (all ${maxSlots} slots are assigned)`);
+    }
+
+    const portResults = await Promise.all(candidates.map((s) => isPortInUse(basePort + s)));
+    const availableIndex = portResults.indexOf(false);
+    if (availableIndex === -1) {
+      throw new Error(`No available slots (all ports ${basePort + 1}-${basePort + maxSlots} are in use)`);
+    }
+
+    const slot = candidates[availableIndex];
+    cache[worktreePath] = slot;
+    await atomicWriteJson(getCacheFile(), cache);
+    return slot;
+  });
+}
+
 // Slot cache: persists worktree path → slot number mappings
 export function getCacheDir(): string {
   return join(process.env.CLAUDE_WORKTREE_CACHE_DIR || join(homedir(), ".cache", "claude-worktree"));

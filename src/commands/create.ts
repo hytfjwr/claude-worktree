@@ -18,7 +18,7 @@ import {
   verifyBranchRef,
 } from "../core/git.ts";
 import { completeSession, deleteSession, saveSession } from "../core/session.ts";
-import { deleteSlot, findAvailableSlot, readSlot, saveSlot } from "../core/slot.ts";
+import { assignSlot, deleteSlot, readSlot } from "../core/slot.ts";
 import { spawnInteractive } from "../core/spawn.ts";
 import { buildClaudeCommand } from "../external/claude.ts";
 import { checkWeztermAvailable, createPane, sendCommand } from "../external/wezterm.ts";
@@ -57,8 +57,7 @@ const defaultDeps: CreateDeps = {
   buildHookCommand,
   resolveHookTimeout,
   executeHookWithSpinner,
-  findAvailableSlot,
-  saveSlot,
+  assignSlot,
   readSlot,
   deleteSlot,
   saveSession,
@@ -585,8 +584,7 @@ export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps
   if (config) {
     const anyHookUsesSlot = [config.postCreate, config.preClean, config.postClean].some((h) => h?.includes("{slot}"));
     if (anyHookUsesSlot) {
-      slot = await deps.findAvailableSlot();
-      await deps.saveSlot(worktreePath, slot);
+      slot = await deps.assignSlot(worktreePath);
     }
   }
 
