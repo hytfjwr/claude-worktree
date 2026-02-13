@@ -54,15 +54,16 @@ function buildDraftInstructions(draftInstructions: DraftInstructions): string {
 }
 
 /**
- * Escape prompt for heredoc delimiter.
- * Check that the delimiter string (PROMPT_END) does not appear in the prompt.
+ * Find a heredoc delimiter that does not appear as a line in the content.
+ * Starts with "PROMPT_END" and appends underscores until a safe delimiter is found.
  */
-function escapeForHeredoc(str: string): string {
-  // No special escaping is needed for heredoc.
-  // However, if the delimiter string appears in the content, a different delimiter
-  // or string transformation would be needed.
-  // In practice, PROMPT_END is unlikely to appear in a prompt.
-  return str;
+export function findSafeDelimiter(content: string): string {
+  const lines = content.split("\n");
+  let delimiter = "PROMPT_END";
+  while (lines.includes(delimiter)) {
+    delimiter += "_";
+  }
+  return delimiter;
 }
 
 export function buildResumeCommand(options: ResumeCommandOptions): string {
@@ -74,10 +75,10 @@ export function buildResumeCommand(options: ResumeCommandOptions): string {
     return `claude --continue${dangerFlag}`;
   }
 
-  const escapedPrompt = escapeForHeredoc(prompt);
-  return `claude --continue${dangerFlag} <<'PROMPT_END'
-${escapedPrompt}
-PROMPT_END`;
+  const delimiter = findSafeDelimiter(prompt);
+  return `claude --continue${dangerFlag} <<'${delimiter}'
+${prompt}
+${delimiter}`;
 }
 
 export function buildClaudeCommand(options: ClaudeOptions): string {
@@ -100,13 +101,13 @@ export function buildClaudeCommand(options: ClaudeOptions): string {
     fullPrompt += buildDraftInstructions(draftInstructions);
   }
 
-  const escapedPrompt = escapeForHeredoc(fullPrompt);
-
   const dangerFlag = dangerouslySkipPermissions ? "--dangerously-skip-permissions " : "";
 
+  const delimiter = findSafeDelimiter(fullPrompt);
+
   // Pass the prompt via heredoc format.
-  // Quoting 'PROMPT_END' prevents variable expansion.
-  return `claude ${dangerFlag}--permission-mode ${permissionMode} <<'PROMPT_END'
-${escapedPrompt}
-PROMPT_END`;
+  // Quoting the delimiter prevents variable expansion.
+  return `claude ${dangerFlag}--permission-mode ${permissionMode} <<'${delimiter}'
+${fullPrompt}
+${delimiter}`;
 }

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { buildClaudeCommand, buildResumeCommand } from "./claude.ts";
+import { buildClaudeCommand, buildResumeCommand, findSafeDelimiter } from "./claude.ts";
 
 describe("buildClaudeCommand", () => {
   test("basic prompt - default permission mode and suffix are applied", () => {
@@ -340,6 +340,18 @@ It's a "test"
 path\\to\\file
 PROMPT_END`);
   });
+
+  test("prompt containing PROMPT_END - uses alternative delimiter", () => {
+    const result = buildClaudeCommand({
+      prompt: "before\nPROMPT_END\nafter",
+      promptSuffix: "",
+    });
+
+    expect(result).toContain("<<'PROMPT_END_'");
+    expect(result).toContain("before\nPROMPT_END\nafter");
+    expect(result).toMatch(/PROMPT_END_$/);
+    expect(result).not.toMatch(/<<'PROMPT_END'\n/);
+  });
 });
 
 // ============================================================================
@@ -396,5 +408,52 @@ PROMPT_END`);
 line1
 line2
 PROMPT_END`);
+  });
+
+  test("prompt containing PROMPT_END - uses alternative delimiter", () => {
+    const result = buildResumeCommand({ prompt: "before\nPROMPT_END\nafter" });
+    expect(result).toContain("<<'PROMPT_END_'");
+    expect(result).toContain("before\nPROMPT_END\nafter");
+    expect(result).toMatch(/PROMPT_END_$/);
+  });
+});
+
+// ============================================================================
+// findSafeDelimiter tests
+// ============================================================================
+
+describe("findSafeDelimiter", () => {
+  test("no collision - returns default PROMPT_END", () => {
+    expect(findSafeDelimiter("normal prompt")).toBe("PROMPT_END");
+  });
+
+  test("PROMPT_END in content - appends underscore", () => {
+    expect(findSafeDelimiter("before\nPROMPT_END\nafter")).toBe("PROMPT_END_");
+  });
+
+  test("multiple collisions - appends underscores until safe", () => {
+    expect(findSafeDelimiter("PROMPT_END\nPROMPT_END_\nPROMPT_END__")).toBe("PROMPT_END___");
+  });
+
+  test("PROMPT_END as substring of a line - no collision", () => {
+    expect(findSafeDelimiter("text PROMPT_END text")).toBe("PROMPT_END");
+  });
+
+  test("PROMPT_END with trailing whitespace - no collision", () => {
+    expect(findSafeDelimiter("PROMPT_END ")).toBe("PROMPT_END");
+  });
+
+  test("PROMPT_END with leading whitespace - no collision", () => {
+    expect(findSafeDelimiter("  PROMPT_END")).toBe("PROMPT_END");
+  });
+
+  test("PROMPT_END with CRLF line endings - no collision", () => {
+    // \r is part of the line content after split("\n"), so "PROMPT_END\r" !== "PROMPT_END".
+    // Bash heredoc also compares the delimiter exactly, so "PROMPT_END\r" won't terminate it.
+    expect(findSafeDelimiter("PROMPT_END\r\n")).toBe("PROMPT_END");
+  });
+
+  test("empty content - returns default PROMPT_END", () => {
+    expect(findSafeDelimiter("")).toBe("PROMPT_END");
   });
 });
