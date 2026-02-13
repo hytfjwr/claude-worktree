@@ -340,6 +340,23 @@ describe("executeClean", () => {
   });
 
   describe("fetchAndPrune", () => {
+    test("skips fetchAndPrune in dry-run mode", async () => {
+      const worktree = makeWorktree();
+      const status = makeStatus({}, { canAutoClean: true });
+      let fetchCalled = false;
+      const deps = makeDeps({
+        fetchAndPrune: async () => {
+          fetchCalled = true;
+        },
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
+        getWorktreeStatuses: async () => [status],
+      });
+
+      await executeClean({ ...defaultArgs, dryRun: true }, deps);
+
+      expect(fetchCalled).toBe(false);
+    });
+
     test("continues even when fetchAndPrune fails", async () => {
       const worktree = makeWorktree();
       const status = makeStatus({}, { canAutoClean: true });

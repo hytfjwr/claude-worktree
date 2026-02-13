@@ -40,12 +40,14 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
     errors: [],
   };
 
-  const fetchSpinner = deps.startSpinner("Updating remote references...");
-  try {
-    await deps.fetchAndPrune();
-    fetchSpinner.stop(`${icons.success()} Done updating remote references.`);
-  } catch {
-    fetchSpinner.fail("Failed to update remote references (continuing)");
+  if (!args.dryRun) {
+    const fetchSpinner = deps.startSpinner("Updating remote references...");
+    try {
+      await deps.fetchAndPrune();
+      fetchSpinner.stop(`${icons.success()} Done updating remote references.`);
+    } catch {
+      fetchSpinner.fail("Failed to update remote references (continuing)");
+    }
   }
 
   const listSpinner = deps.startSpinner("Fetching worktree list...");
