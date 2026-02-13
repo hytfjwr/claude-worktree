@@ -14,6 +14,7 @@ import type {
 } from "../types.ts";
 import { rawCode } from "../ui/color.ts";
 import { icons } from "../ui/icons.ts";
+import { logInfo } from "../ui/logger.ts";
 import { startSpinner } from "../ui/spinner.ts";
 
 const defaultDeps: ListDeps = {
@@ -222,9 +223,9 @@ export async function executeList(args: ListArgs, deps: ListDeps = defaultDeps):
   // Empty result
   if (result.entries.length === 0) {
     if (args.json) {
-      console.log(JSON.stringify({ worktrees: [] }, null, 2));
+      logInfo(JSON.stringify({ worktrees: [] }, null, 2));
     } else {
-      console.log("No worktrees found.");
+      logInfo("No worktrees found.");
     }
     return result;
   }
@@ -251,12 +252,12 @@ export async function executeList(args: ListArgs, deps: ListDeps = defaultDeps):
         }),
       })),
     };
-    console.log(JSON.stringify(jsonOutput, null, 2));
+    logInfo(JSON.stringify(jsonOutput, null, 2));
     return result;
   }
 
   // Rich display
-  console.log(`\n${rawCode("bold")}Worktrees (${result.entries.length})${rawCode("reset")}\n`);
+  logInfo(`\n${rawCode("bold")}Worktrees (${result.entries.length})${rawCode("reset")}\n`);
 
   // Derive repoRoot from main worktree path or first worktree
   const mainEntry = result.entries.find((e) => e.worktree.isMain);
@@ -265,12 +266,12 @@ export async function executeList(args: ListArgs, deps: ListDeps = defaultDeps):
   for (const entry of result.entries) {
     const lines = formatWorktreeEntry(entry, repoRoot, args.verbose);
     for (const line of lines) {
-      console.log(line);
+      logInfo(line);
     }
-    console.log("");
+    logInfo("");
   }
 
-  console.log(formatSummary(result.entries));
+  logInfo(formatSummary(result.entries));
 
   return result;
 }

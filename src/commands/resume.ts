@@ -7,7 +7,7 @@ import { buildResumeCommand } from "../external/claude.ts";
 import { checkWeztermAvailable, createPane, ensureWeztermAvailable, sendCommand } from "../external/wezterm.ts";
 import type { ResumeArgs, ResumeDeps, WorktreeInfo } from "../types.ts";
 import { icons } from "../ui/icons.ts";
-import { logDebug } from "../ui/logger.ts";
+import { logDebug, logInfo } from "../ui/logger.ts";
 import { selectWorktree } from "../ui/prompt.ts";
 
 // =============================================================================
@@ -36,7 +36,7 @@ const defaultDeps: ResumeDeps = {
 async function launchResumeInPane(worktree: WorktreeInfo, claudeCommand: string, deps: ResumeDeps): Promise<void> {
   const paneIdStr = await deps.createPane({ keepFocus: true });
   const paneId = Number.parseInt(paneIdStr, 10);
-  console.log(`${icons.window()} Created pane: ${paneId}`);
+  logInfo(`${icons.window()} Created pane: ${paneId}`);
 
   await deps.sendCommand(paneIdStr, `cd "${worktree.path}" && ${claudeCommand}`);
 
@@ -46,7 +46,7 @@ async function launchResumeInPane(worktree: WorktreeInfo, claudeCommand: string,
     startedAt: new Date().toISOString(),
   });
 
-  console.log(`${icons.done()} Claude resumed in new pane`);
+  logInfo(`${icons.done()} Claude resumed in new pane`);
 }
 
 /**
@@ -109,7 +109,7 @@ export async function runResume(args: ResumeArgs, deps: ResumeDeps = defaultDeps
   // Resolve target worktree
   const target = await resolveTargetWorktree(branchName, nonMainWorktrees, deps);
   if (!target) {
-    console.log("Cancelled.");
+    logInfo("Cancelled.");
     return;
   }
 
@@ -121,10 +121,10 @@ export async function runResume(args: ResumeArgs, deps: ResumeDeps = defaultDeps
   }
 
   // Display info
-  console.log(`${icons.branch()} Branch: ${target.branch}`);
-  console.log(`${icons.folder()} Worktree: ${target.path}`);
+  logInfo(`${icons.branch()} Branch: ${target.branch}`);
+  logInfo(`${icons.folder()} Worktree: ${target.path}`);
   if (prompt) {
-    console.log(`${icons.clipboard()} Prompt: ${prompt}`);
+    logInfo(`${icons.clipboard()} Prompt: ${prompt}`);
   }
 
   // Build claude command

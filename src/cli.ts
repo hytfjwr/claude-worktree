@@ -5,10 +5,11 @@ import { runResume } from "./commands/resume.ts";
 import { executeRunInPane, parseRunInPaneArgs } from "./commands/run-in-pane.ts";
 import { extractOptions } from "./options.ts";
 import type { CleanArgs, Command, CreateArgs, ListArgs, ResumeArgs } from "./types.ts";
+import { logInfo } from "./ui/logger.ts";
 import { getVersion } from "./version.ts";
 
 export function showHelp(): void {
-  console.log(`claude-worktree - CLI for parallel development with WezTerm + git worktree + Claude Code
+  logInfo(`claude-worktree - CLI for parallel development with WezTerm + git worktree + Claude Code
 
 Usage:
   claude-worktree <branch-name> <prompt>
@@ -76,7 +77,7 @@ Examples:
 }
 
 export function showCreateHelp(): void {
-  console.log(`claude-worktree <branch-name> - Create a new worktree and launch Claude Code
+  logInfo(`claude-worktree <branch-name> - Create a new worktree and launch Claude Code
 
 Creates a git worktree for a new branch, then starts a Claude Code session.
 Optionally opens in a new WezTerm pane for parallel development.
@@ -112,7 +113,7 @@ Examples:
 }
 
 export function showListHelp(): void {
-  console.log(`claude-worktree list - List existing worktrees with status
+  logInfo(`claude-worktree list - List existing worktrees with status
 
 Displays all git worktrees managed by claude-worktree, including branch info,
 commit details, and optionally Claude session status.
@@ -134,7 +135,7 @@ Examples:
 }
 
 export function showCleanHelp(): void {
-  console.log(`claude-worktree clean - Remove unnecessary worktrees
+  logInfo(`claude-worktree clean - Remove unnecessary worktrees
 
 Identifies worktrees that can be safely removed (merged branches, deleted remote
 branches) and prompts for confirmation before deleting.
@@ -157,7 +158,7 @@ Examples:
 }
 
 export function showResumeHelp(): void {
-  console.log(`claude-worktree resume - Resume a Claude session in an existing worktree
+  logInfo(`claude-worktree resume - Resume a Claude session in an existing worktree
 
 Resumes a Claude Code session using --continue in an existing worktree.
 If no branch name is specified, an interactive selection prompt is shown.
@@ -473,7 +474,7 @@ export async function run(command: Command): Promise<void> {
       }
       break;
     case "version":
-      console.log(getVersion());
+      logInfo(getVersion());
       break;
     case "create":
       await runCreate(command.args);
