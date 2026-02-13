@@ -538,9 +538,7 @@ describe("runCreate", () => {
           mainBranch: "main",
         })),
       });
-      await runCreate(defaultPaneArgs, deps);
-
-      expect(process.exitCode).toBe(1);
+      await expect(runCreate(defaultPaneArgs, deps)).rejects.toThrow("Worktree limit reached");
       expect(deps.createWorktree).not.toHaveBeenCalled();
     });
 

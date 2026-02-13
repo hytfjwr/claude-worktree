@@ -498,9 +498,7 @@ export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps
     const nonMainCount = worktrees.filter((w) => !w.isMain).length;
     const limitError = checkWorktreeLimit(config, nonMainCount, existingWorktree !== null);
     if (limitError) {
-      console.log(limitError);
-      process.exitCode = 1;
-      return;
+      throw new Error(limitError);
     }
   }
 
