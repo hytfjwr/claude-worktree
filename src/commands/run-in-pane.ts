@@ -120,12 +120,8 @@ export async function executeRunInPane(args: RunInPaneArgs): Promise<void> {
       cwd: worktreePath,
     });
     proc.on("error", reject);
-    proc.on("close", (code) => {
-      if (code === 0) {
-        resolve();
-      } else {
-        reject(new Error(`Claude command exited with code ${code ?? 1}`));
-      }
+    proc.on("close", () => {
+      resolve();
     });
   });
 }
