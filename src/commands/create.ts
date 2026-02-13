@@ -35,6 +35,7 @@ import type {
 import { icons } from "../ui/icons.ts";
 import { logInfo, logWarn } from "../ui/logger.ts";
 import { confirm } from "../ui/prompt.ts";
+import { startSpinner } from "../ui/spinner.ts";
 import { executeHookWithSpinner } from "./hooks.ts";
 import { performRollback } from "./rollback.ts";
 
@@ -67,6 +68,7 @@ const defaultDeps: CreateDeps = {
   createPane,
   sendCommand,
   confirm,
+  startSpinner,
   performRollback,
 };
 
@@ -467,7 +469,14 @@ export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps
       // In dry-run, assume remote ref would be used (no network call)
       worktreeBaseBranch = `origin/${effectiveBaseBranch}`;
     } else {
-      await deps.fetchOrigin(effectiveBaseBranch);
+      const fetchSpinner = deps.startSpinner("Fetching latest from origin...");
+      try {
+        await deps.fetchOrigin(effectiveBaseBranch);
+        fetchSpinner.stop(`${icons.success()} Fetched latest from origin.`);
+      } catch (err) {
+        fetchSpinner.fail(`Failed to fetch from origin: ${getErrorMessage(err)}`);
+        throw err;
+      }
       const remoteRef = `origin/${effectiveBaseBranch}`;
       const remoteExists = await deps.verifyBranchRef(remoteRef);
       if (remoteExists) {

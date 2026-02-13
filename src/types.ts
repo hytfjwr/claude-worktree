@@ -362,6 +362,7 @@ export type CreateDeps = {
 
   // UI
   confirm: (message: string) => Promise<boolean>;
+  startSpinner: (message: string) => Spinner;
 
   // Rollback
   performRollback: (options: RollbackOptions) => Promise<void>;

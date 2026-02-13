@@ -186,6 +186,7 @@ function makeDeps(overrides: Partial<CreateDeps> = {}): CreateDeps {
     createPane: vi.fn(async () => "42"),
     sendCommand: vi.fn(async () => {}),
     confirm: vi.fn(async () => true),
+    startSpinner: vi.fn(() => ({ stop: vi.fn(), fail: vi.fn(), updateTail: vi.fn(), isExpanded: vi.fn(() => false) })),
     performRollback: vi.fn(async () => {}),
     ...overrides,
   };
