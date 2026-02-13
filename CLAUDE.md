@@ -117,34 +117,54 @@ bin/
   claude-worktree.ts   # Entry point
 src/
   core/                # Core domain logic
-    git.ts             # Git operations (repo info, worktree creation)
-    git.test.ts
-    exec.ts            # Shell command execution (child_process wrapper)
-    exec.test.ts
+    cache.ts           # File lock and JSON cache utilities
+    cache.test.ts
     config.ts          # Project config (.claude-worktree.json) & hook execution
     config.test.ts
+    errors.ts          # Custom error types and type guards
+    errors.test.ts
+    exec.ts            # Shell command execution (child_process wrapper)
+    exec.test.ts
+    git.ts             # Git operations (repo info, worktree creation)
+    git.test.ts
     session.ts         # Session metadata (save/read/complete/delete) & status detection
     session.test.ts
     slot.ts            # Port-scan based slot auto-assignment & slot cache
     slot.test.ts
+    spawn.ts           # Interactive process spawning with signal forwarding
+    spawn.test.ts
   commands/            # Command implementations
+    clean.ts           # Worktree cleanup orchestration
+    clean.test.ts
     create.ts          # Create command orchestration
     create.test.ts
+    hooks.ts           # Shared hook execution with spinner feedback
+    hooks.test.ts
     list.ts            # Worktree listing with rich display
     list.test.ts
     resume.ts          # Resume command orchestration
     resume.test.ts
-    clean.ts           # Worktree cleanup orchestration
-    clean.test.ts
+    rollback.ts        # Worktree rollback logic
+    rollback.test.ts
+    run-in-pane.ts     # Pane mode execution orchestration
+    run-in-pane.test.ts
   external/            # External tool integrations
     claude.ts          # Claude Code command generation
     claude.test.ts
     wezterm.ts         # WezTerm pane operations (split, send text)
     wezterm.test.ts
   ui/                  # Terminal UI utilities
+    color.ts           # Terminal color utilities (NO_COLOR support)
+    color.test.ts
+    icons.ts           # Terminal icon/symbol utilities
+    icons.test.ts
+    logger.ts          # Logging utilities
+    logger.test.ts
+    prompt.ts          # Interactive user prompts
+    select.ts          # Interactive selection (single/multi, TTY/non-TTY)
+    select.test.ts
     spinner.ts         # Terminal spinner with shimmer effect
     spinner.test.ts
-    prompt.ts          # Interactive user prompts
   cli.ts               # Argument parsing & routing
   cli.test.ts
   options.ts           # CLI option extraction utility
