@@ -13,12 +13,13 @@ export type SpawnInteractiveOptions = {
  * - Forwards SIGINT/SIGTERM to the child process once, then removes the handler
  *   so that a second signal terminates the parent immediately.
  * - Cleans up all event listeners when the child closes or errors.
- * - Returns a promise that resolves when the child exits, or rejects on spawn error.
+ * - Returns a promise that resolves with the child process exit code (including
+ *   non-zero codes) when the child exits, and rejects only on spawn error.
  */
-export function spawnInteractive(options: SpawnInteractiveOptions): Promise<void> {
+export function spawnInteractive(options: SpawnInteractiveOptions): Promise<number> {
   const { command, cwd } = options;
 
-  return new Promise<void>((resolve, reject) => {
+  return new Promise<number>((resolve, reject) => {
     const proc = spawn("sh", ["-c", command], {
       stdio: ["inherit", "inherit", "inherit"],
       cwd,
@@ -54,9 +55,9 @@ export function spawnInteractive(options: SpawnInteractiveOptions): Promise<void
       reject(err);
     });
 
-    proc.on("close", () => {
+    proc.on("close", (code) => {
       cleanup();
-      resolve();
+      resolve(code ?? 1);
     });
   });
 }

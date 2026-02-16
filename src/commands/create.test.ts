@@ -9,7 +9,7 @@ import { checkWorktreeLimit, getSelfCommand, readPlanFile, runCreate } from "./c
 
 // Mock spawnInteractive to avoid spawning real processes in terminal mode
 vi.mock("../core/spawn.ts", () => ({
-  spawnInteractive: vi.fn(async () => {}),
+  spawnInteractive: vi.fn(async () => 0),
 }));
 
 describe("readPlanFile", () => {
@@ -275,6 +275,15 @@ describe("runCreate", () => {
       const deps = makeDeps();
 
       await expect(runCreate(defaultTerminalArgs, deps)).rejects.toThrow("process crashed");
+      expect(deps.saveSession).toHaveBeenCalled();
+      expect(deps.completeSession).not.toHaveBeenCalled();
+    });
+
+    test("does not complete session when child process exits with non-zero code", async () => {
+      vi.mocked(spawnInteractive).mockResolvedValueOnce(1);
+      const deps = makeDeps();
+
+      await runCreate(defaultTerminalArgs, deps);
       expect(deps.saveSession).toHaveBeenCalled();
       expect(deps.completeSession).not.toHaveBeenCalled();
     });

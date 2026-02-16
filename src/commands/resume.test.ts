@@ -3,8 +3,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
+import { spawnInteractive } from "../core/spawn.ts";
 import type { ResumeDeps, WorktreeInfo } from "../types/index.ts";
 import { runResume } from "./resume.ts";
+
+// Mock spawnInteractive to avoid spawning real processes in terminal mode
+vi.mock("../core/spawn.ts", () => ({
+  spawnInteractive: vi.fn(async () => 0),
+}));
 
 // ============================================================================
 // Helper functions
@@ -63,8 +69,24 @@ beforeEach(() => {
 // ============================================================================
 
 describe("runResume", () => {
-  // Note: Terminal mode tests use pane mode to avoid spawning real processes.
-  // Terminal mode launch logic is equivalent to create.ts (same signal forwarding pattern).
+  describe("terminal mode", () => {
+    test("completes session when child process exits with code 0", async () => {
+      vi.mocked(spawnInteractive).mockResolvedValueOnce(0);
+      const deps = makeDeps();
+      await runResume({ branchName: "feature/test" }, deps);
+
+      expect(deps.completeSession).toHaveBeenCalledWith(tempDir);
+    });
+
+    test("does not complete session when child process exits with non-zero code", async () => {
+      vi.mocked(spawnInteractive).mockResolvedValueOnce(1);
+      const deps = makeDeps();
+      await runResume({ branchName: "feature/test" }, deps);
+
+      expect(deps.saveSession).toHaveBeenCalled();
+      expect(deps.completeSession).not.toHaveBeenCalled();
+    });
+  });
 
   describe("branch name specified", () => {
     test("builds resume command with correct options", async () => {

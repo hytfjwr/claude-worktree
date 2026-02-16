@@ -58,9 +58,11 @@ async function launchResumeInTerminal(worktree: WorktreeInfo, claudeCommand: str
     startedAt: new Date().toISOString(),
   });
 
-  await spawnInteractive({ command: claudeCommand, cwd: worktree.path });
+  const exitCode = await spawnInteractive({ command: claudeCommand, cwd: worktree.path });
 
-  await deps.completeSession(worktree.path);
+  if (exitCode === 0) {
+    await deps.completeSession(worktree.path);
+  }
 }
 
 // =============================================================================
