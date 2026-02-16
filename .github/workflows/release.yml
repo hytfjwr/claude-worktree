@@ -65,6 +65,7 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git push origin --delete "$BRANCH" 2>/dev/null || true
           git checkout -b "$BRANCH"
           git add package.json
           git commit -m "chore: release v${VERSION}"
@@ -75,12 +76,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           VERSION="${{ steps.bump.outputs.version }}"
-          BODY=$(cat <<EOF
+          BRANCH="release/v${VERSION}"
+          EXISTING=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number')
+          if [ -n "$EXISTING" ]; then
+            echo "PR #${EXISTING} already exists for ${BRANCH}, skipping creation"
+          else
+            BODY=$(cat <<EOF
           ## Summary
           - Bump package version to v${VERSION}
           EOF
-          )
-          gh pr create \
-            --title "chore: release v${VERSION}" \
-            --body "$BODY" \
-            --base main
+            )
+            gh pr create \
+              --title "chore: release v${VERSION}" \
+              --body "$BODY" \
+              --base main
+          fi
