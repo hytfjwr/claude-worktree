@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
-import { withTTY } from "../__test-utils__.ts";
+import { saveEnv, withTTY } from "../__test-utils__.ts";
 import {
   _resetColorCache,
   blue,
@@ -17,9 +17,15 @@ import {
   yellow,
 } from "./color.ts";
 
+let restoreEnv: () => void;
+
+beforeEach(() => {
+  restoreEnv = saveEnv("NO_COLOR");
+});
+
 afterEach(() => {
+  restoreEnv();
   _resetColorCache();
-  delete process.env.NO_COLOR;
 });
 
 describe("shouldUseColor", () => {

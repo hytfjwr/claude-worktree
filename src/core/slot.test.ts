@@ -15,27 +15,22 @@ vi.mock("./cache.ts", async (importOriginal) => {
 
 import { createServer } from "node:net";
 
+import { saveEnv } from "../__test-utils__.ts";
 import { getCacheDir } from "./cache.ts";
 import { assignSlot, deleteSlot, findAvailableSlot, isPortInUse, readSlot, saveSlot } from "./slot.ts";
 
 describe("slot cache", () => {
   let tempDir: string;
-  let originalEnv: string | undefined;
+  let restoreEnv: () => void;
 
   beforeEach(() => {
-    // Use a temp directory to avoid touching the real cache
     tempDir = mkdtempSync(join(tmpdir(), "claude-worktree-test-"));
-    originalEnv = process.env.CLAUDE_WORKTREE_CACHE_DIR;
+    restoreEnv = saveEnv("CLAUDE_WORKTREE_CACHE_DIR");
     process.env.CLAUDE_WORKTREE_CACHE_DIR = tempDir;
   });
 
   afterEach(() => {
-    // Restore env and clean up temp directory
-    if (originalEnv !== undefined) {
-      process.env.CLAUDE_WORKTREE_CACHE_DIR = originalEnv;
-    } else {
-      delete process.env.CLAUDE_WORKTREE_CACHE_DIR;
-    }
+    restoreEnv();
     try {
       rmSync(tempDir, { recursive: true });
     } catch {
@@ -173,20 +168,16 @@ describe("isPortInUse", () => {
 
 describe("assignSlot", () => {
   let tempDir: string;
-  let originalEnv: string | undefined;
+  let restoreEnv: () => void;
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), "claude-worktree-test-assign-"));
-    originalEnv = process.env.CLAUDE_WORKTREE_CACHE_DIR;
+    restoreEnv = saveEnv("CLAUDE_WORKTREE_CACHE_DIR");
     process.env.CLAUDE_WORKTREE_CACHE_DIR = tempDir;
   });
 
   afterEach(() => {
-    if (originalEnv !== undefined) {
-      process.env.CLAUDE_WORKTREE_CACHE_DIR = originalEnv;
-    } else {
-      delete process.env.CLAUDE_WORKTREE_CACHE_DIR;
-    }
+    restoreEnv();
     try {
       rmSync(tempDir, { recursive: true });
     } catch {

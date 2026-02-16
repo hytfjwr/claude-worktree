@@ -95,6 +95,27 @@ export function createFakeChildProcess(): ChildProcess {
   return fakeProc;
 }
 
+/**
+ * Save current values of specified environment variables without modifying them.
+ * Returns a restore function for use in afterEach.
+ * Use when tests modify env vars within individual test bodies.
+ */
+export function saveEnv(...keys: string[]): () => void {
+  const saved = new Map<string, string | undefined>();
+  for (const key of keys) {
+    saved.set(key, process.env[key]);
+  }
+  return () => {
+    for (const [key, value] of saved) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  };
+}
+
 export function withTTY(isTTY: boolean, fn: () => void) {
   const saved = Object.getOwnPropertyDescriptor(process.stdout, "isTTY");
   Object.defineProperty(process.stdout, "isTTY", { value: isTTY, configurable: true, writable: true });

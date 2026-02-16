@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
+import { saveEnv } from "../__test-utils__.ts";
 import { _resetColorCache } from "./color.ts";
 import {
   COLOR_THEMES,
@@ -31,15 +32,17 @@ function withTTY<T>(isTTY: boolean, fn: () => T): T {
   }
 }
 
+let restoreEnv: () => void;
+
 beforeEach(() => {
-  // Ensure color cache is fresh for each test
+  restoreEnv = saveEnv("NO_COLOR");
   _resetColorCache();
 });
 
 afterEach(() => {
   vi.useRealTimers();
+  restoreEnv();
   _resetColorCache();
-  delete process.env.NO_COLOR;
 });
 
 describe("startSpinner (non-TTY)", () => {

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
+import { saveEnv } from "../__test-utils__.ts";
 import type { SessionInfo, WeztermPane } from "../types/index.ts";
 
 // Speed up lock acquisition failure tests by using minimal retries
@@ -160,15 +161,17 @@ describe("formatElapsed", () => {
 
 describe("session file I/O", () => {
   let tempDir: string;
+  let restoreEnv: () => void;
 
   beforeEach(async () => {
     tempDir = join(tmpdir(), `claude-worktree-session-test-${Date.now()}-${Math.random().toString(16).slice(2)}`);
     await mkdir(tempDir, { recursive: true });
+    restoreEnv = saveEnv("CLAUDE_WORKTREE_CACHE_DIR");
     process.env.CLAUDE_WORKTREE_CACHE_DIR = tempDir;
   });
 
   afterEach(async () => {
-    delete process.env.CLAUDE_WORKTREE_CACHE_DIR;
+    restoreEnv();
     await rm(tempDir, { recursive: true, force: true });
   });
 

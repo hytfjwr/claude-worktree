@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
+import { saveEnv } from "../__test-utils__.ts";
 import { _resetColorCache } from "./color.ts";
 import { selectMany, selectSingle } from "./select.ts";
 
@@ -131,13 +132,16 @@ const sampleItems = [
 // Setup / Teardown
 // =============================================================================
 
+let restoreEnv: () => void;
+
 beforeEach(() => {
+  restoreEnv = saveEnv("NO_COLOR");
   _resetColorCache();
 });
 
 afterEach(() => {
+  restoreEnv();
   _resetColorCache();
-  delete process.env.NO_COLOR;
 });
 
 // =============================================================================

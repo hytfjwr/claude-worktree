@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
+import { saveEnv } from "../__test-utils__.ts";
 import { atomicWriteJson, getCacheDir, readJsonFile, STALE_LOCK_THRESHOLD_MS, withLock } from "./cache.ts";
 import { LockAcquisitionError } from "./errors.ts";
 
@@ -169,18 +170,14 @@ describe("readJsonFile", () => {
 });
 
 describe("getCacheDir", () => {
-  let originalEnv: string | undefined;
+  let restoreEnv: () => void;
 
   beforeEach(() => {
-    originalEnv = process.env.CLAUDE_WORKTREE_CACHE_DIR;
+    restoreEnv = saveEnv("CLAUDE_WORKTREE_CACHE_DIR");
   });
 
   afterEach(() => {
-    if (originalEnv !== undefined) {
-      process.env.CLAUDE_WORKTREE_CACHE_DIR = originalEnv;
-    } else {
-      delete process.env.CLAUDE_WORKTREE_CACHE_DIR;
-    }
+    restoreEnv();
   });
 
   test("respects CLAUDE_WORKTREE_CACHE_DIR env var", () => {

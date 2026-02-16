@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import { createExecStub } from "../__test-utils__.ts";
+import { createExecStub, saveEnv } from "../__test-utils__.ts";
 import { getCurrentPaneId } from "./wezterm.ts";
 
 // Hoisted mock for ../core/exec — default passthrough, overridable per-test via mockExecImpl
@@ -93,14 +93,14 @@ function createMockSpawn(config: { exitCode?: number } = {}) {
 // ============================================================================
 
 describe("getCurrentPaneId", () => {
-  const originalEnv = process.env.WEZTERM_PANE;
+  let restoreEnv: () => void;
+
+  beforeEach(() => {
+    restoreEnv = saveEnv("WEZTERM_PANE");
+  });
 
   afterEach(() => {
-    if (originalEnv === undefined) {
-      delete process.env.WEZTERM_PANE;
-    } else {
-      process.env.WEZTERM_PANE = originalEnv;
-    }
+    restoreEnv();
   });
 
   test("retrieves from environment variable", () => {
@@ -322,20 +322,16 @@ describe("activatePane", () => {
 });
 
 describe("createPane", () => {
-  let savedWeztermPane: string | undefined;
+  let restoreEnv: () => void;
 
   beforeEach(() => {
     vi.resetModules();
     mockExecImpl.current = null;
-    savedWeztermPane = process.env.WEZTERM_PANE;
+    restoreEnv = saveEnv("WEZTERM_PANE");
   });
   afterEach(() => {
     mockExecImpl.current = null;
-    if (savedWeztermPane === undefined) {
-      delete process.env.WEZTERM_PANE;
-    } else {
-      process.env.WEZTERM_PANE = savedWeztermPane;
-    }
+    restoreEnv();
   });
 
   test("creates pane via splitPaneRight and returns new paneId", async () => {
