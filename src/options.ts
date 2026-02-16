@@ -1,3 +1,4 @@
+import { UsageError } from "./core/errors.ts";
 import type { ExtractResult, OptionDef, OptionSchema } from "./types/index.ts";
 
 export function extractOptions(args: string[], schema: OptionSchema): ExtractResult {
@@ -36,7 +37,7 @@ export function extractOptions(args: string[], schema: OptionSchema): ExtractRes
         booleans[entry.key] = true;
       } else {
         if (i + 1 >= args.length) {
-          throw new Error(entry.def.errorMessage);
+          throw new UsageError(entry.def.errorMessage);
         }
         strings[entry.key] = args[i + 1];
         i++; // skip the value
@@ -47,16 +48,16 @@ export function extractOptions(args: string[], schema: OptionSchema): ExtractRes
       const singleDash = `-${arg.slice(2)}`;
       if (flagMap.has(singleDash) || ignoredSet.has(singleDash)) {
         const prefix = schema.unknownErrorPrefix ?? "Unknown option";
-        throw new Error(`${prefix}: "${arg}" (did you mean "${singleDash}"?)`);
+        throw new UsageError(`${prefix}: "${arg}" (did you mean "${singleDash}"?)`);
       }
       if (schema.unknownHandling === "error") {
         const prefix = schema.unknownErrorPrefix ?? "Unknown option";
-        throw new Error(`${prefix}: ${arg}`);
+        throw new UsageError(`${prefix}: ${arg}`);
       }
       remaining.push(arg);
     } else if (schema.unknownHandling === "error" && arg.startsWith("-")) {
       const prefix = schema.unknownErrorPrefix ?? "Unknown option";
-      throw new Error(`${prefix}: ${arg}`);
+      throw new UsageError(`${prefix}: ${arg}`);
     } else {
       remaining.push(arg);
     }

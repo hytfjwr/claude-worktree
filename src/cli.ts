@@ -3,6 +3,7 @@ import { runCreate } from "./commands/create.ts";
 import { executeList } from "./commands/list.ts";
 import { runResume } from "./commands/resume.ts";
 import { executeRunInPane, parseRunInPaneArgs } from "./commands/run-in-pane.ts";
+import { UsageError } from "./core/errors.ts";
 import { extractOptions } from "./options.ts";
 import type { CleanArgs, Command, CreateArgs, ListArgs, ResumeArgs } from "./types/index.ts";
 import { logInfo } from "./ui/logger.ts";
@@ -238,7 +239,7 @@ export function validateBranchName(name: string): string | null {
 
 export function parseCreateArgs(args: string[]): CreateArgs {
   if (args.length < 1) {
-    throw new Error(
+    throw new UsageError(
       `Usage:\n  ${CREATE_USAGE}\n\n` +
         "Example:\n" +
         "  claude-worktree feature/auth 'Implement authentication feature'\n" +
@@ -251,7 +252,7 @@ export function parseCreateArgs(args: string[]): CreateArgs {
   // Validate branch name
   const branchError = validateBranchName(branchName);
   if (branchError) {
-    throw new Error(branchError);
+    throw new UsageError(branchError);
   }
 
   const { booleans, strings, remaining } = extractOptions(args.slice(1), {
@@ -277,12 +278,12 @@ export function parseCreateArgs(args: string[]): CreateArgs {
   // Check for unknown options
   const unknownFlag = remaining.find((arg) => arg.startsWith("-"));
   if (unknownFlag) {
-    throw new Error(`Unknown option: ${unknownFlag}`);
+    throw new UsageError(`Unknown option: ${unknownFlag}`);
   }
 
   // Mutual exclusivity check for -merge and -draft
   if (merge && draft) {
-    throw new Error(
+    throw new UsageError(
       "Cannot use both -merge and -draft options.\n\n" +
         "  -merge  Auto-merge into base branch and cleanup after task completion\n" +
         "  -draft  Auto-create a Draft PR after task completion\n\n" +
@@ -296,12 +297,12 @@ export function parseCreateArgs(args: string[]): CreateArgs {
 
   // Mutual exclusivity check: cannot specify both -plan and inline prompt
   if (planFile && inlinePrompt) {
-    throw new Error("Cannot use both -plan and inline prompt. Please use one or the other.");
+    throw new UsageError("Cannot use both -plan and inline prompt. Please use one or the other.");
   }
 
   // Require either inline prompt or -plan
   if (!inlinePrompt && !planFile) {
-    throw new Error(`A prompt or -plan option is required.\n\nUsage:\n  ${CREATE_USAGE}`);
+    throw new UsageError(`A prompt or -plan option is required.\n\nUsage:\n  ${CREATE_USAGE}`);
   }
 
   return {
@@ -415,7 +416,7 @@ export function parseArgs(args: string[]): Command {
   // Internal sub-command: must be checked before help flags
   if (args[0] === "_run-in-pane") {
     if (args.length !== 2) {
-      throw new Error("_run-in-pane requires exactly one payload file path argument");
+      throw new UsageError("_run-in-pane requires exactly one payload file path argument");
     }
     return { type: "_run-in-pane", payloadPath: args[1] };
   }
@@ -449,7 +450,7 @@ export function parseArgs(args: string[]): Command {
 
   // Single non-flag argument that isn't a known command → missing prompt for branch
   if (args.length === 1 && !args[0].startsWith("-")) {
-    throw new Error(
+    throw new UsageError(
       `Missing prompt for branch "${args[0]}".\n\n` +
         `Usage:\n  claude-worktree ${args[0]} '<prompt>'\n  claude-worktree ${args[0]} -plan <file-path>`,
     );

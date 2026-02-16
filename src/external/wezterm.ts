@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 
+import { DependencyError } from "../core/errors.ts";
 import { exec } from "../core/exec.ts";
 import type { WeztermPane } from "../types/index.ts";
 
@@ -53,7 +54,7 @@ export async function ensureWeztermAvailable(checkFn: () => Promise<boolean>, us
           ? "  https://wezfurlong.org/wezterm/install/linux.html"
           : "  https://wezfurlong.org/wezterm/installation.html";
 
-    throw new Error(
+    throw new DependencyError(
       "WezTerm CLI is not installed. The -pane option requires WezTerm.\n\n" +
         `Install WezTerm:\n${installHint}\n\n` +
         "Or run without -pane to use the current terminal:\n" +

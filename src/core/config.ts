@@ -6,7 +6,7 @@ import { TextDecoder } from "node:util";
 import type { HookVars, ProjectConfig } from "../types/index.ts";
 import { projectConfigFields } from "../types/index.ts";
 import { logWarn } from "../ui/logger.ts";
-import { getErrorMessage, isNodeError } from "./errors.ts";
+import { getErrorMessage, HookError, isNodeError } from "./errors.ts";
 import { exec } from "./exec.ts";
 
 function checkField(field: string, value: unknown, expected: typeof Number | typeof String): string | null {
@@ -86,21 +86,21 @@ export async function loadProjectConfig(repoRoot: string): Promise<ProjectConfig
  */
 function validateHookVars(vars: HookVars): void {
   if (vars.path.length === 0) {
-    throw new Error("Invalid path in hook variables. Path must not be empty.");
+    throw new HookError("Invalid path in hook variables. Path must not be empty.");
   }
   const SAFE_PATH = /^[a-zA-Z0-9._/-]+$/;
   if (!SAFE_PATH.test(vars.path)) {
-    throw new Error(
+    throw new HookError(
       `Invalid path in hook variables: ${JSON.stringify(vars.path)}. Only alphanumeric, dots, underscores, slashes, and hyphens are allowed.`,
     );
   }
   if (vars.path.startsWith("-")) {
-    throw new Error(
+    throw new HookError(
       "Invalid path in hook variables. Path must not start with '-' to avoid being interpreted as a command-line option.",
     );
   }
   if (vars.slot != null && (!Number.isInteger(vars.slot) || vars.slot < 1 || vars.slot > 9)) {
-    throw new Error("Invalid slot: must be an integer between 1-9");
+    throw new HookError("Invalid slot: must be an integer between 1-9");
   }
 }
 
@@ -155,7 +155,7 @@ function withTimeout<T>(promise: PromiseLike<T>, timeoutMs: number, command: str
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeoutPromise = new Promise<never>((_, reject) => {
     timer = setTimeout(
-      () => reject(new Error(`Hook command timed out after ${timeoutMs / 1000}s: ${command}`)),
+      () => reject(new HookError(`Hook command timed out after ${timeoutMs / 1000}s: ${command}`)),
       timeoutMs,
     );
   });
@@ -176,7 +176,7 @@ export async function runHook(
     const resultPromise = exec("sh", ["-c", command]).cwd(cwd).nothrow();
     const result = timeoutMs !== undefined ? await withTimeout(resultPromise, timeoutMs, command) : await resultPromise;
     if (result.exitCode !== 0) {
-      throw new Error(`Hook command failed with exit code ${result.exitCode}: ${command}`);
+      throw new HookError(`Hook command failed with exit code ${result.exitCode}: ${command}`);
     }
     return;
   }
@@ -247,7 +247,7 @@ export async function runHook(
         throw error;
       }
       if (exitCode !== 0) {
-        throw new Error(`Hook command failed with exit code ${exitCode}: ${command}`);
+        throw new HookError(`Hook command failed with exit code ${exitCode}: ${command}`);
       }
     };
 
@@ -259,7 +259,7 @@ export async function runHook(
           new Promise<never>((_, reject) => {
             timer = setTimeout(() => {
               escalateKill(proc);
-              reject(new Error(`Hook command timed out after ${timeoutMs / 1000}s: ${command}`));
+              reject(new HookError(`Hook command timed out after ${timeoutMs / 1000}s: ${command}`));
             }, timeoutMs);
           }),
         ]);
@@ -275,6 +275,6 @@ export async function runHook(
   const resultPromise = exec("sh", ["-c", command]).cwd(cwd).nothrow().quiet();
   const result = timeoutMs !== undefined ? await withTimeout(resultPromise, timeoutMs, command) : await resultPromise;
   if (result.exitCode !== 0) {
-    throw new Error(`Hook command failed with exit code ${result.exitCode}: ${command}`);
+    throw new HookError(`Hook command failed with exit code ${result.exitCode}: ${command}`);
   }
 }

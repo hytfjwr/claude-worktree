@@ -1,5 +1,6 @@
 import { access } from "node:fs/promises";
 
+import { GitError } from "../core/errors.ts";
 import { getGitContext, listWorktrees } from "../core/git.ts";
 import { completeSession, saveSession } from "../core/session.ts";
 import { spawnInteractive } from "../core/spawn.ts";
@@ -78,7 +79,7 @@ async function resolveTargetWorktree(
     const target = worktrees.find((w) => w.branch === branchName) ?? null;
     if (!target) {
       const available = worktrees.map((w) => `  ${w.branch ?? "(detached)"}  (${w.path})`).join("\n");
-      throw new Error(`Worktree not found for branch: ${branchName}\n\nAvailable worktrees:\n${available}`);
+      throw new GitError(`Worktree not found for branch: ${branchName}\n\nAvailable worktrees:\n${available}`);
     }
     return target;
   }
@@ -103,7 +104,7 @@ export async function runResume(args: ResumeArgs, deps: ResumeDeps = defaultDeps
   const nonMainWorktrees = worktrees.filter((w) => !w.isMain);
 
   if (nonMainWorktrees.length === 0) {
-    throw new Error(
+    throw new GitError(
       "No worktrees found to resume.\n\n" + "Create a worktree first:\n" + "  claude-worktree <branch-name> <prompt>",
     );
   }
@@ -119,7 +120,7 @@ export async function runResume(args: ResumeArgs, deps: ResumeDeps = defaultDeps
   try {
     await access(target.path);
   } catch {
-    throw new Error(`Worktree directory does not exist: ${target.path}`);
+    throw new GitError(`Worktree directory does not exist: ${target.path}`);
   }
 
   // Display info

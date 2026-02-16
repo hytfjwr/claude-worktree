@@ -166,7 +166,7 @@ afterEach(() => {
 describe("executeRunInPane", () => {
   test("runs postCreate hook then launches Claude Code", async () => {
     mockExecuteHook.mockResolvedValue({ success: true });
-    mockSpawnInteractive.mockResolvedValue(undefined);
+    mockSpawnInteractive.mockResolvedValue(0);
 
     await executeRunInPane({ ...validArgs, postCreateCommand: "docker up" });
 
@@ -204,7 +204,7 @@ describe("executeRunInPane", () => {
   });
 
   test("skips hook and launches Claude directly when no postCreateCommand", async () => {
-    mockSpawnInteractive.mockResolvedValue(undefined);
+    mockSpawnInteractive.mockResolvedValue(0);
 
     const argsWithoutHook = { ...validArgs, postCreateCommand: undefined };
     await executeRunInPane(argsWithoutHook);

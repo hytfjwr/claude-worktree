@@ -2,7 +2,7 @@ import { readFile, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, resolve } from "node:path";
 
-import { getErrorMessage, isNodeError } from "../core/errors.ts";
+import { getErrorMessage, isNodeError, UsageError } from "../core/errors.ts";
 import { spawnInteractive } from "../core/spawn.ts";
 import type { RunInPaneArgs } from "../types/index.ts";
 import { logError } from "../ui/logger.ts";
@@ -14,7 +14,7 @@ export async function parseRunInPaneArgs(payloadPath: string): Promise<RunInPane
   const dir = resolve(dirname(payloadPath));
   const name = basename(payloadPath);
   if (dir !== resolve(tmpdir()) || !name.startsWith("claude-worktree-") || !name.endsWith(".json")) {
-    throw new Error(`_run-in-pane: invalid payload path: ${payloadPath}`);
+    throw new UsageError(`_run-in-pane: invalid payload path: ${payloadPath}`);
   }
 
   let content: string;
@@ -22,9 +22,9 @@ export async function parseRunInPaneArgs(payloadPath: string): Promise<RunInPane
     content = await readFile(payloadPath, "utf-8");
   } catch (err) {
     if (isNodeError(err) && err.code === "ENOENT") {
-      throw new Error(`_run-in-pane: payload file not found: ${payloadPath}`);
+      throw new UsageError(`_run-in-pane: payload file not found: ${payloadPath}`);
     }
-    throw new Error(`_run-in-pane: failed to read payload file ${payloadPath}: ${getErrorMessage(err)}`);
+    throw new UsageError(`_run-in-pane: failed to read payload file ${payloadPath}: ${getErrorMessage(err)}`);
   }
 
   // Clean up temp file
@@ -34,39 +34,39 @@ export async function parseRunInPaneArgs(payloadPath: string): Promise<RunInPane
   try {
     parsed = JSON.parse(content);
   } catch {
-    throw new Error("_run-in-pane: invalid JSON payload");
+    throw new UsageError("_run-in-pane: invalid JSON payload");
   }
 
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("_run-in-pane: payload must be a JSON object");
+    throw new UsageError("_run-in-pane: payload must be a JSON object");
   }
 
   const obj = parsed as Record<string, unknown>;
 
   if (typeof obj.worktreePath !== "string" || !obj.worktreePath) {
-    throw new Error("_run-in-pane: missing required field 'worktreePath'");
+    throw new UsageError("_run-in-pane: missing required field 'worktreePath'");
   }
   if (typeof obj.repoRoot !== "string" || !obj.repoRoot) {
-    throw new Error("_run-in-pane: missing required field 'repoRoot'");
+    throw new UsageError("_run-in-pane: missing required field 'repoRoot'");
   }
   if (typeof obj.claudeCommand !== "string" || !obj.claudeCommand) {
-    throw new Error("_run-in-pane: missing required field 'claudeCommand'");
+    throw new UsageError("_run-in-pane: missing required field 'claudeCommand'");
   }
   if (
     typeof obj.postCreateTimeout !== "number" ||
     !Number.isFinite(obj.postCreateTimeout) ||
     obj.postCreateTimeout < 0
   ) {
-    throw new Error("_run-in-pane: field 'postCreateTimeout' must be a finite non-negative number");
+    throw new UsageError("_run-in-pane: field 'postCreateTimeout' must be a finite non-negative number");
   }
   if (typeof obj.preCleanTimeout !== "number" || !Number.isFinite(obj.preCleanTimeout) || obj.preCleanTimeout < 0) {
-    throw new Error("_run-in-pane: field 'preCleanTimeout' must be a finite non-negative number");
+    throw new UsageError("_run-in-pane: field 'preCleanTimeout' must be a finite non-negative number");
   }
   if (typeof obj.postCleanTimeout !== "number" || !Number.isFinite(obj.postCleanTimeout) || obj.postCleanTimeout < 0) {
-    throw new Error("_run-in-pane: field 'postCleanTimeout' must be a finite non-negative number");
+    throw new UsageError("_run-in-pane: field 'postCleanTimeout' must be a finite non-negative number");
   }
   if (typeof obj.verbose !== "boolean") {
-    throw new Error("_run-in-pane: missing required field 'verbose'");
+    throw new UsageError("_run-in-pane: missing required field 'verbose'");
   }
 
   return {

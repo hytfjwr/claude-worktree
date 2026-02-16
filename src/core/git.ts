@@ -9,6 +9,7 @@ import type {
   WorktreeInfo,
   WorktreeStatus,
 } from "../types/index.ts";
+import { GitError } from "./errors.ts";
 import { exec } from "./exec.ts";
 
 const CONCURRENCY_LIMIT = 5;
@@ -40,16 +41,16 @@ export async function getGitContext(): Promise<GitContext> {
     const message = err instanceof Error ? err.message : String(err);
     // Distinguish "not a git repo" from other failures (e.g., git not installed)
     if (message.includes("not a git repository") || message.includes("ENOENT")) {
-      throw new Error(
+      throw new GitError(
         `Not in a git repository (cwd: ${process.cwd()})\n\n` +
           "Navigate to a git repository and try again:\n" +
           "  cd /path/to/your/repo",
       );
     }
-    throw new Error(`Failed to detect git repository: ${message}`);
+    throw new GitError(`Failed to detect git repository: ${message}`);
   }
   if (!repoRoot) {
-    throw new Error(
+    throw new GitError(
       `Not in a git repository (cwd: ${process.cwd()})\n\n` +
         "Navigate to a git repository and try again:\n" +
         "  cd /path/to/your/repo",
@@ -58,7 +59,7 @@ export async function getGitContext(): Promise<GitContext> {
 
   const currentBranch = (await exec("git", ["branch", "--show-current"]).text()).trim();
   if (!currentBranch) {
-    throw new Error("Could not determine current branch. You may be in a detached HEAD state.");
+    throw new GitError("Could not determine current branch. You may be in a detached HEAD state.");
   }
 
   return {
@@ -80,7 +81,7 @@ export async function createWorktree(branchName: string, worktreePath: string, b
   const result = await exec("git", ["worktree", "add", "-b", branchName, worktreePath, baseBranch]).nothrow().quiet();
   if (result.exitCode !== 0) {
     const stderr = result.stderr.toString().trim();
-    throw new Error(`Failed to create worktree: ${stderr}`);
+    throw new GitError(`Failed to create worktree: ${stderr}`);
   }
 }
 
@@ -151,7 +152,7 @@ export function parseWorktreePorcelain(output: string, mainBranch: string): Pars
 export async function listWorktrees(): Promise<ListWorktreesResult> {
   const result = await exec("git", ["worktree", "list", "--porcelain"]).nothrow().quiet();
   if (result.exitCode !== 0) {
-    throw new Error("Failed to list worktrees. Are you in a git repository?");
+    throw new GitError("Failed to list worktrees. Are you in a git repository?");
   }
   const output = result.text().trim();
   const mainBranch = await getMainBranch();
@@ -220,7 +221,7 @@ export async function deleteLocalBranch(branchName: string, force = false): Prom
   const result = await exec("git", ["branch", flag, branchName]).nothrow().quiet();
   if (result.exitCode !== 0) {
     const stderr = result.stderr.toString().trim();
-    throw new Error(`Failed to delete branch ${branchName}: ${stderr}`);
+    throw new GitError(`Failed to delete branch ${branchName}: ${stderr}`);
   }
 }
 
@@ -269,7 +270,7 @@ export async function fetchOrigin(branch?: string): Promise<void> {
   const result = await exec("git", args).nothrow().quiet();
   if (result.exitCode !== 0) {
     const stderr = result.stderr.toString().trim();
-    throw new Error(`Failed to fetch from origin: ${stderr}`);
+    throw new GitError(`Failed to fetch from origin: ${stderr}`);
   }
 }
 

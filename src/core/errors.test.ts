@@ -1,6 +1,15 @@
 import { describe, expect, test } from "vitest";
 
-import { getErrorMessage, isNodeError } from "./errors.ts";
+import {
+  DependencyError,
+  ExitCode,
+  GitError,
+  getErrorMessage,
+  HookError,
+  isNodeError,
+  toExitCode,
+  UsageError,
+} from "./errors.ts";
 
 describe("isNodeError", () => {
   test("returns true for Error with code property", () => {
@@ -83,5 +92,79 @@ describe("getErrorMessage", () => {
       }
     }
     expect(getErrorMessage(new CustomError("custom"))).toBe("custom");
+  });
+});
+
+describe("ExitCode", () => {
+  test("has expected values", () => {
+    expect(ExitCode.success).toBe(0);
+    expect(ExitCode.general).toBe(1);
+    expect(ExitCode.usage).toBe(2);
+    expect(ExitCode.git).toBe(3);
+    expect(ExitCode.dependency).toBe(4);
+    expect(ExitCode.hook).toBe(5);
+    expect(ExitCode.interrupted).toBe(130);
+  });
+});
+
+describe("typed error classes", () => {
+  test("UsageError has correct name and message", () => {
+    const err = new UsageError("bad args");
+    expect(err).toBeInstanceOf(Error);
+    expect(err).toBeInstanceOf(UsageError);
+    expect(err.name).toBe("UsageError");
+    expect(err.message).toBe("bad args");
+  });
+
+  test("GitError has correct name and message", () => {
+    const err = new GitError("not a repo");
+    expect(err).toBeInstanceOf(Error);
+    expect(err).toBeInstanceOf(GitError);
+    expect(err.name).toBe("GitError");
+    expect(err.message).toBe("not a repo");
+  });
+
+  test("DependencyError has correct name and message", () => {
+    const err = new DependencyError("wezterm missing");
+    expect(err).toBeInstanceOf(Error);
+    expect(err).toBeInstanceOf(DependencyError);
+    expect(err.name).toBe("DependencyError");
+    expect(err.message).toBe("wezterm missing");
+  });
+
+  test("HookError has correct name and message", () => {
+    const err = new HookError("hook timed out");
+    expect(err).toBeInstanceOf(Error);
+    expect(err).toBeInstanceOf(HookError);
+    expect(err.name).toBe("HookError");
+    expect(err.message).toBe("hook timed out");
+  });
+});
+
+describe("toExitCode", () => {
+  test("returns usage for UsageError", () => {
+    expect(toExitCode(new UsageError("bad"))).toBe(ExitCode.usage);
+  });
+
+  test("returns git for GitError", () => {
+    expect(toExitCode(new GitError("fail"))).toBe(ExitCode.git);
+  });
+
+  test("returns dependency for DependencyError", () => {
+    expect(toExitCode(new DependencyError("missing"))).toBe(ExitCode.dependency);
+  });
+
+  test("returns hook for HookError", () => {
+    expect(toExitCode(new HookError("timeout"))).toBe(ExitCode.hook);
+  });
+
+  test("returns general for plain Error", () => {
+    expect(toExitCode(new Error("unknown"))).toBe(ExitCode.general);
+  });
+
+  test("returns general for non-Error", () => {
+    expect(toExitCode("string error")).toBe(ExitCode.general);
+    expect(toExitCode(null)).toBe(ExitCode.general);
+    expect(toExitCode(42)).toBe(ExitCode.general);
   });
 });

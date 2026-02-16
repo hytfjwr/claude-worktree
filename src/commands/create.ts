@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import { buildHookCommand, loadProjectConfig, resolveHookTimeout } from "../core/config.ts";
-import { getErrorMessage, isNodeError } from "../core/errors.ts";
+import { GitError, getErrorMessage, isNodeError, UsageError } from "../core/errors.ts";
 import {
   branchExists,
   buildWorktreeCommand,
@@ -86,14 +86,14 @@ export async function readPlanFile(filePath: string): Promise<string> {
     fileSize = fileStat.size;
   } catch (err) {
     if (isNodeError(err) && err.code === "ENOENT") {
-      throw new Error(`Plan file not found: ${filePath}`);
+      throw new UsageError(`Plan file not found: ${filePath}`);
     }
-    throw new Error(`Failed to read plan file ${filePath}: ${getErrorMessage(err)}`);
+    throw new UsageError(`Failed to read plan file ${filePath}: ${getErrorMessage(err)}`);
   }
 
   if (fileSize > MAX_PLAN_FILE_SIZE) {
     const sizeMB = (fileSize / (1024 * 1024)).toFixed(1);
-    throw new Error(`Plan file is too large (${sizeMB}MB). Maximum allowed size is 1MB: ${filePath}`);
+    throw new UsageError(`Plan file is too large (${sizeMB}MB). Maximum allowed size is 1MB: ${filePath}`);
   }
 
   let content: string;
@@ -101,13 +101,13 @@ export async function readPlanFile(filePath: string): Promise<string> {
     content = await readFile(filePath, "utf-8");
   } catch (err) {
     const error = err as NodeJS.ErrnoException;
-    throw new Error(`Failed to read plan file ${filePath}: ${error.message}`);
+    throw new UsageError(`Failed to read plan file ${filePath}: ${error.message}`);
   }
 
   const trimmed = content.trim();
 
   if (!trimmed) {
-    throw new Error(`Plan file is empty: ${filePath}`);
+    throw new UsageError(`Plan file is empty: ${filePath}`);
   }
 
   return trimmed;
@@ -456,7 +456,7 @@ export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps
   if (baseBranch) {
     const exists = await deps.verifyBranchRef(baseBranch);
     if (!exists) {
-      throw new Error(
+      throw new GitError(
         `Base branch not found: "${baseBranch}"\n\n` +
           "Check the branch name and try again. To see available branches:\n" +
           "  git branch -a",
@@ -500,7 +500,7 @@ export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps
     const nonMainCount = worktrees.filter((w) => !w.isMain).length;
     const limitError = checkWorktreeLimit(config, nonMainCount, existingWorktree !== null);
     if (limitError) {
-      throw new Error(limitError);
+      throw new UsageError(limitError);
     }
   }
 
