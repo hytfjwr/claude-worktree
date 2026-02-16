@@ -1,6 +1,13 @@
 import { relative } from "node:path";
 
-import { fetchAndPrune, getAheadBehind, getLastCommit, getWorktreeStatuses, listWorktrees } from "../core/git.ts";
+import {
+  fetchAndPrune,
+  getAheadBehind,
+  getLastCommit,
+  getRemoteTrackingBranches,
+  getWorktreeStatuses,
+  listWorktrees,
+} from "../core/git.ts";
 import { determineSessionStatus, formatElapsed, readAllSessions } from "../core/session.ts";
 import { listWeztermPanes } from "../external/wezterm.ts";
 import type {
@@ -18,6 +25,7 @@ import { logInfo } from "../ui/logger.ts";
 import { startSpinner } from "../ui/spinner.ts";
 
 const defaultDeps: ListDeps = {
+  getRemoteTrackingBranches,
   fetchAndPrune,
   listWorktrees,
   getWorktreeStatuses,
@@ -166,6 +174,14 @@ export async function executeList(args: ListArgs, deps: ListDeps = defaultDeps):
   let succeeded = false;
 
   try {
+    // Capture remote tracking branches BEFORE fetching/pruning
+    let trackedBranches: Set<string> | undefined;
+    try {
+      trackedBranches = await deps.getRemoteTrackingBranches();
+    } catch {
+      // Continue without tracking info
+    }
+
     // Fetch and prune (graceful failure)
     try {
       await deps.fetchAndPrune();
@@ -176,7 +192,7 @@ export async function executeList(args: ListArgs, deps: ListDeps = defaultDeps):
     const { worktrees, mainBranch } = await deps.listWorktrees();
 
     if (worktrees.length > 0) {
-      const statuses = await deps.getWorktreeStatuses(worktrees, mainBranch);
+      const statuses = await deps.getWorktreeStatuses(worktrees, mainBranch, trackedBranches);
 
       // Fetch panes and sessions by default (skip with -no-status)
       const panes = args.noStatus ? null : await deps.listWeztermPanes();

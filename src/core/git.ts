@@ -194,8 +194,33 @@ export async function isBranchMerged(branch: string, baseBranch?: string): Promi
   return mergedBranches.includes(branch);
 }
 
-export async function isRemoteBranchDeleted(branch: string): Promise<boolean> {
-  // Check if remote branch exists
+/**
+ * Get branches that have remote tracking references (refs/remotes/origin/*).
+ * Call this BEFORE fetchAndPrune() to capture which branches were previously on remote.
+ */
+export async function getRemoteTrackingBranches(): Promise<Set<string>> {
+  const result = await exec("git", ["for-each-ref", "--format=%(refname:short)", "refs/remotes/origin/"])
+    .nothrow()
+    .quiet();
+  if (result.exitCode !== 0) {
+    return new Set();
+  }
+  const branches = result
+    .text()
+    .trim()
+    .split("\n")
+    .filter((b) => b.length > 0)
+    .map((b) => b.replace(/^origin\//, ""));
+  // Exclude HEAD pointer (e.g. "origin/HEAD" -> "HEAD")
+  return new Set(branches.filter((b) => b !== "HEAD"));
+}
+
+export async function isRemoteBranchDeleted(branch: string, trackedBranches: Set<string>): Promise<boolean> {
+  // If the branch was never tracked on remote, it's not "remote deleted"
+  if (!trackedBranches.has(branch)) {
+    return false;
+  }
+  // Check if remote branch still exists
   const result = await exec("git", ["ls-remote", "--heads", "origin", branch]).nothrow().quiet();
   if (result.exitCode !== 0) {
     return true; // Assume deleted if we can't check
@@ -290,7 +315,12 @@ export async function verifyBranchRef(ref: string): Promise<boolean> {
   return result.exitCode === 0;
 }
 
-export async function getWorktreeStatuses(worktrees: WorktreeInfo[], mainBranch: string): Promise<WorktreeStatus[]> {
+export async function getWorktreeStatuses(
+  worktrees: WorktreeInfo[],
+  mainBranch: string,
+  trackedBranches?: Set<string>,
+): Promise<WorktreeStatus[]> {
+  const effectiveTracked = trackedBranches ?? new Set<string>();
   return promiseAllLimit(
     worktrees.map((worktree) => async (): Promise<WorktreeStatus> => {
       if (worktree.isMain) {
@@ -325,7 +355,7 @@ export async function getWorktreeStatuses(worktrees: WorktreeInfo[], mainBranch:
 
       const [branchMerged, branchDeletedOnRemote] = await Promise.all([
         worktree.branch ? isBranchMerged(worktree.branch, mainBranch) : false,
-        worktree.branch ? isRemoteBranchDeleted(worktree.branch) : false,
+        worktree.branch ? isRemoteBranchDeleted(worktree.branch, effectiveTracked) : false,
       ]);
       const canAutoClean = branchMerged || branchDeletedOnRemote;
 

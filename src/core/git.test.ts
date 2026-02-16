@@ -419,6 +419,73 @@ describe("isBranchMerged", () => {
   });
 });
 
+describe("getRemoteTrackingBranches", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    mockExecImpl.current = null;
+  });
+  afterEach(() => {
+    mockExecImpl.current = null;
+  });
+
+  test("returns set of remote tracking branches", async () => {
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("for-each-ref")) {
+        return { stdout: "origin/main\norigin/feature/test\norigin/develop\n" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { getRemoteTrackingBranches } = await import("./git.ts");
+    const branches = await getRemoteTrackingBranches();
+
+    expect(branches).toEqual(new Set(["main", "feature/test", "develop"]));
+  });
+
+  test("excludes HEAD pointer", async () => {
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("for-each-ref")) {
+        return { stdout: "origin/HEAD\norigin/main\n" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { getRemoteTrackingBranches } = await import("./git.ts");
+    const branches = await getRemoteTrackingBranches();
+
+    expect(branches).toEqual(new Set(["main"]));
+    expect(branches.has("HEAD")).toBe(false);
+  });
+
+  test("returns empty set when command fails", async () => {
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("for-each-ref")) {
+        return { stdout: "", exitCode: 128 };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { getRemoteTrackingBranches } = await import("./git.ts");
+    const branches = await getRemoteTrackingBranches();
+
+    expect(branches).toEqual(new Set());
+  });
+
+  test("returns empty set on empty output", async () => {
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("for-each-ref")) {
+        return { stdout: "" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { getRemoteTrackingBranches } = await import("./git.ts");
+    const branches = await getRemoteTrackingBranches();
+
+    expect(branches).toEqual(new Set());
+  });
+});
+
 describe("isRemoteBranchDeleted", () => {
   beforeEach(() => {
     vi.resetModules();
@@ -437,7 +504,8 @@ describe("isRemoteBranchDeleted", () => {
     });
 
     const { isRemoteBranchDeleted } = await import("./git.ts");
-    const isDeleted = await isRemoteBranchDeleted("main");
+    const tracked = new Set(["main"]);
+    const isDeleted = await isRemoteBranchDeleted("main", tracked);
 
     expect(isDeleted).toBe(false);
   });
@@ -451,12 +519,13 @@ describe("isRemoteBranchDeleted", () => {
     });
 
     const { isRemoteBranchDeleted } = await import("./git.ts");
-    const isDeleted = await isRemoteBranchDeleted("feature/deleted");
+    const tracked = new Set(["feature/deleted"]);
+    const isDeleted = await isRemoteBranchDeleted("feature/deleted", tracked);
 
     expect(isDeleted).toBe(true);
   });
 
-  test("assumes deleted when ls-remote fails", async () => {
+  test("assumes deleted when ls-remote fails for tracked branch", async () => {
     mockExecImpl.current = createExecStub((_cmd, args) => {
       if (args.includes("ls-remote")) {
         return { stdout: "", exitCode: 128 };
@@ -465,9 +534,43 @@ describe("isRemoteBranchDeleted", () => {
     });
 
     const { isRemoteBranchDeleted } = await import("./git.ts");
-    const isDeleted = await isRemoteBranchDeleted("feature/test");
+    const tracked = new Set(["feature/test"]);
+    const isDeleted = await isRemoteBranchDeleted("feature/test", tracked);
 
     expect(isDeleted).toBe(true);
+  });
+
+  test("branch never pushed to remote - false (not remote deleted)", async () => {
+    // ls-remote should NOT be called for untracked branches
+    let lsRemoteCalled = false;
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("ls-remote")) {
+        lsRemoteCalled = true;
+        return { stdout: "" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { isRemoteBranchDeleted } = await import("./git.ts");
+    const tracked = new Set(["main", "develop"]);
+    const isDeleted = await isRemoteBranchDeleted("feature/new-local", tracked);
+
+    expect(isDeleted).toBe(false);
+    expect(lsRemoteCalled).toBe(false);
+  });
+
+  test("empty trackedBranches set - always false", async () => {
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("ls-remote")) {
+        return { stdout: "" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { isRemoteBranchDeleted } = await import("./git.ts");
+    const isDeleted = await isRemoteBranchDeleted("feature/test", new Set());
+
+    expect(isDeleted).toBe(false);
   });
 });
 
@@ -1069,6 +1172,9 @@ describe("getWorktreeStatuses", () => {
     };
   }
 
+  // Default tracked branches set including "feature/test" (the default branch in createWorktree)
+  const defaultTracked = new Set(["feature/test"]);
+
   // Helper to set exec mock for controlling isBranchMerged/isRemoteBranchDeleted behavior.
   // vi.doMock("./git") cannot intercept intra-module calls in Vitest, so we mock exec instead.
   function setExecMockForStatuses(config: { branchMerged: boolean; remoteBranchDeleted: boolean }) {
@@ -1149,7 +1255,7 @@ describe("getWorktreeStatuses", () => {
 
     const { getWorktreeStatuses } = await import("./git.ts");
     const worktree = createWorktree();
-    const statuses = await getWorktreeStatuses([worktree], "main");
+    const statuses = await getWorktreeStatuses([worktree], "main", defaultTracked);
 
     expect(statuses[0].canAutoClean).toBe(true);
     expect(statuses[0].reason).toBe("Merged");
@@ -1160,7 +1266,7 @@ describe("getWorktreeStatuses", () => {
 
     const { getWorktreeStatuses } = await import("./git.ts");
     const worktree = createWorktree();
-    const statuses = await getWorktreeStatuses([worktree], "main");
+    const statuses = await getWorktreeStatuses([worktree], "main", defaultTracked);
 
     expect(statuses[0].canAutoClean).toBe(true);
     expect(statuses[0].reason).toBe("Remote deleted");
@@ -1171,7 +1277,7 @@ describe("getWorktreeStatuses", () => {
 
     const { getWorktreeStatuses } = await import("./git.ts");
     const worktree = createWorktree();
-    const statuses = await getWorktreeStatuses([worktree], "main");
+    const statuses = await getWorktreeStatuses([worktree], "main", defaultTracked);
 
     expect(statuses[0].canAutoClean).toBe(true);
     expect(statuses[0].reason).toBe("Merged & remote deleted");
@@ -1182,8 +1288,37 @@ describe("getWorktreeStatuses", () => {
 
     const { getWorktreeStatuses } = await import("./git.ts");
     const worktree = createWorktree();
+    const statuses = await getWorktreeStatuses([worktree], "main", defaultTracked);
+
+    expect(statuses[0].canAutoClean).toBe(false);
+    expect(statuses[0].reason).toBe("Active");
+  });
+
+  test("branch not in trackedBranches is not marked as remote deleted", async () => {
+    // Even though ls-remote returns empty (branch doesn't exist on remote),
+    // if the branch was never tracked, it should NOT be "Remote deleted"
+    setExecMockForStatuses({ branchMerged: false, remoteBranchDeleted: true });
+
+    const { getWorktreeStatuses } = await import("./git.ts");
+    const worktree = createWorktree({ branch: "feature/new-local" });
+    // trackedBranches does NOT include "feature/new-local"
+    const tracked = new Set(["main", "develop"]);
+    const statuses = await getWorktreeStatuses([worktree], "main", tracked);
+
+    expect(statuses[0].branchDeletedOnRemote).toBe(false);
+    expect(statuses[0].canAutoClean).toBe(false);
+    expect(statuses[0].reason).toBe("Active");
+  });
+
+  test("without trackedBranches, branch is not marked as remote deleted", async () => {
+    setExecMockForStatuses({ branchMerged: false, remoteBranchDeleted: true });
+
+    const { getWorktreeStatuses } = await import("./git.ts");
+    const worktree = createWorktree();
+    // No trackedBranches passed (undefined)
     const statuses = await getWorktreeStatuses([worktree], "main");
 
+    expect(statuses[0].branchDeletedOnRemote).toBe(false);
     expect(statuses[0].canAutoClean).toBe(false);
     expect(statuses[0].reason).toBe("Active");
   });

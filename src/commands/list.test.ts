@@ -44,6 +44,7 @@ const noopSpinner = (_message: string) => ({
 
 function makeListDeps(overrides: Partial<ListDeps> = {}): ListDeps {
   return {
+    getRemoteTrackingBranches: async () => new Set<string>(),
     fetchAndPrune: async () => {},
     listWorktrees: async () => ({ worktrees: [], mainBranch: "main" }),
     getWorktreeStatuses: async () => [],
