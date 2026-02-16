@@ -19,6 +19,7 @@ import type {
   PullRequestInfo,
   WorktreeStatus,
 } from "../types/index.ts";
+import { rawCode } from "../ui/color.ts";
 import { icons } from "../ui/icons.ts";
 import { logDebug, logInfo, logWarn } from "../ui/logger.ts";
 import { confirm, selectMultiple } from "../ui/prompt.ts";
@@ -108,6 +109,10 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
     }
   }
 
+  const cyan = rawCode("cyan");
+  const dim = rawCode("dim");
+  const reset = rawCode("reset");
+
   let toDelete: WorktreeStatus[];
 
   if (args.all) {
@@ -131,12 +136,12 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
     logInfo(`\n${icons.trash()}  Deletion candidates:`);
     for (const status of autoCleanable) {
       const branch = status.worktree.branch || "(detached)";
-      logInfo(`  ${icons.bullet()} ${branch}`);
-      logInfo(`    Path: ${status.worktree.path}`);
-      logInfo(`    Reason: ${status.reason}`);
+      logInfo(`  ${icons.bullet()} ${cyan}${branch}${reset}`);
+      logInfo(`    ${dim}Path: ${status.worktree.path}${reset}`);
+      logInfo(`    ${dim}Reason: ${status.reason}${reset}`);
       const pr = status.worktree.branch ? prMap.get(status.worktree.branch) : undefined;
       if (pr) {
-        logInfo(`    PR: #${pr.number} ${pr.title} (${pr.state}) ${pr.url}`);
+        logInfo(`    ${dim}PR: #${pr.number} ${pr.title} (${pr.state}) ${pr.url}${reset}`);
       }
     }
 
@@ -153,10 +158,10 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
     logInfo("\n[dry-run] The following worktrees would be deleted:");
     for (const status of toDelete) {
       const label = status.worktree.branch || status.worktree.path;
-      logInfo(`  ${icons.bullet()} ${label}`);
+      logInfo(`  ${icons.bullet()} ${cyan}${label}${reset}`);
       const pr = status.worktree.branch ? prMap.get(status.worktree.branch) : undefined;
       if (pr) {
-        logInfo(`    PR: #${pr.number} ${pr.title} (${pr.state}) ${pr.url}`);
+        logInfo(`    ${dim}PR: #${pr.number} ${pr.title} (${pr.state}) ${pr.url}${reset}`);
       }
     }
     return result;
