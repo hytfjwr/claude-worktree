@@ -117,7 +117,7 @@ export const SIGKILL_GRACE_MS = 5000;
  * Send SIGTERM, then escalate to SIGKILL after a grace period
  * if the process hasn't exited.
  */
-function escalateKill(proc: ChildProcess): void {
+function escalateKill(proc: ChildProcess, graceMs = SIGKILL_GRACE_MS): void {
   let sent: boolean;
   try {
     sent = proc.kill("SIGTERM");
@@ -131,7 +131,7 @@ function escalateKill(proc: ChildProcess): void {
     } catch {
       // Process already exited
     }
-  }, SIGKILL_GRACE_MS);
+  }, graceMs);
   proc.once("exit", () => clearTimeout(killTimer));
 }
 
@@ -168,9 +168,10 @@ function withTimeout<T>(promise: PromiseLike<T>, timeoutMs: number, command: str
 export async function runHook(
   command: string,
   cwd: string,
-  options?: { verbose?: boolean; onLine?: (line: string) => void; timeout?: number },
+  options?: { verbose?: boolean; onLine?: (line: string) => void; timeout?: number; sigkillGraceMs?: number },
 ): Promise<void> {
   const timeoutMs = options?.timeout !== undefined ? options.timeout * 1000 : undefined;
+  const graceMs = options?.sigkillGraceMs;
 
   if (options?.verbose) {
     const resultPromise = exec("sh", ["-c", command]).cwd(cwd).nothrow();
@@ -242,7 +243,7 @@ export async function runHook(
       } catch (error) {
         // Kill the process if a stream error occurs and process is still alive
         if (!proc.killed) {
-          escalateKill(proc);
+          escalateKill(proc, graceMs);
         }
         throw error;
       }
@@ -258,7 +259,7 @@ export async function runHook(
           streamAndExit(),
           new Promise<never>((_, reject) => {
             timer = setTimeout(() => {
-              escalateKill(proc);
+              escalateKill(proc, graceMs);
               reject(new HookError(`Hook command timed out after ${timeoutMs / 1000}s: ${command}`));
             }, timeoutMs);
           }),
