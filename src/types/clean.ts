@@ -1,5 +1,6 @@
 import type { HookVars, ProjectConfig } from "./config.ts";
 import type { GitContext, ListWorktreesResult, WorktreeInfo, WorktreeStatus } from "./git.ts";
+import type { PullRequestInfo } from "./github.ts";
 import type { Spinner } from "./spinner.ts";
 
 export type CleanArgs = {
@@ -35,4 +36,6 @@ export type CleanDeps = {
   confirm: (message: string) => Promise<boolean>;
   selectMultiple: (statuses: WorktreeStatus[]) => Promise<WorktreeStatus[]>;
   startSpinner: (message: string) => Spinner;
+  checkGhAvailable: () => Promise<boolean>;
+  getPullRequestForBranch: (branch: string) => Promise<PullRequestInfo | null>;
 };

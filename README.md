@@ -11,6 +11,7 @@ A CLI tool that creates a git worktree and launches [Claude Code](https://docs.a
 - [Git](https://git-scm.com/)
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
 - [WezTerm](https://wezfurlong.org/wezterm/) (optional, required only for `-pane`)
+- [GitHub CLI](https://cli.github.com/) (optional, enables PR info display in `clean`)
 
 ## Installation
 

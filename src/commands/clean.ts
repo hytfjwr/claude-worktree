@@ -10,7 +10,15 @@ import {
 } from "../core/git.ts";
 import { deleteSession } from "../core/session.ts";
 import { deleteSlot, readSlot } from "../core/slot.ts";
-import type { CleanArgs, CleanDeps, CleanResult, ProjectConfig, WorktreeStatus } from "../types/index.ts";
+import { checkGhAvailable, getPullRequestForBranch } from "../external/github.ts";
+import type {
+  CleanArgs,
+  CleanDeps,
+  CleanResult,
+  ProjectConfig,
+  PullRequestInfo,
+  WorktreeStatus,
+} from "../types/index.ts";
 import { icons } from "../ui/icons.ts";
 import { logDebug, logInfo, logWarn } from "../ui/logger.ts";
 import { confirm, selectMultiple } from "../ui/prompt.ts";
@@ -32,6 +40,8 @@ const defaultDeps: CleanDeps = {
   confirm,
   selectMultiple,
   startSpinner,
+  checkGhAvailable,
+  getPullRequestForBranch,
 };
 
 export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDeps): Promise<CleanResult> {
@@ -78,11 +88,36 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
     return result;
   }
 
+  // Fetch PR info for all cleanable branches
+  const prMap = new Map<string, PullRequestInfo>();
+  const ghAvailable = await deps.checkGhAvailable();
+  if (ghAvailable) {
+    const branches = cleanableStatuses.map((s) => s.worktree.branch).filter((b): b is string => b !== null);
+    if (branches.length > 0) {
+      const prSpinner = deps.startSpinner("Fetching PR information...");
+      try {
+        const results = await Promise.all(branches.map((b) => deps.getPullRequestForBranch(b)));
+        for (let i = 0; i < branches.length; i++) {
+          const pr = results[i];
+          if (pr) prMap.set(branches[i], pr);
+        }
+        prSpinner.stop(`${icons.success()} Done fetching PR information.`);
+      } catch {
+        prSpinner.fail("Failed to fetch PR information (continuing)");
+      }
+    }
+  }
+
   let toDelete: WorktreeStatus[];
 
   if (args.all) {
-    // Manual selection mode
-    toDelete = await deps.selectMultiple(cleanableStatuses);
+    // Manual selection mode: enrich reason with PR info for display
+    const enrichedStatuses = cleanableStatuses.map((s) => {
+      const pr = s.worktree.branch ? prMap.get(s.worktree.branch) : undefined;
+      if (!pr) return s;
+      return { ...s, reason: `${s.reason} | PR: #${pr.number} ${pr.title} (${pr.state})` };
+    });
+    toDelete = await deps.selectMultiple(enrichedStatuses);
   } else {
     // Auto-detect mode: show only auto-cleanable ones
     const autoCleanable = cleanableStatuses.filter((s) => s.canAutoClean);
@@ -99,6 +134,10 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
       logInfo(`  ${icons.bullet()} ${branch}`);
       logInfo(`    Path: ${status.worktree.path}`);
       logInfo(`    Reason: ${status.reason}`);
+      const pr = status.worktree.branch ? prMap.get(status.worktree.branch) : undefined;
+      if (pr) {
+        logInfo(`    PR: #${pr.number} ${pr.title} (${pr.state}) ${pr.url}`);
+      }
     }
 
     toDelete = autoCleanable;
@@ -113,7 +152,12 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
   if (args.dryRun) {
     logInfo("\n[dry-run] The following worktrees would be deleted:");
     for (const status of toDelete) {
-      logInfo(`  ${icons.bullet()} ${status.worktree.branch || status.worktree.path}`);
+      const label = status.worktree.branch || status.worktree.path;
+      logInfo(`  ${icons.bullet()} ${label}`);
+      const pr = status.worktree.branch ? prMap.get(status.worktree.branch) : undefined;
+      if (pr) {
+        logInfo(`    PR: #${pr.number} ${pr.title} (${pr.state}) ${pr.url}`);
+      }
     }
     return result;
   }

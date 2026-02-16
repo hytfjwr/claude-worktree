@@ -26,7 +26,7 @@ pnpm test              # Run all tests
 pnpm test:watch        # Watch mode
 pnpm test:coverage     # With coverage
 
-# Check dependencies (node, git, wezterm, claude)
+# Check dependencies (node, git, wezterm, claude, gh)
 make check
 ```
 
@@ -214,7 +214,7 @@ src/
 **Environment Variables:**
 - `CLAUDE_WORKTREE_CACHE_DIR` — override the slot cache directory (default: `~/.cache/claude-worktree`)
 
-**External Tool Dependencies:** node, git, wezterm CLI, claude CLI
+**External Tool Dependencies:** node, git, wezterm CLI, claude CLI, gh CLI (optional)
 
 ## Testing
 

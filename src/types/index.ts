@@ -13,6 +13,7 @@ export type {
   WorktreeInfo,
   WorktreeStatus,
 } from "./git.ts";
+export type { PullRequestInfo } from "./github.ts";
 export type { ListArgs, ListDeps, ListResult, WorktreeListEntry } from "./list.ts";
 export type { BooleanOptionDef, ExtractResult, OptionDef, OptionSchema, StringOptionDef } from "./options.ts";
 export type { ResumeDeps } from "./resume.ts";

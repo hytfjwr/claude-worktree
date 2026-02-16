@@ -63,6 +63,8 @@ function makeDeps(overrides: Partial<CleanDeps> = {}): CleanDeps {
     confirm: async () => true,
     selectMultiple: async () => [],
     startSpinner: () => makeSpinner(),
+    checkGhAvailable: async () => false,
+    getPullRequestForBranch: async () => null,
     ...overrides,
   };
 }
@@ -902,6 +904,190 @@ describe("executeClean", () => {
       await executeClean({ ...defaultArgs, force: true }, deps);
 
       expect(deleteLocalBranchCalled).toBe(false);
+    });
+  });
+
+  describe("PR information display", () => {
+    test("shows PR info in auto-detect mode when gh is available", async () => {
+      const worktree = makeWorktree({
+        path: "/tmp/repo-feature-merged",
+        branch: "feature/merged",
+      });
+      const status = makeStatus(
+        { path: "/tmp/repo-feature-merged", branch: "feature/merged" },
+        { canAutoClean: true, branchMerged: true, reason: "Merged" },
+      );
+      const logSpy = vi.spyOn(console, "log");
+      const deps = makeDeps({
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
+        getWorktreeStatuses: async () => [status],
+        checkGhAvailable: async () => true,
+        getPullRequestForBranch: async (branch) => {
+          if (branch === "feature/merged") {
+            return {
+              number: 123,
+              title: "Fix login bug",
+              state: "MERGED",
+              url: "https://github.com/owner/repo/pull/123",
+            };
+          }
+          return null;
+        },
+      });
+
+      await executeClean({ ...defaultArgs, force: true }, deps);
+
+      const logCalls = logSpy.mock.calls.map((c) => c[0]);
+      expect(logCalls.some((msg) => typeof msg === "string" && msg.includes("PR: #123"))).toBe(true);
+      expect(logCalls.some((msg) => typeof msg === "string" && msg.includes("Fix login bug"))).toBe(true);
+      expect(logCalls.some((msg) => typeof msg === "string" && msg.includes("MERGED"))).toBe(true);
+    });
+
+    test("skips PR lookup when gh is not available", async () => {
+      const worktree = makeWorktree({ branch: "feature/test" });
+      const status = makeStatus({ branch: "feature/test" }, { canAutoClean: true, reason: "Merged" });
+      let getPrCalled = false;
+      const deps = makeDeps({
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
+        getWorktreeStatuses: async () => [status],
+        checkGhAvailable: async () => false,
+        getPullRequestForBranch: async () => {
+          getPrCalled = true;
+          return null;
+        },
+      });
+
+      await executeClean({ ...defaultArgs, force: true }, deps);
+
+      expect(getPrCalled).toBe(false);
+    });
+
+    test("continues deletion when PR lookup returns null", async () => {
+      const worktree = makeWorktree({
+        path: "/tmp/repo-pr-fail",
+        branch: "feature/pr-fail",
+      });
+      const status = makeStatus(
+        { path: "/tmp/repo-pr-fail", branch: "feature/pr-fail" },
+        { canAutoClean: true, reason: "Merged" },
+      );
+      const deps = makeDeps({
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
+        getWorktreeStatuses: async () => [status],
+        checkGhAvailable: async () => true,
+        getPullRequestForBranch: async () => null,
+      });
+
+      const result = await executeClean({ ...defaultArgs, force: true }, deps);
+
+      expect(result.deleted).toEqual(["/tmp/repo-pr-fail"]);
+    });
+
+    test("continues deletion when getPullRequestForBranch throws", async () => {
+      const worktree = makeWorktree({
+        path: "/tmp/repo-pr-throw",
+        branch: "feature/pr-throw",
+      });
+      const status = makeStatus(
+        { path: "/tmp/repo-pr-throw", branch: "feature/pr-throw" },
+        { canAutoClean: true, reason: "Merged" },
+      );
+      const spinner = makeSpinner();
+      const deps = makeDeps({
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
+        getWorktreeStatuses: async () => [status],
+        checkGhAvailable: async () => true,
+        getPullRequestForBranch: async () => {
+          throw new Error("Network error");
+        },
+        startSpinner: () => spinner,
+      });
+
+      const result = await executeClean({ ...defaultArgs, force: true }, deps);
+
+      expect(spinner.fail).toHaveBeenCalledWith("Failed to fetch PR information (continuing)");
+      expect(result.deleted).toEqual(["/tmp/repo-pr-throw"]);
+    });
+
+    test("skips PR lookup for detached HEAD (branch null)", async () => {
+      const worktree = makeWorktree({
+        path: "/tmp/repo-detached",
+        branch: null,
+      });
+      const status = makeStatus({ path: "/tmp/repo-detached", branch: null }, { canAutoClean: true });
+      let getPrCalled = false;
+      const deps = makeDeps({
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
+        getWorktreeStatuses: async () => [status],
+        checkGhAvailable: async () => true,
+        getPullRequestForBranch: async () => {
+          getPrCalled = true;
+          return null;
+        },
+      });
+
+      await executeClean({ ...defaultArgs, force: true }, deps);
+
+      expect(getPrCalled).toBe(false);
+    });
+
+    test("shows PR info in dry-run mode", async () => {
+      const worktree = makeWorktree({
+        path: "/tmp/repo-dry-pr",
+        branch: "feature/dry-pr",
+      });
+      const status = makeStatus(
+        { path: "/tmp/repo-dry-pr", branch: "feature/dry-pr" },
+        { canAutoClean: true, reason: "Remote deleted" },
+      );
+      const logSpy = vi.spyOn(console, "log");
+      const deps = makeDeps({
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
+        getWorktreeStatuses: async () => [status],
+        checkGhAvailable: async () => true,
+        getPullRequestForBranch: async () => ({
+          number: 456,
+          title: "Add feature",
+          state: "CLOSED",
+          url: "https://github.com/owner/repo/pull/456",
+        }),
+      });
+
+      await executeClean({ ...defaultArgs, dryRun: true }, deps);
+
+      const logCalls = logSpy.mock.calls.map((c) => c[0]);
+      expect(logCalls.some((msg) => typeof msg === "string" && msg.includes("PR: #456"))).toBe(true);
+    });
+
+    test("includes PR info in hint for -all mode", async () => {
+      const wt = makeWorktree({ path: "/tmp/repo-all-pr", branch: "feature/all-pr" });
+      const status = makeStatus(
+        { path: "/tmp/repo-all-pr", branch: "feature/all-pr" },
+        { canAutoClean: false, reason: "Active" },
+      );
+      let receivedStatuses: WorktreeStatus[] = [];
+      const deps = makeDeps({
+        listWorktrees: async () => ({ worktrees: [wt], mainBranch: "main" }),
+        getWorktreeStatuses: async () => [status],
+        checkGhAvailable: async () => true,
+        getPullRequestForBranch: async () => ({
+          number: 789,
+          title: "New feature",
+          state: "OPEN",
+          url: "https://github.com/owner/repo/pull/789",
+        }),
+        selectMultiple: async (statuses) => {
+          receivedStatuses = statuses;
+          return [];
+        },
+      });
+
+      await executeClean({ ...defaultArgs, all: true }, deps);
+
+      expect(receivedStatuses.length).toBe(1);
+      expect(receivedStatuses[0].reason).toContain("PR: #789");
+      expect(receivedStatuses[0].reason).toContain("New feature");
+      expect(receivedStatuses[0].reason).toContain("OPEN");
     });
   });
 });
