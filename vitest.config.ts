@@ -12,6 +12,7 @@ export default defineConfig({
         "vitest.config.ts",
         "src/index.ts",
         "src/types.ts",
+        "src/__test-utils__.ts",
       ],
       thresholds: {
         statements: 75,

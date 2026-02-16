@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "vitest";
 
+import { withTTY } from "../__test-utils__.ts";
 import {
   _resetColorCache,
   blue,
@@ -15,20 +16,6 @@ import {
   styles,
   yellow,
 } from "./color.ts";
-
-function withTTY(isTTY: boolean, fn: () => void) {
-  const saved = Object.getOwnPropertyDescriptor(process.stdout, "isTTY");
-  Object.defineProperty(process.stdout, "isTTY", { value: isTTY, configurable: true, writable: true });
-  try {
-    fn();
-  } finally {
-    if (saved) {
-      Object.defineProperty(process.stdout, "isTTY", saved);
-    } else {
-      delete (process.stdout as unknown as Record<string, unknown>).isTTY;
-    }
-  }
-}
 
 afterEach(() => {
   _resetColorCache();

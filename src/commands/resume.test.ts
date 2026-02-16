@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
+import { makeWorktree } from "../__test-utils__.ts";
 import { spawnInteractive } from "../core/spawn.ts";
 import type { ResumeDeps, WorktreeInfo } from "../types/index.ts";
 import { runResume } from "./resume.ts";
@@ -26,17 +27,6 @@ afterAll(async () => {
   await rm(tempDir, { recursive: true, force: true });
 });
 
-function makeWorktree(overrides: Partial<WorktreeInfo> = {}): WorktreeInfo {
-  return {
-    path: tempDir,
-    branch: "feature/test",
-    isLocked: false,
-    isDirty: false,
-    isMain: false,
-    ...overrides,
-  };
-}
-
 function makeDeps(overrides: Partial<ResumeDeps> = {}): ResumeDeps {
   return {
     checkWeztermAvailable: async () => true,
@@ -46,7 +36,7 @@ function makeDeps(overrides: Partial<ResumeDeps> = {}): ResumeDeps {
       currentBranch: "main",
     }),
     listWorktrees: async () => ({
-      worktrees: [makeWorktree({ path: "/repo", branch: "main", isMain: true }), makeWorktree()],
+      worktrees: [makeWorktree({ path: "/repo", branch: "main", isMain: true }), makeWorktree({ path: tempDir })],
       mainBranch: "main",
     }),
     saveSession: vi.fn(async () => {}),
@@ -145,7 +135,7 @@ describe("runResume", () => {
 
   describe("interactive selection", () => {
     test("calls selectWorktree when no branch specified", async () => {
-      const target = makeWorktree();
+      const target = makeWorktree({ path: tempDir });
       const deps = makeDeps({
         selectWorktree: vi.fn(async () => target),
       });

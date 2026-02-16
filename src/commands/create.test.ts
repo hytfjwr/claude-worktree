@@ -3,8 +3,9 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterAll, afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
+import { makeWorktree } from "../__test-utils__.ts";
 import { spawnInteractive } from "../core/spawn.ts";
-import type { CreateArgs, CreateDeps, ProjectConfig, WorktreeInfo } from "../types/index.ts";
+import type { CreateArgs, CreateDeps, ProjectConfig } from "../types/index.ts";
 import { checkWorktreeLimit, getSelfCommand, readPlanFile, runCreate } from "./create.ts";
 
 // Mock spawnInteractive to avoid spawning real processes in terminal mode
@@ -137,17 +138,6 @@ describe("checkWorktreeLimit", () => {
 // =============================================================================
 // runCreate orchestration tests
 // =============================================================================
-
-function makeWorktree(overrides: Partial<WorktreeInfo> = {}): WorktreeInfo {
-  return {
-    path: "/repo/.worktrees/feat-x",
-    branch: "feat/x",
-    isLocked: false,
-    isDirty: false,
-    isMain: false,
-    ...overrides,
-  };
-}
 
 function makeDeps(overrides: Partial<CreateDeps> = {}): CreateDeps {
   return {

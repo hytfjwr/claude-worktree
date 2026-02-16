@@ -1,36 +1,8 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
-import type { CleanArgs, CleanDeps, WorktreeInfo, WorktreeStatus } from "../types/index.ts";
+import { makeStatus, makeWorktree } from "../__test-utils__.ts";
+import type { CleanArgs, CleanDeps, WorktreeStatus } from "../types/index.ts";
 import { executeClean } from "./clean.ts";
-
-// ============================================================================
-// Helper functions
-// ============================================================================
-
-function makeWorktree(overrides: Partial<WorktreeInfo> = {}): WorktreeInfo {
-  return {
-    path: "/tmp/repo-feature-test",
-    branch: "feature/test",
-    isLocked: false,
-    isDirty: false,
-    isMain: false,
-    ...overrides,
-  };
-}
-
-function makeStatus(
-  worktreeOverrides: Partial<WorktreeInfo> = {},
-  statusOverrides: Partial<Omit<WorktreeStatus, "worktree">> = {},
-): WorktreeStatus {
-  return {
-    worktree: makeWorktree(worktreeOverrides),
-    branchMerged: false,
-    branchDeletedOnRemote: false,
-    canAutoClean: false,
-    reason: "Active",
-    ...statusOverrides,
-  };
-}
 
 function makeSpinner() {
   return {

@@ -10,15 +10,8 @@ vi.mock("../ui/icons.ts", () => ({
   },
 }));
 
-import type {
-  CommitInfo,
-  ListArgs,
-  ListDeps,
-  SessionState,
-  WorktreeInfo,
-  WorktreeListEntry,
-  WorktreeStatus,
-} from "../types/index.ts";
+import { makeCommitInfo, makeStatus, makeWorktree } from "../__test-utils__.ts";
+import type { ListArgs, ListDeps, SessionState, WorktreeListEntry } from "../types/index.ts";
 import {
   executeList,
   formatAheadBehind,
@@ -30,44 +23,6 @@ import {
   shortenPath,
   truncate,
 } from "./list.ts";
-
-// ============================================================================
-// Helper functions
-// ============================================================================
-
-function makeWorktree(overrides: Partial<WorktreeInfo> = {}): WorktreeInfo {
-  return {
-    path: "/tmp/repo-feature-test",
-    branch: "feature/test",
-    isLocked: false,
-    isDirty: false,
-    isMain: false,
-    ...overrides,
-  };
-}
-
-function makeStatus(
-  worktreeOverrides: Partial<WorktreeInfo> = {},
-  statusOverrides: Partial<Omit<WorktreeStatus, "worktree">> = {},
-): WorktreeStatus {
-  return {
-    worktree: makeWorktree(worktreeOverrides),
-    branchMerged: false,
-    branchDeletedOnRemote: false,
-    canAutoClean: false,
-    reason: "Active",
-    ...statusOverrides,
-  };
-}
-
-function makeCommitInfo(overrides: Partial<CommitInfo> = {}): CommitInfo {
-  return {
-    hash: "abc1234",
-    message: "Fix typo in README",
-    date: new Date("2025-01-15T10:00:00Z"),
-    ...overrides,
-  };
-}
 
 function makeListEntry(overrides: Partial<WorktreeListEntry> = {}): WorktreeListEntry {
   const defaultStatus = makeStatus();
