@@ -1,0 +1,86 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version bump type
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - custom
+      custom_version:
+        description: Custom version (only when "custom" is selected, e.g. 1.2.3)
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release:
+    name: Create Release PR
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate custom version
+        if: inputs.version == 'custom'
+        run: |
+          if [ -z "${{ inputs.custom_version }}" ]; then
+            echo "::error::custom_version is required when version is 'custom'"
+            exit 1
+          fi
+          if ! echo "${{ inputs.custom_version }}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::custom_version must be a valid semver (e.g. 1.2.3)"
+            exit 1
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Bump version
+        id: bump
+        run: |
+          if [ "${{ inputs.version }}" = "custom" ]; then
+            npm version "${{ inputs.custom_version }}" --no-git-tag-version
+          else
+            npm version "${{ inputs.version }}" --no-git-tag-version
+          fi
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Create branch, commit, and push
+        env:
+          LEFTHOOK: "0"
+        run: |
+          VERSION="${{ steps.bump.outputs.version }}"
+          BRANCH="release/v${VERSION}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add package.json
+          git commit -m "chore: release v${VERSION}"
+          git push -u origin "$BRANCH"
+
+      - name: Create Pull Request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ steps.bump.outputs.version }}"
+          BODY=$(cat <<EOF
+          ## Summary
+          - Bump package version to v${VERSION}
+          EOF
+          )
+          gh pr create \
+            --title "chore: release v${VERSION}" \
+            --body "$BODY" \
+            --base main
