@@ -7,6 +7,7 @@ import {
   DEFAULT_HOOK_TIMEOUT,
   resolveHookTimeout,
   runHook,
+  SIGKILL_GRACE_MS,
   validateProjectConfig,
 } from "./config.ts";
 
@@ -277,5 +278,36 @@ describe("runHook timeout", () => {
     await expect(runHook(sleepCmd, testCwd, { timeout: 0.05, onLine: (line) => lines.push(line) })).rejects.toThrow(
       `Hook command timed out after 0.05s: ${sleepCmd}`,
     );
+  });
+
+  test(
+    "kills SIGTERM-resistant process via SIGKILL escalation (onLine mode)",
+    async () => {
+      // Use 'exec' so sh replaces itself with node; without it, sh may fork
+      // on Linux, causing SIGTERM to kill sh while node survives as an orphan.
+      const trapCmd = `exec node -e "console.log(process.pid); process.on('SIGTERM', () => {}); setTimeout(() => {}, 30000)"`;
+      const lines: string[] = [];
+      await expect(runHook(trapCmd, testCwd, { timeout: 0.1, onLine: (line) => lines.push(line) })).rejects.toThrow(
+        /timed out/,
+      );
+
+      const pidLine = lines.find((line) => /^\d+$/.test(line));
+      expect(pidLine, "expected hook output to contain a PID line").toBeDefined();
+      const pid = Number(pidLine);
+      expect(Number.isNaN(pid)).toBe(false);
+
+      // SIGKILL is sent after SIGKILL_GRACE_MS; wait for it to take effect
+      await new Promise((resolve) => setTimeout(resolve, SIGKILL_GRACE_MS + 1000));
+
+      // After the grace period, the process should no longer exist
+      expect(() => process.kill(pid, 0)).toThrow();
+    },
+    SIGKILL_GRACE_MS + 5000,
+  );
+});
+
+describe("SIGKILL_GRACE_MS", () => {
+  test("is 5000ms", () => {
+    expect(SIGKILL_GRACE_MS).toBe(5000);
   });
 });

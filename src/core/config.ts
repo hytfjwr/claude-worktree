@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { TextDecoder } from "node:util";
@@ -111,6 +111,30 @@ export function buildHookCommand(template: string, vars: HookVars): string {
 
 export const DEFAULT_HOOK_TIMEOUT = 600;
 
+export const SIGKILL_GRACE_MS = 5000;
+
+/**
+ * Send SIGTERM, then escalate to SIGKILL after a grace period
+ * if the process hasn't exited.
+ */
+function escalateKill(proc: ChildProcess): void {
+  let sent: boolean;
+  try {
+    sent = proc.kill("SIGTERM");
+  } catch {
+    return;
+  }
+  if (!sent) return;
+  const killTimer = setTimeout(() => {
+    try {
+      proc.kill("SIGKILL");
+    } catch {
+      // Process already exited
+    }
+  }, SIGKILL_GRACE_MS);
+  proc.once("exit", () => clearTimeout(killTimer));
+}
+
 export function resolveHookTimeout(
   hookName: "postCreate" | "preClean" | "postClean",
   config: ProjectConfig | null,
@@ -217,12 +241,8 @@ export async function runHook(
         exitCode = results[0];
       } catch (error) {
         // Kill the process if a stream error occurs and process is still alive
-        try {
-          if (!proc.killed) {
-            proc.kill();
-          }
-        } catch {
-          // Process may already be dead (ESRCH)
+        if (!proc.killed) {
+          escalateKill(proc);
         }
         throw error;
       }
@@ -238,7 +258,7 @@ export async function runHook(
           streamAndExit(),
           new Promise<never>((_, reject) => {
             timer = setTimeout(() => {
-              proc.kill();
+              escalateKill(proc);
               reject(new Error(`Hook command timed out after ${timeoutMs / 1000}s: ${command}`));
             }, timeoutMs);
           }),
