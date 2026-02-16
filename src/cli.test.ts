@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
 import {
   parseArgs,
@@ -1161,5 +1161,146 @@ describe("parseResumeArgs", () => {
   test("-h is ignored (does not throw)", () => {
     const result = parseResumeArgs(["-h"]);
     expect(result.branchName).toBeUndefined();
+  });
+});
+
+// ============================================================================
+// run() dispatcher
+// ============================================================================
+
+vi.mock("./commands/create.ts", () => ({
+  runCreate: vi.fn(),
+}));
+
+vi.mock("./commands/resume.ts", () => ({
+  runResume: vi.fn(),
+}));
+
+vi.mock("./commands/list.ts", () => ({
+  executeList: vi.fn(),
+}));
+
+vi.mock("./commands/clean.ts", () => ({
+  executeClean: vi.fn(),
+}));
+
+vi.mock("./commands/run-in-pane.ts", () => ({
+  parseRunInPaneArgs: vi.fn(),
+  executeRunInPane: vi.fn(),
+}));
+
+vi.mock("./ui/logger.ts", () => ({
+  logInfo: vi.fn(),
+}));
+
+vi.mock("./version.ts", () => ({
+  getVersion: vi.fn(() => "1.2.3"),
+}));
+
+const { run } = await import("./cli.ts");
+const { runCreate } = await import("./commands/create.ts");
+const { runResume } = await import("./commands/resume.ts");
+const { executeList } = await import("./commands/list.ts");
+const { executeClean } = await import("./commands/clean.ts");
+const { parseRunInPaneArgs, executeRunInPane } = await import("./commands/run-in-pane.ts");
+const { logInfo } = await import("./ui/logger.ts");
+
+afterEach(() => {
+  vi.clearAllMocks();
+});
+
+describe("run", () => {
+  test("dispatches 'create' to runCreate", async () => {
+    const args = {
+      branchName: "feature/test",
+      prompt: "Test prompt",
+      danger: false,
+      merge: false,
+      draft: false,
+      pull: false,
+      pane: false,
+      verbose: false,
+      dryRun: false,
+    };
+    await run({ type: "create", args });
+    expect(runCreate).toHaveBeenCalledWith(args);
+  });
+
+  test("dispatches 'resume' to runResume", async () => {
+    const args = { branchName: "feature/auth", danger: false, pane: false, verbose: false };
+    await run({ type: "resume", args });
+    expect(runResume).toHaveBeenCalledWith(args);
+  });
+
+  test("dispatches 'list' to executeList", async () => {
+    const args = { json: false, verbose: false, noStatus: false };
+    await run({ type: "list", args });
+    expect(executeList).toHaveBeenCalledWith(args);
+  });
+
+  test("dispatches 'clean' to executeClean", async () => {
+    const args = { force: false, all: false, dryRun: false, verbose: false };
+    await run({ type: "clean", args });
+    expect(executeClean).toHaveBeenCalledWith(args);
+  });
+
+  test("shows version for 'version' command", async () => {
+    await run({ type: "version" });
+    expect(logInfo).toHaveBeenCalledWith("1.2.3");
+  });
+
+  test("shows global help for 'help' command without commandHelp", async () => {
+    await run({ type: "help" });
+    expect(logInfo).toHaveBeenCalled();
+    const output = vi.mocked(logInfo).mock.calls[0][0];
+    expect(output).toContain("claude-worktree");
+    expect(output).toContain("Usage:");
+  });
+
+  test("shows create help for 'help' command with commandHelp='create'", async () => {
+    await run({ type: "help", commandHelp: "create" });
+    expect(logInfo).toHaveBeenCalled();
+    const output = vi.mocked(logInfo).mock.calls[0][0];
+    expect(output).toContain("Create a new worktree");
+  });
+
+  test("shows list help for 'help' command with commandHelp='list'", async () => {
+    await run({ type: "help", commandHelp: "list" });
+    expect(logInfo).toHaveBeenCalled();
+    const output = vi.mocked(logInfo).mock.calls[0][0];
+    expect(output).toContain("List existing worktrees");
+  });
+
+  test("shows clean help for 'help' command with commandHelp='clean'", async () => {
+    await run({ type: "help", commandHelp: "clean" });
+    expect(logInfo).toHaveBeenCalled();
+    const output = vi.mocked(logInfo).mock.calls[0][0];
+    expect(output).toContain("Remove unnecessary worktrees");
+  });
+
+  test("shows resume help for 'help' command with commandHelp='resume'", async () => {
+    await run({ type: "help", commandHelp: "resume" });
+    expect(logInfo).toHaveBeenCalled();
+    const output = vi.mocked(logInfo).mock.calls[0][0];
+    expect(output).toContain("Resume a Claude session");
+  });
+
+  test("dispatches '_run-in-pane' to parseRunInPaneArgs then executeRunInPane", async () => {
+    const mockArgs = {
+      worktreePath: "/tmp/wt",
+      repoRoot: "/tmp/repo",
+      claudeCommand: "claude",
+      postCreateTimeout: 600,
+      preCleanTimeout: 600,
+      postCleanTimeout: 600,
+      verbose: false,
+    };
+    vi.mocked(parseRunInPaneArgs).mockResolvedValue(mockArgs);
+    vi.mocked(executeRunInPane).mockResolvedValue(undefined);
+
+    await run({ type: "_run-in-pane", payloadPath: "/tmp/payload.json" });
+
+    expect(parseRunInPaneArgs).toHaveBeenCalledWith("/tmp/payload.json");
+    expect(executeRunInPane).toHaveBeenCalledWith(mockArgs);
   });
 });

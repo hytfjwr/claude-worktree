@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
 import type { RunInPaneArgs } from "../types/index.ts";
 import { parseRunInPaneArgs } from "./run-in-pane.ts";
@@ -127,5 +127,92 @@ describe("parseRunInPaneArgs", () => {
   test.each([null, [], "string", 0, true])("error: non-object payload (%j)", async (value) => {
     const path = await writePayload(value);
     await expect(parseRunInPaneArgs(path)).rejects.toThrow("payload must be a JSON object");
+  });
+});
+
+// ============================================================================
+// executeRunInPane
+// ============================================================================
+
+vi.mock("./hooks.ts", () => ({
+  executeHookWithSpinner: vi.fn(),
+}));
+
+vi.mock("../core/spawn.ts", () => ({
+  spawnInteractive: vi.fn(),
+}));
+
+vi.mock("./rollback.ts", () => ({
+  performRollback: vi.fn(),
+}));
+
+vi.mock("../ui/logger.ts", () => ({
+  logError: vi.fn(),
+}));
+
+const { executeRunInPane } = await import("./run-in-pane.ts");
+const { executeHookWithSpinner } = await import("./hooks.ts");
+const { spawnInteractive } = await import("../core/spawn.ts");
+const { performRollback } = await import("./rollback.ts");
+
+const mockExecuteHook = vi.mocked(executeHookWithSpinner);
+const mockSpawnInteractive = vi.mocked(spawnInteractive);
+const mockPerformRollback = vi.mocked(performRollback);
+
+afterEach(() => {
+  vi.clearAllMocks();
+});
+
+describe("executeRunInPane", () => {
+  test("runs postCreate hook then launches Claude Code", async () => {
+    mockExecuteHook.mockResolvedValue({ success: true });
+    mockSpawnInteractive.mockResolvedValue(undefined);
+
+    await executeRunInPane({ ...validArgs, postCreateCommand: "docker up" });
+
+    expect(mockExecuteHook).toHaveBeenCalledWith({
+      hookCmd: "docker up",
+      cwd: validArgs.repoRoot,
+      label: "postCreate",
+      verbose: false,
+      timeout: validArgs.postCreateTimeout,
+    });
+    expect(mockSpawnInteractive).toHaveBeenCalledWith({
+      command: validArgs.claudeCommand,
+      cwd: validArgs.worktreePath,
+    });
+  });
+
+  test("rolls back and does not launch Claude when postCreate hook fails", async () => {
+    mockExecuteHook.mockResolvedValue({ success: false, message: "timeout" });
+    mockPerformRollback.mockResolvedValue(undefined);
+
+    await executeRunInPane({ ...validArgs, postCreateCommand: "docker up" });
+
+    expect(mockPerformRollback).toHaveBeenCalledWith({
+      worktreePath: validArgs.worktreePath,
+      repoRoot: validArgs.repoRoot,
+      preCleanCommand: validArgs.preCleanCommand,
+      preCleanTimeout: validArgs.preCleanTimeout,
+      postCleanCommand: validArgs.postCleanCommand,
+      postCleanTimeout: validArgs.postCleanTimeout,
+      slot: validArgs.slot,
+      verbose: false,
+      deleteSessionData: true,
+    });
+    expect(mockSpawnInteractive).not.toHaveBeenCalled();
+  });
+
+  test("skips hook and launches Claude directly when no postCreateCommand", async () => {
+    mockSpawnInteractive.mockResolvedValue(undefined);
+
+    const argsWithoutHook = { ...validArgs, postCreateCommand: undefined };
+    await executeRunInPane(argsWithoutHook);
+
+    expect(mockExecuteHook).not.toHaveBeenCalled();
+    expect(mockSpawnInteractive).toHaveBeenCalledWith({
+      command: validArgs.claudeCommand,
+      cwd: validArgs.worktreePath,
+    });
   });
 });
