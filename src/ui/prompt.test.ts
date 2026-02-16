@@ -24,7 +24,6 @@ vi.mock("./select.ts", () => ({
 import { confirm, selectMultiple, selectWorktree } from "./prompt.ts";
 
 afterEach(() => {
-  vi.restoreAllMocks();
   mockSelectSingle.mockReset();
   mockSelectMany.mockReset();
 });

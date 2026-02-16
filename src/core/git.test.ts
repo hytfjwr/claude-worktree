@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
+import { createExecStub } from "../__test-utils__.ts";
 import type { WorktreeInfo } from "../types/index.ts";
-import type { ExecResult } from "./exec.ts";
 import { buildWorktreeCommand, getWorktreePath, parseWorktreePorcelain } from "./git.ts";
 
 // Hoisted mock for ./exec — default passthrough, overridable per-test via mockExecImpl
@@ -21,51 +21,6 @@ vi.mock("./exec.ts", async (importOriginal) => {
     },
   };
 });
-
-/**
- * Create a fake ExecBuilder that mirrors the real exec() return type contract.
- * - Awaiting returns ExecResult (with sync .text())
- * - .text() on builder returns Promise<string>
- * - .nothrow() suppresses rejection on non-zero exitCode (matching real ExecBuilder)
- * - .quiet() is a chainable no-op
- * Throws for unhandled commands to catch regressions early.
- */
-function createExecStub(
-  handler: (cmd: string, args: string[]) => { stdout: string; stderr?: string; exitCode?: number },
-) {
-  return (cmd: string, args: string[]) => {
-    const { stdout, stderr = "", exitCode = 0 } = handler(cmd, args);
-    const result: ExecResult = {
-      exitCode,
-      stdout: Buffer.from(stdout),
-      stderr: Buffer.from(stderr),
-      text: () => stdout,
-    };
-    let shouldThrow = true;
-    function rejectIfNeeded<T>(fallback: () => Promise<T>): Promise<T> {
-      if (exitCode !== 0 && shouldThrow) {
-        const msg = `Command failed with exit code ${exitCode}: ${cmd} ${args.join(" ")}${stderr ? `\n${stderr}` : ""}`;
-        return Promise.reject(new Error(msg));
-      }
-      return fallback();
-    }
-    const builder = {
-      nothrow() {
-        shouldThrow = false;
-        return this;
-      },
-      quiet() {
-        return this;
-      },
-      text: () => rejectIfNeeded(() => Promise.resolve(stdout)),
-      // biome-ignore lint/suspicious/noThenProperty: intentional PromiseLike implementation for exec stub
-      then(resolve?: ((value: ExecResult) => unknown) | null, reject?: ((reason: unknown) => unknown) | null) {
-        return rejectIfNeeded(() => Promise.resolve(result)).then(resolve, reject);
-      },
-    };
-    return builder;
-  };
-}
 
 // ============================================================================
 // Pure function tests (no mocks needed)

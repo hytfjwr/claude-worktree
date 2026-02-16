@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 
 import type { RunInPaneArgs } from "../types/index.ts";
 import { parseRunInPaneArgs } from "./run-in-pane.ts";
@@ -158,10 +158,6 @@ const { performRollback } = await import("./rollback.ts");
 const mockExecuteHook = vi.mocked(executeHookWithSpinner);
 const mockSpawnInteractive = vi.mocked(spawnInteractive);
 const mockPerformRollback = vi.mocked(performRollback);
-
-afterEach(() => {
-  vi.clearAllMocks();
-});
 
 describe("executeRunInPane", () => {
   test("runs postCreate hook then launches Claude Code", async () => {

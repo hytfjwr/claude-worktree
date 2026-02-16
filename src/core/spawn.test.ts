@@ -1,7 +1,7 @@
-import { type ChildProcess, spawn } from "node:child_process";
-import { EventEmitter } from "node:events";
+import { spawn } from "node:child_process";
 import { describe, expect, test, vi } from "vitest";
 
+import { createFakeChildProcess } from "../__test-utils__.ts";
 import { spawnInteractive } from "./spawn.ts";
 
 vi.mock("node:child_process", async (importOriginal) => {
@@ -24,9 +24,7 @@ describe("spawnInteractive", () => {
   });
 
   test("resolves with 1 when close event has null code (e.g. killed by signal)", async () => {
-    const fakeProc = new EventEmitter() as ChildProcess;
-    // biome-ignore lint/suspicious/noExplicitAny: stub for test
-    fakeProc.kill = vi.fn() as any;
+    const fakeProc = createFakeChildProcess();
 
     vi.mocked(spawn).mockReturnValueOnce(fakeProc);
 
@@ -38,9 +36,7 @@ describe("spawnInteractive", () => {
   });
 
   test("rejects when spawn emits an error event", async () => {
-    const fakeProc = new EventEmitter() as ChildProcess;
-    // biome-ignore lint/suspicious/noExplicitAny: stub for test
-    fakeProc.kill = vi.fn() as any;
+    const fakeProc = createFakeChildProcess();
 
     vi.mocked(spawn).mockReturnValueOnce(fakeProc);
 
@@ -53,9 +49,7 @@ describe("spawnInteractive", () => {
   });
 
   test("forwards SIGINT to child process", async () => {
-    const fakeProc = new EventEmitter() as ChildProcess;
-    // biome-ignore lint/suspicious/noExplicitAny: stub for test
-    fakeProc.kill = vi.fn() as any;
+    const fakeProc = createFakeChildProcess();
 
     vi.mocked(spawn).mockReturnValueOnce(fakeProc);
 
@@ -73,9 +67,7 @@ describe("spawnInteractive", () => {
   });
 
   test("cleans up signal handlers after child closes", async () => {
-    const fakeProc = new EventEmitter() as ChildProcess;
-    // biome-ignore lint/suspicious/noExplicitAny: stub for test
-    fakeProc.kill = vi.fn() as any;
+    const fakeProc = createFakeChildProcess();
 
     vi.mocked(spawn).mockReturnValueOnce(fakeProc);
 

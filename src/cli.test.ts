@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 
 import {
   parseArgs,
@@ -1204,10 +1204,6 @@ const { executeList } = await import("./commands/list.ts");
 const { executeClean } = await import("./commands/clean.ts");
 const { parseRunInPaneArgs, executeRunInPane } = await import("./commands/run-in-pane.ts");
 const { logInfo } = await import("./ui/logger.ts");
-
-afterEach(() => {
-  vi.clearAllMocks();
-});
 
 describe("run", () => {
   test("dispatches 'create' to runCreate", async () => {

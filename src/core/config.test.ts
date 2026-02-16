@@ -272,7 +272,6 @@ describe("loadProjectConfig", () => {
   });
 
   afterEach(async () => {
-    vi.restoreAllMocks();
     await rm(tempDir, { recursive: true, force: true });
   });
 

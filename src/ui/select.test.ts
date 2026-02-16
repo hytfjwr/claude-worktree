@@ -136,7 +136,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  vi.restoreAllMocks();
   _resetColorCache();
   delete process.env.NO_COLOR;
 });

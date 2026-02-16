@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 
 import { executeHookWithSpinner } from "./hooks.ts";
 
@@ -28,10 +28,6 @@ const { startSpinner, createTailUpdater } = await import("../ui/spinner.ts");
 const mockRunHook = vi.mocked(runHook);
 const mockStartSpinner = vi.mocked(startSpinner);
 const mockCreateTailUpdater = vi.mocked(createTailUpdater);
-
-afterEach(() => {
-  vi.clearAllMocks();
-});
 
 const baseOptions = {
   hookCmd: "echo hello",

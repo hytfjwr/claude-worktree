@@ -38,7 +38,6 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
-  vi.restoreAllMocks();
   _resetColorCache();
   delete process.env.NO_COLOR;
 });
