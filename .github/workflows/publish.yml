@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+    paths:
+      - package.json
 
 permissions:
   contents: write
@@ -25,11 +27,16 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
 
-      - name: Check if tag already exists
+      - name: Check if already published
         id: check
         run: |
-          if git ls-remote --tags origin "refs/tags/v${{ steps.version.outputs.version }}" | grep -q .; then
+          VERSION="${{ steps.version.outputs.version }}"
+          if git ls-remote --tags origin "refs/tags/v${VERSION}" | grep -q .; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Tag v${VERSION} already exists, skipping publish"
+          elif npm view "@hytfjwr/claude-worktree@${VERSION}" version >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Version ${VERSION} already on npm, skipping publish"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
