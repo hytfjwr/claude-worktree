@@ -30,15 +30,10 @@ describe("parseArgs", () => {
       const result = parseArgs(["feature/test", "-h", "prompt"]);
       expect(result).toEqual({ type: "help", commandHelp: "create" });
     });
-
-    test("-help for clean - returns clean help", () => {
-      const result = parseArgs(["clean", "-help"]);
-      expect(result).toEqual({ type: "help", commandHelp: "clean" });
-    });
   });
 
   describe("clean", () => {
-    test("basic - clean command", () => {
+    test("clean command", () => {
       const result = parseArgs(["clean"]);
       expect(result).toEqual({
         type: "clean",
@@ -53,7 +48,7 @@ describe("parseArgs", () => {
   });
 
   describe("list", () => {
-    test("basic - list command", () => {
+    test("list command", () => {
       const result = parseArgs(["list"]);
       expect(result).toEqual({
         type: "list",
@@ -157,7 +152,7 @@ describe("parseArgs", () => {
   });
 
   describe("missing prompt for branch", () => {
-    test.each(["ABC", "status", "hotfix"])('single word "%s" - throws missing prompt error', (input) => {
+    test.each(["ABC", "status", "hotfix"])('single word "%s" throws missing prompt error', (input) => {
       expect(() => parseArgs([input])).toThrow(`Missing prompt for branch "${input}"`);
     });
 
@@ -168,12 +163,13 @@ describe("parseArgs", () => {
       expect(() => parseArgs(["ABC"])).toThrow(substring);
     });
 
-    test("branch with prompt - does not throw unknown command", () => {
+    test("non-subcommand word falls through to create", () => {
+      // parseSubCommand returns null for unknown words, falling through to create
       const result = parseArgs(["hotfix", "Fix the bug"]);
       expect(result.type).toBe("create");
     });
 
-    test("branch with -plan - does not throw unknown command", () => {
+    test("branch with -plan falls through to create", () => {
       const result = parseArgs(["hotfix", "-plan", "plan.md"]);
       expect(result.type).toBe("create");
     });
@@ -181,7 +177,7 @@ describe("parseArgs", () => {
 });
 
 describe("parseCreateArgs", () => {
-  test("basic - branch + prompt", () => {
+  test("branch + prompt", () => {
     const result = parseCreateArgs(["feature/test", "Test prompt"]);
     expect(result).toEqual({
       branchName: "feature/test",
@@ -334,20 +330,30 @@ describe("parseCreateArgs", () => {
     });
   });
 
-  test("all options combined -merge + -danger + -plan", () => {
-    const result = parseCreateArgs(["feature/test", "-plan", "plan.md", "-merge", "-danger"]);
+  test("all options combined -pane -draft -pull -danger -verbose -dry-run -plan", () => {
+    const result = parseCreateArgs([
+      "feature/test",
+      "-plan",
+      "plan.md",
+      "-pane",
+      "-draft",
+      "-pull",
+      "-danger",
+      "-verbose",
+      "-dry-run",
+    ]);
     expect(result).toEqual({
       branchName: "feature/test",
       prompt: "",
       planFile: "plan.md",
       danger: true,
-      merge: true,
-      draft: false,
-      pull: false,
+      merge: false,
+      draft: true,
+      pull: true,
       baseBranch: undefined,
-      pane: false,
-      verbose: false,
-      dryRun: false,
+      pane: true,
+      verbose: true,
+      dryRun: true,
     });
   });
 
@@ -436,20 +442,32 @@ describe("parseCreateArgs", () => {
     });
   });
 
-  test("all options combined -base + -merge + -danger + -plan", () => {
-    const result = parseCreateArgs(["feature/test", "-base", "develop", "-plan", "plan.md", "-merge", "-danger"]);
+  test("all options combined -base -pane -draft -pull -danger -verbose -dry-run -plan", () => {
+    const result = parseCreateArgs([
+      "feature/test",
+      "-base",
+      "develop",
+      "-plan",
+      "plan.md",
+      "-pane",
+      "-draft",
+      "-pull",
+      "-danger",
+      "-verbose",
+      "-dry-run",
+    ]);
     expect(result).toEqual({
       branchName: "feature/test",
       prompt: "",
       planFile: "plan.md",
       danger: true,
-      merge: true,
-      draft: false,
-      pull: false,
+      merge: false,
+      draft: true,
+      pull: true,
       baseBranch: "develop",
-      pane: false,
-      verbose: false,
-      dryRun: false,
+      pane: true,
+      verbose: true,
+      dryRun: true,
     });
   });
 
@@ -623,6 +641,18 @@ describe("parseCreateArgs", () => {
     });
   });
 
+  test("-pull + -verbose options", () => {
+    const result = parseCreateArgs(["feature/test", "Prompt", "-pull", "-verbose"]);
+    expect(result.pull).toBe(true);
+    expect(result.verbose).toBe(true);
+  });
+
+  test("-pull + -dry-run options", () => {
+    const result = parseCreateArgs(["feature/test", "Prompt", "-pull", "-dry-run"]);
+    expect(result.pull).toBe(true);
+    expect(result.dryRun).toBe(true);
+  });
+
   test("-dry-run option", () => {
     const result = parseCreateArgs(["feature/test", "Prompt", "-dry-run"]);
     expect(result.dryRun).toBe(true);
@@ -649,32 +679,36 @@ describe("parseCreateArgs", () => {
     expect(result.prompt).toBe("Prompt");
   });
 
-  test("error: -merge and -draft are mutually exclusive", () => {
+  test("-merge + -draft throws mutually exclusive error", () => {
     expect(() => parseCreateArgs(["feature/test", "Prompt", "-merge", "-draft"])).toThrow(
       "Cannot use both -merge and -draft options",
     );
   });
 
-  test("error: -base without argument", () => {
+  test("-base without argument throws", () => {
     expect(() => parseCreateArgs(["feature/test", "Prompt", "-base"])).toThrow("-base requires a branch name argument");
   });
 
-  test("error: not enough arguments (0)", () => {
+  test("no arguments throws usage error", () => {
     expect(() => parseCreateArgs([])).toThrow("Usage:");
   });
 
-  test("error: no prompt and no -plan", () => {
+  test("no prompt and no -plan throws", () => {
     expect(() => parseCreateArgs(["feature/test"])).toThrow("A prompt or -plan option is required");
   });
 
-  test("error: -plan without argument", () => {
+  test("-plan without argument throws", () => {
     expect(() => parseCreateArgs(["feature/test", "-plan"])).toThrow("-plan requires a file path argument");
   });
 
-  test("error: both -plan and inline prompt", () => {
+  test("-plan + inline prompt throws", () => {
     expect(() => parseCreateArgs(["feature/test", "Prompt", "-plan", "plan.md"])).toThrow(
       "Cannot use both -plan and inline prompt",
     );
+  });
+
+  test("-plan with empty string throws", () => {
+    expect(() => parseCreateArgs(["feature/test", "-plan", ""])).toThrow("A prompt or -plan option is required");
   });
 
   test("multi-word inline prompt", () => {
@@ -682,25 +716,25 @@ describe("parseCreateArgs", () => {
     expect(result.prompt).toBe("this is multi-word");
   });
 
-  test("error: unknown option -unknown", () => {
+  test("unknown option -unknown throws", () => {
     expect(() => parseCreateArgs(["feature/test", "-unknown", "text"])).toThrow("Unknown option: -unknown");
   });
 
-  test("error: unknown short option -x", () => {
+  test("unknown option -x throws", () => {
     expect(() => parseCreateArgs(["feature/test", "-x"])).toThrow("Unknown option: -x");
   });
 
-  test("error: unknown option after prompt", () => {
+  test("unknown option after prompt throws", () => {
     expect(() => parseCreateArgs(["feature/test", "Prompt", "-foo"])).toThrow("Unknown option: -foo");
   });
 
-  test("error: --pane → hint suggesting -pane", () => {
+  test("--pane suggests -pane", () => {
     expect(() => parseCreateArgs(["feature/test", "Prompt", "--pane"])).toThrow(
       'Unknown option: "--pane" (did you mean "-pane"?)',
     );
   });
 
-  test("error: --base → hint suggesting -base", () => {
+  test("--base suggests -base", () => {
     expect(() => parseCreateArgs(["feature/test", "Prompt", "--base", "develop"])).toThrow(
       'Unknown option: "--base" (did you mean "-base"?)',
     );
@@ -708,7 +742,7 @@ describe("parseCreateArgs", () => {
 });
 
 describe("parseCleanArgs", () => {
-  test("basic - no options", () => {
+  test("no options", () => {
     const result = parseCleanArgs([]);
     expect(result).toEqual({ force: false, all: false, dryRun: false, verbose: false });
   });
@@ -743,14 +777,14 @@ describe("parseCleanArgs", () => {
     expect(result.dryRun).toBe(true);
   });
 
-  test("combined flags - -force -all -dry-run", () => {
-    const result = parseCleanArgs(["-force", "-all", "-dry-run"]);
-    expect(result).toEqual({ force: true, all: true, dryRun: true, verbose: false });
+  test("combined flags -force -all -dry-run -verbose", () => {
+    const result = parseCleanArgs(["-force", "-all", "-dry-run", "-verbose"]);
+    expect(result).toEqual({ force: true, all: true, dryRun: true, verbose: true });
   });
 
-  test("combined short flags - -f -a -n", () => {
-    const result = parseCleanArgs(["-f", "-a", "-n"]);
-    expect(result).toEqual({ force: true, all: true, dryRun: true, verbose: false });
+  test("combined short flags -f -a -n -v", () => {
+    const result = parseCleanArgs(["-f", "-a", "-n", "-v"]);
+    expect(result).toEqual({ force: true, all: true, dryRun: true, verbose: true });
   });
 
   test("-h/-help is ignored (does not throw)", () => {
@@ -768,11 +802,11 @@ describe("parseCleanArgs", () => {
     expect(result.verbose).toBe(true);
   });
 
-  test("error: unknown option", () => {
+  test("unknown option throws", () => {
     expect(() => parseCleanArgs(["-unknown"])).toThrow("Unknown option for clean command: -unknown");
   });
 
-  test("error: --force → hint suggesting -force", () => {
+  test("--force suggests -force", () => {
     expect(() => parseCleanArgs(["--force"])).toThrow(
       'Unknown option for clean command: "--force" (did you mean "-force"?)',
     );
@@ -780,7 +814,7 @@ describe("parseCleanArgs", () => {
 });
 
 describe("parseListArgs", () => {
-  test("basic - no options", () => {
+  test("no options", () => {
     const result = parseListArgs([]);
     expect(result).toEqual({ json: false, verbose: false, noStatus: false });
   });
@@ -800,11 +834,11 @@ describe("parseListArgs", () => {
     expect(result.noStatus).toBe(true);
   });
 
-  test("-status is now unknown option", () => {
+  test("-status throws as unknown option", () => {
     expect(() => parseListArgs(["-status"])).toThrow("Unknown option for list command");
   });
 
-  test("-s is now unknown option", () => {
+  test("-s throws as unknown option", () => {
     expect(() => parseListArgs(["-s"])).toThrow("Unknown option for list command");
   });
 
@@ -838,11 +872,11 @@ describe("parseListArgs", () => {
     expect(result).toEqual({ json: false, verbose: false, noStatus: false });
   });
 
-  test("error: unknown option", () => {
+  test("unknown option throws", () => {
     expect(() => parseListArgs(["-unknown"])).toThrow("Unknown option for list command: -unknown");
   });
 
-  test("error: --json → hint suggesting -json", () => {
+  test("--json suggests -json", () => {
     expect(() => parseListArgs(["--json"])).toThrow(
       'Unknown option for list command: "--json" (did you mean "-json"?)',
     );
@@ -949,17 +983,17 @@ describe("validateBranchName", () => {
 });
 
 describe("parseCreateArgs - branch validation", () => {
-  test("error: branch name starting with -", () => {
+  test("branch name starting with - throws", () => {
     expect(() => parseCreateArgs(["-feature", "Prompt"])).toThrow("cannot start with");
   });
 
-  test("error: branch name with spaces", () => {
+  test("branch name with spaces throws", () => {
     expect(() => parseCreateArgs(["my branch", "Prompt"])).toThrow("whitespace");
   });
 });
 
 describe("parseCreateArgs - whitespace prompt", () => {
-  test("error: whitespace-only prompt is rejected", () => {
+  test("whitespace-only prompt throws", () => {
     expect(() => parseCreateArgs(["feature/test", "   "])).toThrow("A prompt or -plan option is required");
   });
 });
@@ -980,8 +1014,18 @@ describe("parseArgs - per-command help", () => {
     expect(result).toEqual({ type: "help", commandHelp: "clean" });
   });
 
+  test("clean -help returns clean help", () => {
+    const result = parseArgs(["clean", "-help"]);
+    expect(result).toEqual({ type: "help", commandHelp: "clean" });
+  });
+
   test("branch -h returns create help", () => {
     const result = parseArgs(["feature/test", "-h"]);
+    expect(result).toEqual({ type: "help", commandHelp: "create" });
+  });
+
+  test("branch -help returns create help", () => {
+    const result = parseArgs(["feature/test", "-help"]);
     expect(result).toEqual({ type: "help", commandHelp: "create" });
   });
 
@@ -1068,7 +1112,7 @@ describe("parseArgs - resume", () => {
 // ============================================================================
 
 describe("parseResumeArgs", () => {
-  test("no args - all undefined/false", () => {
+  test("no args", () => {
     const result = parseResumeArgs([]);
     expect(result).toEqual({
       branchName: undefined,
@@ -1148,11 +1192,22 @@ describe("parseResumeArgs", () => {
     });
   });
 
-  test("error: unknown option", () => {
+  test("prompt with interleaved -v option extracts verbose and joins remaining words", () => {
+    const result = parseResumeArgs(["feature/test", "fix", "-v", "the", "bug"]);
+    expect(result).toEqual({
+      branchName: "feature/test",
+      prompt: "fix the bug",
+      pane: false,
+      danger: false,
+      verbose: true,
+    });
+  });
+
+  test("unknown option throws", () => {
     expect(() => parseResumeArgs(["-unknown"])).toThrow("Unknown option for resume command: -unknown");
   });
 
-  test("error: --pane → hint suggesting -pane", () => {
+  test("--pane suggests -pane", () => {
     expect(() => parseResumeArgs(["--pane"])).toThrow(
       'Unknown option for resume command: "--pane" (did you mean "-pane"?)',
     );

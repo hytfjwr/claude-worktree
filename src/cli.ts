@@ -275,12 +275,6 @@ export function parseCreateArgs(args: string[]): CreateArgs {
   const { pane, danger, merge, draft, pull, dryRun, verbose } = booleans;
   const { baseBranch, planFile } = strings;
 
-  // Check for unknown options
-  const unknownFlag = remaining.find((arg) => arg.startsWith("-"));
-  if (unknownFlag) {
-    throw new UsageError(`Unknown option: ${unknownFlag}`);
-  }
-
   // Mutual exclusivity check for -merge and -draft
   if (merge && draft) {
     throw new UsageError(
