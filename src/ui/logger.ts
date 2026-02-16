@@ -1,11 +1,7 @@
+import type { Logger } from "../types/index.ts";
 import { icons } from "./icons.ts";
 
-export interface Logger {
-  log(msg: string): void;
-  warn(msg: string): void;
-  error(msg: string): void;
-  debug(msg: string): void;
-}
+export type { Logger } from "../types/index.ts";
 
 const defaultLogger: Logger = {
   log: (msg) => console.log(msg),

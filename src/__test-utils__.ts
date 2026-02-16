@@ -2,8 +2,7 @@ import type { ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { vi } from "vitest";
 
-import type { ExecResult } from "./core/exec.ts";
-import type { CommitInfo, WorktreeInfo, WorktreeStatus } from "./types/index.ts";
+import type { CommitInfo, ExecResult, WorktreeInfo, WorktreeStatus } from "./types/index.ts";
 
 export function makeWorktree(overrides: Partial<WorktreeInfo> = {}): WorktreeInfo {
   return {

@@ -1,20 +1,16 @@
 import * as readline from "node:readline";
 
+import type { SelectItem } from "../types/index.ts";
 import { cyan, dim, green } from "./color.ts";
 import { icons } from "./icons.ts";
 import { logInfo } from "./logger.ts";
 import { stripAnsi } from "./spinner.ts";
 
+export type { SelectItem } from "../types/index.ts";
+
 // =============================================================================
 // Types
 // =============================================================================
-
-export type SelectItem<T> = {
-  value: T;
-  label: string;
-  description?: string;
-  hint?: string;
-};
 
 type SelectOptions<T> = {
   message: string;

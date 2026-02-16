@@ -1,3 +1,7 @@
+type Color = { r: number; g: number; b: number };
+
+export type ColorTheme = { base: Color; bright: Color };
+
 export type Spinner = {
   stop: (finalMessage?: string) => void;
   fail: (message: string) => void;

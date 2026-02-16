@@ -1,11 +1,8 @@
 import { spawn } from "node:child_process";
 
-export type SpawnInteractiveOptions = {
-  /** Shell command string to execute via `sh -c` */
-  command: string;
-  /** Working directory for the child process */
-  cwd?: string;
-};
+import type { SpawnInteractiveOptions } from "../types/index.ts";
+
+export type { SpawnInteractiveOptions } from "../types/index.ts";
 
 /**
  * Spawn an interactive child process with `stdio: "inherit"` and signal forwarding.

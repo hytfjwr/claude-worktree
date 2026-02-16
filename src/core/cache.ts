@@ -3,8 +3,11 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { setTimeout } from "node:timers/promises";
 
+import type { LockOptions } from "../types/index.ts";
 import { logDebug } from "../ui/logger.ts";
 import { isNodeError, LockAcquisitionError } from "./errors.ts";
+
+export type { LockOptions } from "../types/index.ts";
 
 export function getCacheDir(): string {
   return join(process.env.CLAUDE_WORKTREE_CACHE_DIR || join(homedir(), ".cache", "claude-worktree"));
@@ -15,11 +18,6 @@ export const LOCK_RETRY_INTERVAL_MS = 100;
 
 /** If a lock file is older than this, consider the owning process likely dead. */
 export const STALE_LOCK_THRESHOLD_MS = 30_000;
-
-export interface LockOptions {
-  maxRetries?: number;
-  retryIntervalMs?: number;
-}
 
 /**
  * Check whether the process that wrote the lock file is still alive.

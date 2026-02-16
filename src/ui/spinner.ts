@@ -1,6 +1,8 @@
-import type { Spinner } from "../types/index.ts";
+import type { ColorTheme, Spinner } from "../types/index.ts";
 import { isColorEnabled } from "./color.ts";
 import { icons } from "./icons.ts";
+
+export type { ColorTheme } from "../types/index.ts";
 
 const FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const INTERVAL = 80; // ms
@@ -9,9 +11,6 @@ const INTERVAL = 80; // ms
 const SHIMMER_WIDTH = 6;
 const SHIMMER_SPEED = 2; // characters per frame
 const SHIMMER_PAUSE = 6; // extra dark frames between sweeps
-
-type Color = { r: number; g: number; b: number };
-export type ColorTheme = { base: Color; bright: Color };
 
 export const COLOR_THEMES: readonly ColorTheme[] = [
   { base: { r: 120, g: 110, b: 170 }, bright: { r: 230, g: 225, b: 255 } }, // Purple
