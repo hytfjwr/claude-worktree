@@ -1,6 +1,6 @@
 import * as readline from "node:readline";
 
-import { rawCode } from "./color.ts";
+import { cyan, dim, green } from "./color.ts";
 import { icons } from "./icons.ts";
 import { logInfo } from "./logger.ts";
 import { stripAnsi } from "./spinner.ts";
@@ -79,45 +79,36 @@ function computeLabelWidth<T>(items: SelectItem<T>[]): number {
 }
 
 function renderSingle<T>(items: SelectItem<T>[], cursor: number, labelWidth: number): string {
-  const dim = rawCode("dim");
-  const cyan = rawCode("cyan");
-  const reset = rawCode("reset");
-
   let out = "";
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
     const isCurrent = i === cursor;
-    const pointer = isCurrent ? `${cyan}${icons.cursor()}${reset}` : " ";
-    const label = isCurrent ? `${cyan}${item.label}${reset}` : item.label;
+    const pointer = isCurrent ? cyan(icons.cursor()) : " ";
+    const label = isCurrent ? cyan(item.label) : item.label;
     const padding = " ".repeat(Math.max(0, labelWidth - stripAnsi(item.label).length));
-    const desc = item.description ? `${dim}  ${item.description}${reset}` : "";
+    const desc = item.description ? dim(`  ${item.description}`) : "";
     out += `  ${pointer} ${label}${padding}${desc}\n`;
   }
   return out;
 }
 
 function renderMulti<T>(items: SelectItem<T>[], cursor: number, selected: Set<number>, labelWidth: number): string {
-  const dim = rawCode("dim");
-  const cyan = rawCode("cyan");
-  const green = rawCode("green");
-  const reset = rawCode("reset");
-
   let out = "";
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
     const isCurrent = i === cursor;
     const isSelected = selected.has(i);
-    const pointer = isCurrent ? `${cyan}${icons.cursor()}${reset}` : " ";
-    const check = isSelected ? `${green}${icons.checked()}${reset}` : `${dim}${icons.unchecked()}${reset}`;
-    const label = isCurrent ? `${cyan}${item.label}${reset}` : item.label;
+    const pointer = isCurrent ? cyan(icons.cursor()) : " ";
+    const check = isSelected ? green(icons.checked()) : dim(icons.unchecked());
+    const label = isCurrent ? cyan(item.label) : item.label;
     const padding = " ".repeat(Math.max(0, labelWidth - stripAnsi(item.label).length));
     let meta = "";
     if (item.description && item.hint) {
-      meta = `${dim}  ${item.description} – ${item.hint}${reset}`;
+      meta = dim(`  ${item.description} – ${item.hint}`);
     } else if (item.description) {
-      meta = `${dim}  ${item.description}${reset}`;
+      meta = dim(`  ${item.description}`);
     } else if (item.hint) {
-      meta = `${dim}  ${item.hint}${reset}`;
+      meta = dim(`  ${item.hint}`);
     }
     out += `  ${pointer} ${check} ${label}${padding}${meta}\n`;
   }
@@ -317,12 +308,10 @@ export async function selectSingle<T>(options: SelectOptions<T>): Promise<T | nu
     return fallbackSingle(options);
   }
 
-  const dim = rawCode("dim");
-  const reset = rawCode("reset");
   const labelWidth = computeLabelWidth(items);
 
   const headerLine = `\n${message}`;
-  const footerLine = `${dim}  ↑/↓ navigate  Enter confirm  q cancel${reset}`;
+  const footerLine = dim("  ↑/↓ navigate  Enter confirm  q cancel");
 
   let currentCursor = 0;
 
@@ -346,13 +335,11 @@ export async function selectMany<T>(options: SelectOptions<T>): Promise<T[]> {
     return fallbackMany(options);
   }
 
-  const dim = rawCode("dim");
-  const reset = rawCode("reset");
   const labelWidth = computeLabelWidth(items);
   const selected = new Set<number>();
 
   const headerLine = `\n${message}`;
-  const footerLine = `${dim}  ↑/↓ navigate  Space toggle  a all  Enter confirm  q cancel${reset}`;
+  const footerLine = dim("  ↑/↓ navigate  Space toggle  a all  Enter confirm  q cancel");
 
   let currentCursor = 0;
 

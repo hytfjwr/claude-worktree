@@ -1,6 +1,20 @@
 import { afterEach, describe, expect, test } from "vitest";
 
-import { _resetColorCache, isColorEnabled, rawCode, shouldUseColor } from "./color.ts";
+import {
+  _resetColorCache,
+  blue,
+  bold,
+  colorize,
+  cyan,
+  dim,
+  green,
+  isColorEnabled,
+  magenta,
+  rawCode,
+  shouldUseColor,
+  styles,
+  yellow,
+} from "./color.ts";
 
 function withTTY(isTTY: boolean, fn: () => void) {
   const saved = Object.getOwnPropertyDescriptor(process.stdout, "isTTY");
@@ -84,6 +98,74 @@ describe("rawCode", () => {
       expect(rawCode("bold")).toBe("\x1b[1m");
       expect(rawCode("reset")).toBe("\x1b[0m");
       expect(rawCode("dim")).toBe("\x1b[38;5;245m");
+    });
+  });
+});
+
+describe("color wrapper functions", () => {
+  test("return plain text when color is disabled", () => {
+    process.env.NO_COLOR = "1";
+    _resetColorCache();
+    expect(bold("hello")).toBe("hello");
+    expect(dim("hello")).toBe("hello");
+    expect(green("hello")).toBe("hello");
+    expect(yellow("hello")).toBe("hello");
+    expect(blue("hello")).toBe("hello");
+    expect(magenta("hello")).toBe("hello");
+    expect(cyan("hello")).toBe("hello");
+  });
+
+  test("wrap text with ANSI codes when color is enabled", () => {
+    withTTY(true, () => {
+      delete process.env.NO_COLOR;
+      _resetColorCache();
+      expect(bold("hi")).toBe("\x1b[1mhi\x1b[0m");
+      expect(dim("hi")).toBe("\x1b[38;5;245mhi\x1b[0m");
+      expect(green("hi")).toBe("\x1b[32mhi\x1b[0m");
+      expect(yellow("hi")).toBe("\x1b[33mhi\x1b[0m");
+      expect(blue("hi")).toBe("\x1b[34mhi\x1b[0m");
+      expect(magenta("hi")).toBe("\x1b[35mhi\x1b[0m");
+      expect(cyan("hi")).toBe("\x1b[36mhi\x1b[0m");
+    });
+  });
+});
+
+describe("colorize", () => {
+  test("returns plain text when color is disabled", () => {
+    process.env.NO_COLOR = "1";
+    _resetColorCache();
+    expect(colorize("\x1b[36m", "hello")).toBe("hello");
+  });
+
+  test("returns plain text when code is empty", () => {
+    withTTY(true, () => {
+      delete process.env.NO_COLOR;
+      _resetColorCache();
+      expect(colorize("", "hello")).toBe("hello");
+    });
+  });
+
+  test("wraps text with given code when color is enabled", () => {
+    withTTY(true, () => {
+      delete process.env.NO_COLOR;
+      _resetColorCache();
+      expect(colorize("\x1b[36m", "hello")).toBe("\x1b[36mhello\x1b[0m");
+    });
+  });
+});
+
+describe("styles", () => {
+  test("returns plain text when color is disabled", () => {
+    process.env.NO_COLOR = "1";
+    _resetColorCache();
+    expect(styles("hello", "bold", "cyan")).toBe("hello");
+  });
+
+  test("applies multiple styles when color is enabled", () => {
+    withTTY(true, () => {
+      delete process.env.NO_COLOR;
+      _resetColorCache();
+      expect(styles("hi", "bold", "cyan")).toBe("\x1b[1m\x1b[36mhi\x1b[0m");
     });
   });
 });

@@ -12,7 +12,7 @@ import type {
   WorktreeListEntry,
   WorktreeStatus,
 } from "../types/index.ts";
-import { rawCode } from "../ui/color.ts";
+import { bold, colorize, dim, green, rawCode } from "../ui/color.ts";
 import { icons } from "../ui/icons.ts";
 import { logInfo } from "../ui/logger.ts";
 import { startSpinner } from "../ui/spinner.ts";
@@ -109,29 +109,23 @@ export function formatAheadBehind(ab: AheadBehind | null): string {
 export function formatSessionState(session: SessionState): string {
   const elapsed = formatElapsed(session.elapsedMs);
   const panePart = session.paneId != null ? `  pane #${session.paneId}` : "";
-  const g = rawCode("green");
-  const r = rawCode("reset");
-  const d = rawCode("dim");
   if (session.status === "running") {
-    return `${g}${icons.active()}${r} ${g}Running${r} ${d}(${elapsed})${r}${panePart}`;
+    return `${green(icons.active())} ${green("Running")} ${dim(`(${elapsed})`)}${panePart}`;
   }
-  return `${g}${icons.success()}${r} Done ${d}(${elapsed})${r}${panePart}`;
+  return `${green(icons.success())} Done ${dim(`(${elapsed})`)}${panePart}`;
 }
 
 export function formatWorktreeEntry(entry: WorktreeListEntry, repoRoot: string, verbose: boolean): string[] {
   const { worktree, status, commit, aheadBehind, session } = entry;
   const badge = getStatusBadge(status);
   const branch = worktree.branch || "(detached)";
-  const r = rawCode("reset");
-  const b = rawCode("bold");
-  const d = rawCode("dim");
 
   // Line 1: icon + branch (bold) + badge (colored) + ahead/behind + session state
   const abStr = formatAheadBehind(aheadBehind);
-  const badgePart = `${badge.color}${badge.label}${r}`;
+  const badgePart = colorize(badge.color, badge.label);
   const abPart = abStr ? `  ${abStr}` : "";
   const sessionPart = session ? `       ${formatSessionState(session)}` : "";
-  const line1 = `  ${badge.color}${badge.icon}${r} ${b}${branch}${r}  ${badgePart}${abPart}${sessionPart}`;
+  const line1 = `  ${colorize(badge.color, badge.icon)} ${bold(branch)}  ${badgePart}${abPart}${sessionPart}`;
 
   // Line 2: commit hash (dim) + message + relative time (dim)
   let line2: string;
@@ -139,14 +133,14 @@ export function formatWorktreeEntry(entry: WorktreeListEntry, repoRoot: string, 
     const hash = verbose ? commit.hash : commit.hash.slice(0, 7);
     const msg = verbose ? commit.message : truncate(commit.message, 50);
     const timeStr = formatRelativeTime(commit.date);
-    line2 = `    ${d}${hash}${r}  ${msg}  ${d}${timeStr}${r}`;
+    line2 = `    ${dim(hash)}  ${msg}  ${dim(timeStr)}`;
   } else {
-    line2 = `    ${d}(no commits)${r}`;
+    line2 = `    ${dim("(no commits)")}`;
   }
 
   // Line 3: path (dim)
   const pathStr = verbose ? worktree.path : shortenPath(worktree.path, repoRoot);
-  const line3 = `    ${d}${pathStr}${r}`;
+  const line3 = `    ${dim(pathStr)}`;
 
   return [line1, line2, line3];
 }
@@ -257,7 +251,7 @@ export async function executeList(args: ListArgs, deps: ListDeps = defaultDeps):
   }
 
   // Rich display
-  logInfo(`\n${rawCode("bold")}Worktrees (${result.entries.length})${rawCode("reset")}\n`);
+  logInfo(`\n${bold(`Worktrees (${result.entries.length})`)}\n`);
 
   // Derive repoRoot from main worktree path or first worktree
   const mainEntry = result.entries.find((e) => e.worktree.isMain);

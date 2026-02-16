@@ -19,7 +19,7 @@ import type {
   PullRequestInfo,
   WorktreeStatus,
 } from "../types/index.ts";
-import { rawCode } from "../ui/color.ts";
+import { cyan, dim } from "../ui/color.ts";
 import { icons } from "../ui/icons.ts";
 import { logDebug, logInfo, logWarn } from "../ui/logger.ts";
 import { confirm, selectMultiple } from "../ui/prompt.ts";
@@ -109,10 +109,6 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
     }
   }
 
-  const cyan = rawCode("cyan");
-  const dim = rawCode("dim");
-  const reset = rawCode("reset");
-
   let toDelete: WorktreeStatus[];
 
   if (args.all) {
@@ -136,12 +132,12 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
     logInfo(`\n${icons.trash()}  Deletion candidates:`);
     for (const status of autoCleanable) {
       const branch = status.worktree.branch || "(detached)";
-      logInfo(`  ${icons.bullet()} ${cyan}${branch}${reset}`);
-      logInfo(`    ${dim}Path: ${status.worktree.path}${reset}`);
-      logInfo(`    ${dim}Reason: ${status.reason}${reset}`);
+      logInfo(`  ${icons.bullet()} ${cyan(branch)}`);
+      logInfo(`    ${dim(`Path: ${status.worktree.path}`)}`);
+      logInfo(`    ${dim(`Reason: ${status.reason}`)}`);
       const pr = status.worktree.branch ? prMap.get(status.worktree.branch) : undefined;
       if (pr) {
-        logInfo(`    ${dim}PR: #${pr.number} ${pr.title} (${pr.state}) ${pr.url}${reset}`);
+        logInfo(`    ${dim(`PR: #${pr.number} ${pr.title} (${pr.state}) ${pr.url}`)}`);
       }
     }
 
@@ -158,10 +154,10 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
     logInfo("\n[dry-run] The following worktrees would be deleted:");
     for (const status of toDelete) {
       const label = status.worktree.branch || status.worktree.path;
-      logInfo(`  ${icons.bullet()} ${cyan}${label}${reset}`);
+      logInfo(`  ${icons.bullet()} ${cyan(label)}`);
       const pr = status.worktree.branch ? prMap.get(status.worktree.branch) : undefined;
       if (pr) {
-        logInfo(`    ${dim}PR: #${pr.number} ${pr.title} (${pr.state}) ${pr.url}${reset}`);
+        logInfo(`    ${dim(`PR: #${pr.number} ${pr.title} (${pr.state}) ${pr.url}`)}`);
       }
     }
     return result;
