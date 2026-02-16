@@ -487,4 +487,44 @@ describe("non-TTY fallback", () => {
     });
     expect(result).toEqual(["x", "z"]);
   });
+
+  test("selectSingle fallback returns null for out-of-range input", async () => {
+    mockRlAnswer = "99";
+    const result = await withNonTTYStdin(() => {
+      return selectSingle({ message: "Pick:", items: sampleItems });
+    });
+    expect(result).toBeNull();
+  });
+
+  test("selectSingle fallback returns null for non-numeric input", async () => {
+    mockRlAnswer = "abc";
+    const result = await withNonTTYStdin(() => {
+      return selectSingle({ message: "Pick:", items: sampleItems });
+    });
+    expect(result).toBeNull();
+  });
+
+  test("selectMany fallback returns empty for out-of-range input", async () => {
+    const items = [
+      { value: "x", label: "Xray" },
+      { value: "y", label: "Yankee" },
+    ];
+    mockRlAnswer = "0 99";
+    const result = await withNonTTYStdin(() => {
+      return selectMany({ message: "Pick:", items });
+    });
+    expect(result).toEqual([]);
+  });
+
+  test("selectMany fallback returns empty for non-numeric input", async () => {
+    const items = [
+      { value: "x", label: "Xray" },
+      { value: "y", label: "Yankee" },
+    ];
+    mockRlAnswer = "abc";
+    const result = await withNonTTYStdin(() => {
+      return selectMany({ message: "Pick:", items });
+    });
+    expect(result).toEqual([]);
+  });
 });

@@ -161,6 +161,11 @@ describe("readJsonFile", () => {
     const result = await readJsonFile(filePath, { fallback: true }, "fallback");
     expect(result).toEqual({ fallback: true });
   });
+
+  test("throws non-ENOENT errors (e.g. EISDIR)", async () => {
+    // Passing a directory path to readFile triggers EISDIR
+    await expect(readJsonFile(tempDir, {})).rejects.toThrow();
+  });
 });
 
 describe("getCacheDir", () => {

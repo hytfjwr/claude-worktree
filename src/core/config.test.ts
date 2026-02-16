@@ -1,10 +1,13 @@
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { describe, expect, test } from "vitest";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { ProjectConfig } from "../types/index.ts";
 import {
   buildHookCommand,
   DEFAULT_HOOK_TIMEOUT,
+  loadProjectConfig,
   resolveHookTimeout,
   runHook,
   SIGKILL_GRACE_MS,
@@ -260,6 +263,51 @@ describe("validateProjectConfig", () => {
   });
 });
 
+describe("loadProjectConfig", () => {
+  let tempDir: string;
+
+  beforeEach(async () => {
+    tempDir = join(tmpdir(), `config-test-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+    await mkdir(tempDir, { recursive: true });
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  test("returns null when config file does not exist", async () => {
+    const result = await loadProjectConfig(tempDir);
+    expect(result).toBeNull();
+  });
+
+  test("returns null and warns on JSON parse error", async () => {
+    const warnSpy = vi.spyOn(await import("../ui/logger.ts"), "logWarn").mockImplementation(() => {});
+    await writeFile(join(tempDir, ".claude-worktree.json"), "not valid json", "utf-8");
+
+    const result = await loadProjectConfig(tempDir);
+    expect(result).toBeNull();
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("Failed to parse .claude-worktree.json"));
+  });
+
+  test("returns null and warns on validation error", async () => {
+    const warnSpy = vi.spyOn(await import("../ui/logger.ts"), "logWarn").mockImplementation(() => {});
+    await writeFile(join(tempDir, ".claude-worktree.json"), JSON.stringify({ maxWorktrees: "bad" }), "utf-8");
+
+    const result = await loadProjectConfig(tempDir);
+    expect(result).toBeNull();
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("Invalid .claude-worktree.json"));
+  });
+
+  test("returns ProjectConfig for valid config file", async () => {
+    const config = { maxWorktrees: 5, postCreate: "echo setup" };
+    await writeFile(join(tempDir, ".claude-worktree.json"), JSON.stringify(config), "utf-8");
+
+    const result = await loadProjectConfig(tempDir);
+    expect(result).toEqual(config);
+  });
+});
+
 describe("runHook timeout", () => {
   const sleepCmd = 'node -e "setTimeout(() => {}, 10000)"';
 
@@ -309,5 +357,24 @@ describe("runHook timeout", () => {
 describe("SIGKILL_GRACE_MS", () => {
   test("is 5000ms", () => {
     expect(SIGKILL_GRACE_MS).toBe(5000);
+  });
+});
+
+describe("runHook onLine", () => {
+  test("calls onLine for each output line", async () => {
+    const lines: string[] = [];
+    await runHook('echo "line1"; echo "line2"; echo "line3"', testCwd, {
+      onLine: (line) => lines.push(line),
+    });
+    expect(lines).toEqual(["line1", "line2", "line3"]);
+  });
+
+  test("streams stderr to onLine as well", async () => {
+    const lines: string[] = [];
+    await runHook('echo "stdout-line"; echo "stderr-line" >&2', testCwd, {
+      onLine: (line) => lines.push(line),
+    });
+    expect(lines).toContain("stdout-line");
+    expect(lines).toContain("stderr-line");
   });
 });

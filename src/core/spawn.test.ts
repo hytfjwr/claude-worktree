@@ -51,4 +51,52 @@ describe("spawnInteractive", () => {
 
     await expect(promise).rejects.toThrow("spawn ENOENT");
   });
+
+  test("forwards SIGINT to child process", async () => {
+    const fakeProc = new EventEmitter() as ChildProcess;
+    // biome-ignore lint/suspicious/noExplicitAny: stub for test
+    fakeProc.kill = vi.fn() as any;
+
+    vi.mocked(spawn).mockReturnValueOnce(fakeProc);
+
+    const promise = spawnInteractive({ command: "anything" });
+
+    try {
+      // Emit SIGINT on process — should forward to child
+      process.emit("SIGINT", "SIGINT");
+
+      expect(fakeProc.kill).toHaveBeenCalledWith("SIGINT");
+    } finally {
+      fakeProc.emit("close", 0);
+      await promise.catch(() => {});
+    }
+  });
+
+  test("cleans up signal handlers after child closes", async () => {
+    const fakeProc = new EventEmitter() as ChildProcess;
+    // biome-ignore lint/suspicious/noExplicitAny: stub for test
+    fakeProc.kill = vi.fn() as any;
+
+    vi.mocked(spawn).mockReturnValueOnce(fakeProc);
+
+    const listenerCountBefore = process.listenerCount("SIGINT");
+
+    const promise = spawnInteractive({ command: "anything" });
+
+    try {
+      // While child is alive, there should be an additional SIGINT listener
+      expect(process.listenerCount("SIGINT")).toBeGreaterThan(listenerCountBefore);
+
+      // Close child process
+      fakeProc.emit("close", 0);
+      await promise;
+
+      // After close, listeners should be cleaned up
+      expect(process.listenerCount("SIGINT")).toBe(listenerCountBefore);
+    } finally {
+      // Ensure cleanup even if assertions fail
+      fakeProc.emit("close", 0);
+      await promise.catch(() => {});
+    }
+  });
 });

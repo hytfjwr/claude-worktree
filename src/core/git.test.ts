@@ -832,6 +832,263 @@ describe("branchExists", () => {
   });
 });
 
+describe("createWorktree", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    mockExecImpl.current = null;
+  });
+  afterEach(() => {
+    mockExecImpl.current = null;
+  });
+
+  test("succeeds when git worktree add exits with 0", async () => {
+    let capturedArgs: string[] = [];
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("worktree") && args.includes("add")) {
+        capturedArgs = args;
+        return { stdout: "" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { createWorktree } = await import("./git.ts");
+    await expect(createWorktree("feature/new", "/path/to/wt", "main")).resolves.toBeUndefined();
+    expect(capturedArgs).toEqual(["worktree", "add", "-b", "feature/new", "/path/to/wt", "main"]);
+  });
+
+  test("throws when git worktree add fails", async () => {
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("worktree") && args.includes("add")) {
+        return { stdout: "", stderr: "fatal: 'feature/new' already exists", exitCode: 128 };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { createWorktree } = await import("./git.ts");
+    await expect(createWorktree("feature/new", "/path/to/wt", "main")).rejects.toThrow(
+      "Failed to create worktree: fatal: 'feature/new' already exists",
+    );
+  });
+});
+
+describe("removeWorktree", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    mockExecImpl.current = null;
+  });
+  afterEach(() => {
+    mockExecImpl.current = null;
+  });
+
+  test("removes worktree without force", async () => {
+    let capturedArgs: string[] = [];
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("worktree") && args.includes("remove")) {
+        capturedArgs = args;
+        return { stdout: "" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { removeWorktree } = await import("./git.ts");
+    await removeWorktree("/path/to/wt");
+    expect(capturedArgs).toEqual(["worktree", "remove", "/path/to/wt"]);
+    expect(capturedArgs).not.toContain("--force");
+  });
+
+  test("removes worktree with force flag", async () => {
+    let capturedArgs: string[] = [];
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("worktree") && args.includes("remove")) {
+        capturedArgs = args;
+        return { stdout: "" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { removeWorktree } = await import("./git.ts");
+    await removeWorktree("/path/to/wt", true);
+    expect(capturedArgs).toEqual(["worktree", "remove", "--force", "/path/to/wt"]);
+  });
+});
+
+describe("getLastCommit", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    mockExecImpl.current = null;
+  });
+  afterEach(() => {
+    mockExecImpl.current = null;
+  });
+
+  test("parses commit info correctly", async () => {
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("log")) {
+        return { stdout: "abc123\x00Fix bug\x002025-01-15T10:30:00+09:00\n" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { getLastCommit } = await import("./git.ts");
+    const commit = await getLastCommit("/path/to/wt");
+
+    expect(commit).not.toBeNull();
+    expect(commit?.hash).toBe("abc123");
+    expect(commit?.message).toBe("Fix bug");
+    expect(commit?.date).toEqual(new Date("2025-01-15T10:30:00+09:00"));
+  });
+
+  test("returns null when git log fails", async () => {
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("log")) {
+        return { stdout: "", exitCode: 128 };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { getLastCommit } = await import("./git.ts");
+    const commit = await getLastCommit("/path/to/wt");
+    expect(commit).toBeNull();
+  });
+
+  test("returns null on empty output", async () => {
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("log")) {
+        return { stdout: "" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { getLastCommit } = await import("./git.ts");
+    const commit = await getLastCommit("/path/to/wt");
+    expect(commit).toBeNull();
+  });
+
+  test("returns null on incomplete output (missing fields)", async () => {
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("log")) {
+        return { stdout: "abc123\x00Fix bug\n" }; // missing date field
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { getLastCommit } = await import("./git.ts");
+    const commit = await getLastCommit("/path/to/wt");
+    expect(commit).toBeNull();
+  });
+});
+
+describe("getAheadBehind", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    mockExecImpl.current = null;
+  });
+  afterEach(() => {
+    mockExecImpl.current = null;
+  });
+
+  test("parses ahead/behind counts correctly", async () => {
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("rev-list")) {
+        return { stdout: "3\t1\n" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { getAheadBehind } = await import("./git.ts");
+    const result = await getAheadBehind("feature/test", "main");
+
+    expect(result).toEqual({ ahead: 3, behind: 1 });
+  });
+
+  test("returns null when rev-list fails", async () => {
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("rev-list")) {
+        return { stdout: "", exitCode: 128 };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { getAheadBehind } = await import("./git.ts");
+    const result = await getAheadBehind("feature/test", "main");
+    expect(result).toBeNull();
+  });
+
+  test("returns null on malformed output", async () => {
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("rev-list")) {
+        return { stdout: "unexpected output\n" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { getAheadBehind } = await import("./git.ts");
+    const result = await getAheadBehind("feature/test", "main");
+    expect(result).toBeNull();
+  });
+});
+
+describe("fetchAndPrune", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    mockExecImpl.current = null;
+  });
+  afterEach(() => {
+    mockExecImpl.current = null;
+  });
+
+  test("calls git fetch --prune", async () => {
+    let capturedArgs: string[] = [];
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("fetch")) {
+        capturedArgs = args;
+        return { stdout: "" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { fetchAndPrune } = await import("./git.ts");
+    await expect(fetchAndPrune()).resolves.toBeUndefined();
+    expect(capturedArgs).toEqual(["fetch", "--prune"]);
+  });
+});
+
+describe("verifyBranchRef", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    mockExecImpl.current = null;
+  });
+  afterEach(() => {
+    mockExecImpl.current = null;
+  });
+
+  test("returns true when ref exists", async () => {
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("rev-parse") && args.includes("--verify")) {
+        return { stdout: "abc123\n" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { verifyBranchRef } = await import("./git.ts");
+    const result = await verifyBranchRef("origin/main");
+    expect(result).toBe(true);
+  });
+
+  test("returns false when ref does not exist", async () => {
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("rev-parse") && args.includes("--verify")) {
+        return { stdout: "", exitCode: 128 };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { verifyBranchRef } = await import("./git.ts");
+    const result = await verifyBranchRef("nonexistent-ref");
+    expect(result).toBe(false);
+  });
+});
+
 // ============================================================================
 // getWorktreeStatuses tests (pure logic tests)
 // ============================================================================
