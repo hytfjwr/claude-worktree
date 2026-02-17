@@ -757,6 +757,29 @@ describe("runCreate", () => {
         }),
       );
     });
+
+    test("passes permissionMode from config to buildClaudeCommand", async () => {
+      const deps = makeDeps({
+        loadProjectConfig: vi.fn(async () => ({ permissionMode: "full-auto" as const })),
+      });
+      await runCreate(defaultPaneArgs, deps);
+
+      expect(deps.buildClaudeCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          permissionMode: "full-auto",
+        }),
+      );
+    });
+
+    test("does not set permissionMode when config has no permissionMode", async () => {
+      const deps = makeDeps({
+        loadProjectConfig: vi.fn(async () => ({})),
+      });
+      await runCreate(defaultPaneArgs, deps);
+
+      const callArgs = vi.mocked(deps.buildClaudeCommand).mock.calls[0][0];
+      expect(callArgs).not.toHaveProperty("permissionMode");
+    });
   });
 
   // ---------------------------------------------------------------------------

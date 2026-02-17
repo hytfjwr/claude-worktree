@@ -149,10 +149,12 @@ export function buildClaudeOptions(
   worktreePath: string,
   effectiveBaseBranch: string,
   branchName: string,
+  config: ProjectConfig | null,
 ): ClaudeOptions {
   return {
     prompt: args.prompt,
     dangerouslySkipPermissions: args.danger,
+    ...(config?.permissionMode && { permissionMode: config.permissionMode }),
     ...(args.merge && {
       mergeInstructions: {
         baseBranch: git.currentBranch,
@@ -583,7 +585,14 @@ export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps
   }
 
   // Build Claude options (use local prompt which may be overridden by plan file)
-  const claudeOptions = buildClaudeOptions({ ...args, prompt }, git, worktreePath, effectiveBaseBranch, branchName);
+  const claudeOptions = buildClaudeOptions(
+    { ...args, prompt },
+    git,
+    worktreePath,
+    effectiveBaseBranch,
+    branchName,
+    config,
+  );
 
   // Launch Claude in pane or terminal
   if (pane) {

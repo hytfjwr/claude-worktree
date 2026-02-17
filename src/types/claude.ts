@@ -8,8 +8,12 @@ export type DraftInstructions = {
   branchName: string;
 };
 
+export type PermissionMode = "plan" | "auto-edit" | "full-auto";
+
+export const VALID_PERMISSION_MODES: readonly PermissionMode[] = ["plan", "auto-edit", "full-auto"];
+
 export type ClaudeOptions = {
-  permissionMode?: "plan" | "auto-edit" | "full-auto";
+  permissionMode?: PermissionMode;
   prompt: string;
   promptSuffix?: string;
   dangerouslySkipPermissions?: boolean;

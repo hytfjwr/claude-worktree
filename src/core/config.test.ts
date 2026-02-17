@@ -185,6 +185,7 @@ describe("validateProjectConfig", () => {
 
   test("returns no errors for valid full config", () => {
     const config = {
+      permissionMode: "auto-edit",
       maxWorktrees: 5,
       hookTimeout: 600,
       postCreate: "cd {path} && make setup",
@@ -243,6 +244,22 @@ describe("validateProjectConfig", () => {
     const errors = validateProjectConfig({ postCreate: 123, preClean: false });
     expect(errors).toContain("postCreate must be a string, got 123");
     expect(errors).toContain("preClean must be a string, got false");
+  });
+
+  test("accepts valid permissionMode values", () => {
+    expect(validateProjectConfig({ permissionMode: "plan" })).toEqual([]);
+    expect(validateProjectConfig({ permissionMode: "auto-edit" })).toEqual([]);
+    expect(validateProjectConfig({ permissionMode: "full-auto" })).toEqual([]);
+  });
+
+  test("rejects invalid permissionMode value", () => {
+    const errors = validateProjectConfig({ permissionMode: "invalid" });
+    expect(errors).toEqual(['permissionMode must be one of plan, auto-edit, full-auto, got "invalid"']);
+  });
+
+  test("rejects non-string permissionMode", () => {
+    const errors = validateProjectConfig({ permissionMode: 123 });
+    expect(errors).toEqual(["permissionMode must be a string, got 123"]);
   });
 
   test("collects multiple errors at once", () => {

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { TextDecoder } from "node:util";
 
 import type { HookVars, ProjectConfig } from "../types/index.ts";
-import { projectConfigFields } from "../types/index.ts";
+import { projectConfigFields, VALID_PERMISSION_MODES } from "../types/index.ts";
 import { logWarn } from "../ui/logger.ts";
 import { getErrorMessage, HookError, isNodeError } from "./errors.ts";
 import { exec } from "./exec.ts";
@@ -40,6 +40,14 @@ export function validateProjectConfig(value: unknown): string[] {
     if (obj[field] !== undefined) {
       const error = checkField(field, obj[field], expected);
       if (error) errors.push(error);
+    }
+  }
+
+  if (obj.permissionMode !== undefined && typeof obj.permissionMode === "string") {
+    if (!VALID_PERMISSION_MODES.includes(obj.permissionMode as (typeof VALID_PERMISSION_MODES)[number])) {
+      errors.push(
+        `permissionMode must be one of ${VALID_PERMISSION_MODES.join(", ")}, got ${JSON.stringify(obj.permissionMode)}`,
+      );
     }
   }
 

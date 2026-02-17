@@ -1,4 +1,7 @@
+import type { PermissionMode } from "./claude.ts";
+
 export type ProjectConfig = {
+  permissionMode?: PermissionMode; // Default permission mode for Claude Code
   maxWorktrees?: number; // Maximum number of concurrent worktrees (excludes main)
   hookTimeout?: number; // Timeout in seconds for all hooks (default: 600)
   postCreate?: string;
@@ -10,6 +13,7 @@ export type ProjectConfig = {
 };
 
 export const projectConfigFields = {
+  permissionMode: String,
   maxWorktrees: Number,
   hookTimeout: Number,
   postCreateTimeout: Number,

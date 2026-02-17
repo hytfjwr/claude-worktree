@@ -1,5 +1,12 @@
 export type { LockOptions } from "./cache.ts";
-export type { ClaudeOptions, DraftInstructions, MergeInstructions, ResumeCommandOptions } from "./claude.ts";
+export type {
+  ClaudeOptions,
+  DraftInstructions,
+  MergeInstructions,
+  PermissionMode,
+  ResumeCommandOptions,
+} from "./claude.ts";
+export { VALID_PERMISSION_MODES } from "./claude.ts";
 export type { CleanArgs, CleanDeps, CleanResult } from "./clean.ts";
 export type { CliArgs, Command, CreateArgs, ResumeArgs, RunInPaneArgs } from "./cli.ts";
 export type { HookExecOptions, HookExecResult, HookVars, ProjectConfig } from "./config.ts";
