@@ -265,13 +265,13 @@ describe("runCreate", () => {
       expect(deps.completeSession).not.toHaveBeenCalled();
     });
 
-    test("does not complete session when child process exits with non-zero code", async () => {
+    test("completes session even when child process exits with non-zero code", async () => {
       vi.mocked(spawnInteractive).mockResolvedValueOnce(1);
       const deps = makeDeps();
 
       await runCreate(defaultTerminalArgs, deps);
       expect(deps.saveSession).toHaveBeenCalled();
-      expect(deps.completeSession).not.toHaveBeenCalled();
+      expect(deps.completeSession).toHaveBeenCalled();
     });
 
     test("does not create pane in terminal mode", async () => {

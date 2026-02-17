@@ -423,12 +423,10 @@ async function launchClaudeInTerminal(
     startedAt: new Date().toISOString(),
   });
 
-  const exitCode = await spawnInteractive({ command: claudeCommand, cwd: worktreePath });
+  await spawnInteractive({ command: claudeCommand, cwd: worktreePath });
 
-  // Mark session as completed only when Claude exited successfully
-  if (exitCode === 0) {
-    await deps.completeSession(worktreePath);
-  }
+  // Always mark session as completed in terminal mode since the process has ended
+  await deps.completeSession(worktreePath);
 }
 
 // =============================================================================

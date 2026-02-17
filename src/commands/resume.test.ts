@@ -68,11 +68,20 @@ describe("runResume", () => {
       expect(deps.completeSession).toHaveBeenCalledWith(tempDir);
     });
 
-    test("does not complete session when child process exits with non-zero code", async () => {
+    test("completes session even when child process exits with non-zero code", async () => {
       vi.mocked(spawnInteractive).mockResolvedValueOnce(1);
       const deps = makeDeps();
       await runResume({ branchName: "feature/test" }, deps);
 
+      expect(deps.saveSession).toHaveBeenCalled();
+      expect(deps.completeSession).toHaveBeenCalled();
+    });
+
+    test("does not complete session when spawnInteractive throws", async () => {
+      vi.mocked(spawnInteractive).mockRejectedValueOnce(new Error("spawn failed"));
+      const deps = makeDeps();
+
+      await expect(runResume({ branchName: "feature/test" }, deps)).rejects.toThrow("spawn failed");
       expect(deps.saveSession).toHaveBeenCalled();
       expect(deps.completeSession).not.toHaveBeenCalled();
     });
