@@ -8,6 +8,7 @@ export type CleanArgs = {
   all: boolean;
   dryRun: boolean;
   verbose: boolean;
+  quiet: boolean;
   branches: string[];
 };
 

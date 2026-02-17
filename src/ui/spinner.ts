@@ -146,7 +146,24 @@ export function createTailUpdater(spinner: Spinner): (line: string) => void {
   };
 }
 
+let quietMode = false;
+
+export function setQuietMode(enabled: boolean): void {
+  quietMode = enabled;
+}
+
 export function startSpinner(message: string, options?: { timeoutSec?: number }): Spinner {
+  if (quietMode) {
+    return {
+      stop() {},
+      fail() {},
+      updateTail() {},
+      isExpanded() {
+        return false;
+      },
+    };
+  }
+
   // Non-TTY fallback: no cursor control, no animation, plain text only
   if (!process.stdout.isTTY) {
     let stopped = false;

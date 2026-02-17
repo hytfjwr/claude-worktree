@@ -1,7 +1,16 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { icons } from "./icons.ts";
-import { createSilentLogger, logDebug, logError, logInfo, logWarn, resetLogger, setLogger } from "./logger.ts";
+import {
+  createQuietLogger,
+  createSilentLogger,
+  logDebug,
+  logError,
+  logInfo,
+  logWarn,
+  resetLogger,
+  setLogger,
+} from "./logger.ts";
 
 afterEach(() => {
   resetLogger();
@@ -65,6 +74,31 @@ describe("resetLogger", () => {
     logInfo("restored");
     expect(spy).toHaveBeenCalledWith("restored");
     spy.mockRestore();
+  });
+});
+
+describe("createQuietLogger", () => {
+  test("suppresses log and debug, preserves warn and error", () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
+
+    setLogger(createQuietLogger());
+    logInfo("a");
+    logWarn("b");
+    logError("c");
+    logDebug("d");
+
+    expect(logSpy).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith(`${icons.warning()} b`);
+    expect(errorSpy).toHaveBeenCalledWith(`${icons.error()} c`);
+    expect(debugSpy).not.toHaveBeenCalled();
+
+    logSpy.mockRestore();
+    warnSpy.mockRestore();
+    errorSpy.mockRestore();
+    debugSpy.mockRestore();
   });
 });
 

@@ -5,7 +5,8 @@ import { basename, dirname, resolve } from "node:path";
 import { getErrorMessage, isNodeError, UsageError } from "../core/errors.ts";
 import { spawnInteractive } from "../core/spawn.ts";
 import type { RunInPaneArgs } from "../types/index.ts";
-import { logError } from "../ui/logger.ts";
+import { createQuietLogger, logError, setLogger } from "../ui/logger.ts";
+import { setQuietMode } from "../ui/spinner.ts";
 import { executeHookWithSpinner } from "./hooks.ts";
 import { performRollback } from "./rollback.ts";
 
@@ -81,10 +82,16 @@ export async function parseRunInPaneArgs(payloadPath: string): Promise<RunInPane
     postCleanTimeout: obj.postCleanTimeout,
     slot: typeof obj.slot === "number" ? obj.slot : undefined,
     verbose: obj.verbose,
+    quiet: typeof obj.quiet === "boolean" ? obj.quiet : false,
   };
 }
 
 export async function executeRunInPane(args: RunInPaneArgs): Promise<void> {
+  if (args.quiet) {
+    setLogger(createQuietLogger());
+    setQuietMode(true);
+  }
+
   const { worktreePath, repoRoot, claudeCommand, verbose } = args;
 
   // Run postCreate hook if configured

@@ -57,7 +57,7 @@ function makeListDeps(overrides: Partial<ListDeps> = {}): ListDeps {
   };
 }
 
-const defaultArgs: ListArgs = { json: false, verbose: false, noStatus: false };
+const defaultArgs: ListArgs = { json: false, verbose: false, noStatus: false, quiet: false };
 
 // Suppress console output
 beforeEach(() => {
@@ -377,7 +377,7 @@ describe("executeList", () => {
       getLastCommit: async () => makeCommitInfo(),
     });
 
-    const result = await executeList({ json: true, verbose: false, noStatus: true }, deps);
+    const result = await executeList({ json: true, verbose: false, noStatus: true, quiet: false }, deps);
 
     expect(result.entries).toHaveLength(1);
     const parsed = JSON.parse(jsonOutput);
@@ -455,7 +455,7 @@ describe("executeList", () => {
       getLastCommit: async () => null,
     });
 
-    await executeList({ json: true, verbose: false, noStatus: true }, deps);
+    await executeList({ json: true, verbose: false, noStatus: true, quiet: false }, deps);
 
     const parsed = JSON.parse(jsonOutput);
     expect(parsed.worktrees[0].commit).toBeNull();
@@ -471,7 +471,7 @@ describe("executeList", () => {
       listWorktrees: async () => ({ worktrees: [], mainBranch: "main" }),
     });
 
-    await executeList({ json: true, verbose: false, noStatus: true }, deps);
+    await executeList({ json: true, verbose: false, noStatus: true, quiet: false }, deps);
 
     const parsed = JSON.parse(jsonOutput);
     expect(parsed.worktrees).toEqual([]);
@@ -491,7 +491,7 @@ describe("executeList", () => {
       },
     });
 
-    await executeList({ json: true, verbose: false, noStatus: true }, deps);
+    await executeList({ json: true, verbose: false, noStatus: true, quiet: false }, deps);
 
     expect(spinnerStarted).toBe(false);
   });
@@ -556,7 +556,7 @@ describe("executeList", () => {
       },
     });
 
-    await executeList({ json: false, verbose: false, noStatus: true }, deps);
+    await executeList({ json: false, verbose: false, noStatus: true, quiet: false }, deps);
 
     expect(readAllSessionsCalled).toBe(false);
   });
@@ -628,7 +628,7 @@ describe("executeList", () => {
       }),
     });
 
-    await executeList({ json: true, verbose: false, noStatus: false }, deps);
+    await executeList({ json: true, verbose: false, noStatus: false, quiet: false }, deps);
 
     const parsed = JSON.parse(jsonOutput);
     expect(parsed.worktrees[0].session).toBeDefined();
@@ -651,7 +651,7 @@ describe("executeList", () => {
       },
     });
 
-    await executeList({ json: false, verbose: false, noStatus: true }, deps);
+    await executeList({ json: false, verbose: false, noStatus: true, quiet: false }, deps);
 
     expect(panesCalled).toBe(false);
   });

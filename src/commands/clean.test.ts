@@ -42,7 +42,7 @@ function makeDeps(overrides: Partial<CleanDeps> = {}): CleanDeps {
   };
 }
 
-const defaultArgs: CleanArgs = { force: false, all: false, dryRun: false, verbose: false, branches: [] };
+const defaultArgs: CleanArgs = { force: false, all: false, dryRun: false, quiet: false, verbose: false, branches: [] };
 
 // Suppress console output
 let consoleWarnSpy: ReturnType<typeof vi.spyOn>;

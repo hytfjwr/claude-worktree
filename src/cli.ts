@@ -6,7 +6,8 @@ import { executeRunInPane, parseRunInPaneArgs } from "./commands/run-in-pane.ts"
 import { UsageError } from "./core/errors.ts";
 import { extractOptions } from "./options.ts";
 import type { CleanArgs, Command, CreateArgs, ListArgs, ResumeArgs } from "./types/index.ts";
-import { logInfo } from "./ui/logger.ts";
+import { createQuietLogger, logInfo, setLogger } from "./ui/logger.ts";
+import { setQuietMode } from "./ui/spinner.ts";
 import { getVersion } from "./version.ts";
 
 export function showHelp(): void {
@@ -38,6 +39,7 @@ Options:
   -draft          Auto-create Draft PR after task completion (cannot be used with -merge)
   -pull           Fetch latest base branch from remote before creating worktree
   -n, -dry-run    Preview what would be created without executing
+  -q, -quiet      Suppress informational output (errors only)
   -v, -verbose    Show hook execution logs
   -h, -help       Show this help
   -version, --version  Show version number
@@ -45,11 +47,13 @@ Options:
 Resume options:
   -p, -pane      Open in a new WezTerm pane
   -d, -danger    Skip workspace warning (uses --dangerously-skip-permissions)
+  -q, -quiet     Suppress informational output (errors only)
   -v, -verbose   Show verbose output
 
 List options:
   -j, -json        Output as JSON
   -no-status       Hide Claude session status (shown by default)
+  -q, -quiet       Suppress informational output (errors only)
   -v, -verbose     Show full paths and details
 
 Clean options:
@@ -57,6 +61,7 @@ Clean options:
   -f, -force     Skip confirmation prompt
   -a, -all       Show all worktrees for manual selection
   -n, -dry-run   Preview targets without deleting
+  -q, -quiet     Suppress informational output (errors only)
   -v, -verbose   Show hook execution logs
 
 Examples:
@@ -103,6 +108,7 @@ Options:
   -draft               Auto-create Draft PR after task completion (cannot be used with -merge)
   -pull                Fetch latest base branch from remote before creating worktree
   -n, -dry-run         Preview what would be created without executing
+  -q, -quiet           Suppress informational output (errors only)
   -v, -verbose         Show hook execution logs
   -h, -help            Show this help
 
@@ -128,6 +134,7 @@ Usage:
 Options:
   -j, -json        Output as JSON (machine-readable format)
   -no-status       Hide Claude session status (shown by default)
+  -q, -quiet       Suppress informational output (errors only)
   -v, -verbose     Show full paths and details
   -h, -help        Show this help
 
@@ -155,6 +162,7 @@ Options:
   -f, -force     Skip confirmation prompt
   -a, -all       Show all worktrees for manual selection
   -n, -dry-run   Preview targets without deleting
+  -q, -quiet     Suppress informational output (errors only)
   -v, -verbose   Show hook execution logs
   -h, -help      Show this help
 
@@ -183,6 +191,7 @@ Arguments:
 Options:
   -p, -pane      Open in a new WezTerm pane (requires WezTerm; default: run in current terminal)
   -d, -danger    Skip workspace warning (uses --dangerously-skip-permissions)
+  -q, -quiet     Suppress informational output (errors only)
   -v, -verbose   Show verbose output
   -h, -help      Show this help
 
@@ -272,6 +281,7 @@ export function parseCreateArgs(args: string[]): CreateArgs {
       draft: { type: "boolean", flag: "-draft" },
       pull: { type: "boolean", flag: "-pull" },
       dryRun: { type: "boolean", flag: "-dry-run", alias: "-n" },
+      quiet: { type: "boolean", flag: "-quiet", alias: "-q" },
       verbose: { type: "boolean", flag: "-verbose", alias: "-v" },
       baseBranch: { type: "string", flag: "-base", alias: "-b", errorMessage: "-base requires a branch name argument" },
       planFile: { type: "string", flag: "-plan", errorMessage: "-plan requires a file path argument" },
@@ -281,7 +291,7 @@ export function parseCreateArgs(args: string[]): CreateArgs {
     unknownErrorPrefix: "Unknown option",
   });
 
-  const { pane, danger, merge, draft, pull, dryRun, verbose } = booleans;
+  const { pane, danger, merge, draft, pull, dryRun, quiet, verbose } = booleans;
   const { baseBranch, planFile } = strings;
 
   // Mutual exclusivity check for -merge and -draft
@@ -318,6 +328,7 @@ export function parseCreateArgs(args: string[]): CreateArgs {
     pull,
     baseBranch,
     pane,
+    quiet,
     verbose,
     dryRun,
   };
@@ -328,6 +339,7 @@ export function parseResumeArgs(args: string[]): ResumeArgs {
     options: {
       pane: { type: "boolean", flag: "-pane", alias: "-p" },
       danger: { type: "boolean", flag: "-danger", alias: "-d" },
+      quiet: { type: "boolean", flag: "-quiet", alias: "-q" },
       verbose: { type: "boolean", flag: "-verbose", alias: "-v" },
     },
     unknownHandling: "error",
@@ -335,7 +347,7 @@ export function parseResumeArgs(args: string[]): ResumeArgs {
     unknownErrorPrefix: "Unknown option for resume command",
   });
 
-  const { pane, danger, verbose } = booleans;
+  const { pane, danger, quiet, verbose } = booleans;
 
   // First remaining arg that doesn't start with - is branchName, rest is prompt
   const branchName = remaining.length > 0 ? remaining[0] : undefined;
@@ -346,6 +358,7 @@ export function parseResumeArgs(args: string[]): ResumeArgs {
     prompt,
     danger,
     pane,
+    quiet,
     verbose,
   };
 }
@@ -356,6 +369,7 @@ export function parseCleanArgs(args: string[]): CleanArgs {
       force: { type: "boolean", flag: "-force", alias: "-f" },
       all: { type: "boolean", flag: "-all", alias: "-a" },
       dryRun: { type: "boolean", flag: "-dry-run", alias: "-n" },
+      quiet: { type: "boolean", flag: "-quiet", alias: "-q" },
       verbose: { type: "boolean", flag: "-verbose", alias: "-v" },
     },
     unknownHandling: "error",
@@ -373,6 +387,7 @@ export function parseCleanArgs(args: string[]): CleanArgs {
     force: booleans.force,
     all: booleans.all,
     dryRun: booleans.dryRun,
+    quiet: booleans.quiet,
     verbose: booleans.verbose,
     branches,
   };
@@ -383,6 +398,7 @@ export function parseListArgs(args: string[]): ListArgs {
     options: {
       json: { type: "boolean", flag: "-json", alias: "-j" },
       noStatus: { type: "boolean", flag: "-no-status" },
+      quiet: { type: "boolean", flag: "-quiet", alias: "-q" },
       verbose: { type: "boolean", flag: "-verbose", alias: "-v" },
     },
     unknownHandling: "error",
@@ -392,6 +408,7 @@ export function parseListArgs(args: string[]): ListArgs {
 
   return {
     json: booleans.json,
+    quiet: booleans.quiet,
     verbose: booleans.verbose,
     noStatus: booleans.noStatus,
   };
@@ -470,6 +487,12 @@ export function parseArgs(args: string[]): Command {
 }
 
 export async function run(command: Command): Promise<void> {
+  const quiet = "args" in command && command.args && "quiet" in command.args && command.args.quiet;
+  if (quiet) {
+    setLogger(createQuietLogger());
+    setQuietMode(true);
+  }
+
   switch (command.type) {
     case "help":
       if (command.commandHelp === "create") {

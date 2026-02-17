@@ -25,6 +25,7 @@ const validArgs: RunInPaneArgs = {
   postCleanTimeout: 60,
   slot: 1,
   verbose: false,
+  quiet: false,
 };
 
 describe("parseRunInPaneArgs", () => {
@@ -53,6 +54,7 @@ describe("parseRunInPaneArgs", () => {
       preCleanCommand: undefined,
       postCleanCommand: undefined,
       slot: undefined,
+      quiet: false,
     });
   });
 

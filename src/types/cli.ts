@@ -13,6 +13,7 @@ export type CreateArgs = {
   pane?: boolean;
   verbose?: boolean;
   dryRun?: boolean;
+  quiet?: boolean;
 };
 
 export type ResumeArgs = {
@@ -21,6 +22,7 @@ export type ResumeArgs = {
   danger?: boolean;
   pane?: boolean;
   verbose?: boolean;
+  quiet?: boolean;
 };
 
 export type RunInPaneArgs = {
@@ -35,6 +37,7 @@ export type RunInPaneArgs = {
   postCleanTimeout: number;
   slot?: number;
   verbose: boolean;
+  quiet: boolean;
 };
 
 export type Command =

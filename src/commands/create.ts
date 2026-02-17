@@ -326,10 +326,11 @@ async function launchClaudeInPane(
     claudeOptions: ClaudeOptions;
     slot?: number;
     verbose: boolean;
+    quiet: boolean;
   },
   deps: CreateDeps,
 ): Promise<void> {
-  const { worktreePath, repoRoot, config, claudeOptions, slot, verbose } = options;
+  const { worktreePath, repoRoot, config, claudeOptions, slot, verbose, quiet } = options;
 
   const claudeCommand = deps.buildClaudeCommand(claudeOptions);
 
@@ -351,6 +352,7 @@ async function launchClaudeInPane(
     postCleanTimeout: deps.resolveHookTimeout("postClean", config),
     slot,
     verbose,
+    quiet,
   };
 
   const payloadPath = join(tmpdir(), `claude-worktree-${randomUUID()}.json`);
@@ -536,7 +538,14 @@ export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps
 
     logInfo(`  ${step++}. Launch mode:       ${pane ? "WezTerm pane" : "Current terminal"}`);
 
-    const claudeOptions = buildClaudeOptions({ ...args, prompt }, git, worktreePath, effectiveBaseBranch, branchName);
+    const claudeOptions = buildClaudeOptions(
+      { ...args, prompt },
+      git,
+      worktreePath,
+      effectiveBaseBranch,
+      branchName,
+      config,
+    );
     const claudeCmd = deps.buildClaudeCommand(claudeOptions);
     const claudeCmdLines = claudeCmd.split("\n");
     const claudeCmdPreview = claudeCmdLines.length > 1 ? `${claudeCmdLines[0]} ...` : claudeCmdLines[0];
@@ -609,7 +618,15 @@ export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps
   // Launch Claude in pane or terminal
   if (pane) {
     await launchClaudeInPane(
-      { worktreePath, repoRoot: git.repoRoot, config, claudeOptions, slot, verbose: !!args.verbose },
+      {
+        worktreePath,
+        repoRoot: git.repoRoot,
+        config,
+        claudeOptions,
+        slot,
+        verbose: !!args.verbose,
+        quiet: !!args.quiet,
+      },
       deps,
     );
   } else {

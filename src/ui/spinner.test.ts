@@ -12,6 +12,7 @@ import {
   getMaxExpandedLines,
   lerp,
   pickRandomTheme,
+  setQuietMode,
   shimmerText,
   smoothstep,
   startSpinner,
@@ -43,6 +44,38 @@ afterEach(() => {
   vi.useRealTimers();
   restoreEnv();
   _resetColorCache();
+});
+
+describe("setQuietMode", () => {
+  afterEach(() => {
+    setQuietMode(false);
+  });
+
+  test("returns silent spinner when quiet mode is enabled", () => {
+    setQuietMode(true);
+    const writeSpy = vi.spyOn(process.stdout, "write");
+    const spinner = startSpinner("Processing...");
+
+    expect(writeSpy).not.toHaveBeenCalled();
+
+    spinner.stop();
+    spinner.fail("error");
+    spinner.updateTail(["line"], 1);
+
+    expect(writeSpy).not.toHaveBeenCalled();
+    expect(spinner.isExpanded()).toBe(false);
+  });
+
+  test("returns normal spinner when quiet mode is disabled", () => {
+    setQuietMode(false);
+    withTTY(false, () => {
+      const writeSpy = vi.spyOn(process.stdout, "write");
+      const spinner = startSpinner("Processing...");
+
+      expect(writeSpy).toHaveBeenCalled();
+      spinner.stop();
+    });
+  });
 });
 
 describe("startSpinner (non-TTY)", () => {

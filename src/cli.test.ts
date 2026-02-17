@@ -37,7 +37,7 @@ describe("parseArgs", () => {
       const result = parseArgs(["clean"]);
       expect(result).toEqual({
         type: "clean",
-        args: { force: false, all: false, dryRun: false, verbose: false, branches: [] },
+        args: { force: false, all: false, dryRun: false, quiet: false, verbose: false, branches: [] },
       });
     });
 
@@ -52,7 +52,7 @@ describe("parseArgs", () => {
       const result = parseArgs(["list"]);
       expect(result).toEqual({
         type: "list",
-        args: { json: false, verbose: false, noStatus: false },
+        args: { json: false, quiet: false, verbose: false, noStatus: false },
       });
     });
 
@@ -60,7 +60,7 @@ describe("parseArgs", () => {
       const result = parseArgs(["list", "-json"]);
       expect(result).toEqual({
         type: "list",
-        args: { json: true, verbose: false, noStatus: false },
+        args: { json: true, quiet: false, verbose: false, noStatus: false },
       });
     });
 
@@ -68,7 +68,7 @@ describe("parseArgs", () => {
       const result = parseArgs(["list", "-verbose"]);
       expect(result).toEqual({
         type: "list",
-        args: { json: false, verbose: true, noStatus: false },
+        args: { json: false, quiet: false, verbose: true, noStatus: false },
       });
     });
 
@@ -76,7 +76,7 @@ describe("parseArgs", () => {
       const result = parseArgs(["list", "-v"]);
       expect(result).toEqual({
         type: "list",
-        args: { json: false, verbose: true, noStatus: false },
+        args: { json: false, quiet: false, verbose: true, noStatus: false },
       });
     });
 
@@ -84,7 +84,7 @@ describe("parseArgs", () => {
       const result = parseArgs(["list", "-json", "-verbose"]);
       expect(result).toEqual({
         type: "list",
-        args: { json: true, verbose: true, noStatus: false },
+        args: { json: true, quiet: false, verbose: true, noStatus: false },
       });
     });
   });
@@ -104,6 +104,7 @@ describe("parseArgs", () => {
           pull: false,
           baseBranch: undefined,
           pane: false,
+          quiet: false,
           verbose: false,
           dryRun: false,
         },
@@ -189,6 +190,7 @@ describe("parseCreateArgs", () => {
       pull: false,
       baseBranch: undefined,
       pane: false,
+      quiet: false,
       verbose: false,
       dryRun: false,
     });
@@ -206,6 +208,7 @@ describe("parseCreateArgs", () => {
       pull: false,
       baseBranch: undefined,
       pane: false,
+      quiet: false,
       verbose: false,
       dryRun: false,
     });
@@ -223,6 +226,7 @@ describe("parseCreateArgs", () => {
       pull: false,
       baseBranch: undefined,
       pane: false,
+      quiet: false,
       verbose: false,
       dryRun: false,
     });
@@ -240,6 +244,7 @@ describe("parseCreateArgs", () => {
       pull: false,
       baseBranch: undefined,
       pane: false,
+      quiet: false,
       verbose: false,
       dryRun: false,
     });
@@ -257,6 +262,7 @@ describe("parseCreateArgs", () => {
       pull: false,
       baseBranch: undefined,
       pane: false,
+      quiet: false,
       verbose: false,
       dryRun: false,
     });
@@ -274,6 +280,7 @@ describe("parseCreateArgs", () => {
       pull: false,
       baseBranch: undefined,
       pane: false,
+      quiet: false,
       verbose: false,
       dryRun: false,
     });
@@ -291,6 +298,7 @@ describe("parseCreateArgs", () => {
       pull: false,
       baseBranch: undefined,
       pane: false,
+      quiet: false,
       verbose: false,
       dryRun: false,
     });
@@ -308,6 +316,7 @@ describe("parseCreateArgs", () => {
       pull: false,
       baseBranch: undefined,
       pane: false,
+      quiet: false,
       verbose: false,
       dryRun: false,
     });
@@ -325,6 +334,7 @@ describe("parseCreateArgs", () => {
       pull: false,
       baseBranch: undefined,
       pane: false,
+      quiet: false,
       verbose: false,
       dryRun: false,
     });
@@ -352,6 +362,7 @@ describe("parseCreateArgs", () => {
       pull: true,
       baseBranch: undefined,
       pane: true,
+      quiet: false,
       verbose: true,
       dryRun: true,
     });
@@ -369,6 +380,7 @@ describe("parseCreateArgs", () => {
       pull: false,
       baseBranch: "develop",
       pane: false,
+      quiet: false,
       verbose: false,
       dryRun: false,
     });
@@ -386,6 +398,7 @@ describe("parseCreateArgs", () => {
       pull: false,
       baseBranch: "develop",
       pane: false,
+      quiet: false,
       verbose: false,
       dryRun: false,
     });
@@ -403,6 +416,7 @@ describe("parseCreateArgs", () => {
       pull: false,
       baseBranch: "develop",
       pane: false,
+      quiet: false,
       verbose: false,
       dryRun: false,
     });
@@ -420,6 +434,7 @@ describe("parseCreateArgs", () => {
       pull: false,
       baseBranch: "develop",
       pane: false,
+      quiet: false,
       verbose: false,
       dryRun: false,
     });
@@ -437,6 +452,7 @@ describe("parseCreateArgs", () => {
       pull: false,
       baseBranch: "develop",
       pane: false,
+      quiet: false,
       verbose: false,
       dryRun: false,
     });
@@ -466,6 +482,7 @@ describe("parseCreateArgs", () => {
       pull: true,
       baseBranch: "develop",
       pane: true,
+      quiet: false,
       verbose: true,
       dryRun: true,
     });
@@ -483,6 +500,7 @@ describe("parseCreateArgs", () => {
       pull: false,
       baseBranch: undefined,
       pane: false,
+      quiet: false,
       verbose: false,
       dryRun: false,
     });
@@ -500,6 +518,7 @@ describe("parseCreateArgs", () => {
       pull: false,
       baseBranch: undefined,
       pane: false,
+      quiet: false,
       verbose: false,
       dryRun: false,
     });
@@ -517,6 +536,7 @@ describe("parseCreateArgs", () => {
       pull: false,
       baseBranch: "develop",
       pane: false,
+      quiet: false,
       verbose: false,
       dryRun: false,
     });
@@ -534,6 +554,7 @@ describe("parseCreateArgs", () => {
       pull: false,
       baseBranch: undefined,
       pane: false,
+      quiet: false,
       verbose: false,
       dryRun: false,
     });
@@ -551,6 +572,7 @@ describe("parseCreateArgs", () => {
       pull: false,
       baseBranch: undefined,
       pane: true,
+      quiet: false,
       verbose: false,
       dryRun: false,
     });
@@ -568,6 +590,7 @@ describe("parseCreateArgs", () => {
       pull: false,
       baseBranch: undefined,
       pane: true,
+      quiet: false,
       verbose: false,
       dryRun: false,
     });
@@ -585,6 +608,7 @@ describe("parseCreateArgs", () => {
       pull: false,
       baseBranch: undefined,
       pane: true,
+      quiet: false,
       verbose: false,
       dryRun: false,
     });
@@ -602,6 +626,7 @@ describe("parseCreateArgs", () => {
       pull: false,
       baseBranch: "develop",
       pane: true,
+      quiet: false,
       verbose: false,
       dryRun: false,
     });
@@ -619,6 +644,7 @@ describe("parseCreateArgs", () => {
       pull: true,
       baseBranch: undefined,
       pane: false,
+      quiet: false,
       verbose: false,
       dryRun: false,
     });
@@ -636,6 +662,7 @@ describe("parseCreateArgs", () => {
       pull: true,
       baseBranch: "main",
       pane: false,
+      quiet: false,
       verbose: false,
       dryRun: false,
     });
@@ -671,6 +698,16 @@ describe("parseCreateArgs", () => {
   test("-v option", () => {
     const result = parseCreateArgs(["feature/test", "Prompt", "-v"]);
     expect(result.verbose).toBe(true);
+  });
+
+  test("-quiet option", () => {
+    const result = parseCreateArgs(["feature/test", "Prompt", "-quiet"]);
+    expect(result.quiet).toBe(true);
+  });
+
+  test("-q option (alias for -quiet)", () => {
+    const result = parseCreateArgs(["feature/test", "Prompt", "-q"]);
+    expect(result.quiet).toBe(true);
   });
 
   test("-p does not become part of prompt", () => {
@@ -744,7 +781,7 @@ describe("parseCreateArgs", () => {
 describe("parseCleanArgs", () => {
   test("no options", () => {
     const result = parseCleanArgs([]);
-    expect(result).toEqual({ force: false, all: false, dryRun: false, verbose: false, branches: [] });
+    expect(result).toEqual({ force: false, all: false, dryRun: false, quiet: false, verbose: false, branches: [] });
   });
 
   test("-force flag", () => {
@@ -779,17 +816,17 @@ describe("parseCleanArgs", () => {
 
   test("combined flags -force -all -dry-run -verbose", () => {
     const result = parseCleanArgs(["-force", "-all", "-dry-run", "-verbose"]);
-    expect(result).toEqual({ force: true, all: true, dryRun: true, verbose: true, branches: [] });
+    expect(result).toEqual({ force: true, all: true, dryRun: true, quiet: false, verbose: true, branches: [] });
   });
 
   test("combined short flags -f -a -n -v", () => {
     const result = parseCleanArgs(["-f", "-a", "-n", "-v"]);
-    expect(result).toEqual({ force: true, all: true, dryRun: true, verbose: true, branches: [] });
+    expect(result).toEqual({ force: true, all: true, dryRun: true, quiet: false, verbose: true, branches: [] });
   });
 
   test("-h/-help is ignored (does not throw)", () => {
     const result = parseCleanArgs(["-h"]);
-    expect(result).toEqual({ force: false, all: false, dryRun: false, verbose: false, branches: [] });
+    expect(result).toEqual({ force: false, all: false, dryRun: false, quiet: false, verbose: false, branches: [] });
   });
 
   test("-verbose flag", () => {
@@ -800,6 +837,16 @@ describe("parseCleanArgs", () => {
   test("-v flag", () => {
     const result = parseCleanArgs(["-v"]);
     expect(result.verbose).toBe(true);
+  });
+
+  test("-quiet flag", () => {
+    const result = parseCleanArgs(["-quiet"]);
+    expect(result.quiet).toBe(true);
+  });
+
+  test("-q flag (alias for -quiet)", () => {
+    const result = parseCleanArgs(["-q"]);
+    expect(result.quiet).toBe(true);
   });
 
   test("unknown option throws", () => {
@@ -814,7 +861,14 @@ describe("parseCleanArgs", () => {
 
   test("single branch name", () => {
     const result = parseCleanArgs(["feature/auth"]);
-    expect(result).toEqual({ force: false, all: false, dryRun: false, verbose: false, branches: ["feature/auth"] });
+    expect(result).toEqual({
+      force: false,
+      all: false,
+      dryRun: false,
+      quiet: false,
+      verbose: false,
+      branches: ["feature/auth"],
+    });
   });
 
   test("multiple branch names", () => {
@@ -842,7 +896,7 @@ describe("parseCleanArgs", () => {
 describe("parseListArgs", () => {
   test("no options", () => {
     const result = parseListArgs([]);
-    expect(result).toEqual({ json: false, verbose: false, noStatus: false });
+    expect(result).toEqual({ json: false, quiet: false, verbose: false, noStatus: false });
   });
 
   test("-json flag", () => {
@@ -878,24 +932,34 @@ describe("parseListArgs", () => {
     expect(result.verbose).toBe(true);
   });
 
+  test("-quiet flag", () => {
+    const result = parseListArgs(["-quiet"]);
+    expect(result.quiet).toBe(true);
+  });
+
+  test("-q flag (alias for -quiet)", () => {
+    const result = parseListArgs(["-q"]);
+    expect(result.quiet).toBe(true);
+  });
+
   test("-json + -verbose", () => {
     const result = parseListArgs(["-json", "-verbose"]);
-    expect(result).toEqual({ json: true, verbose: true, noStatus: false });
+    expect(result).toEqual({ json: true, quiet: false, verbose: true, noStatus: false });
   });
 
   test("-no-status + -json", () => {
     const result = parseListArgs(["-no-status", "-json"]);
-    expect(result).toEqual({ json: true, verbose: false, noStatus: true });
+    expect(result).toEqual({ json: true, quiet: false, verbose: false, noStatus: true });
   });
 
   test("-no-status + -v", () => {
     const result = parseListArgs(["-no-status", "-v"]);
-    expect(result).toEqual({ json: false, verbose: true, noStatus: true });
+    expect(result).toEqual({ json: false, quiet: false, verbose: true, noStatus: true });
   });
 
   test("-h/-help is ignored (does not throw)", () => {
     const result = parseListArgs(["-h"]);
-    expect(result).toEqual({ json: false, verbose: false, noStatus: false });
+    expect(result).toEqual({ json: false, quiet: false, verbose: false, noStatus: false });
   });
 
   test("unknown option throws", () => {
@@ -1085,6 +1149,7 @@ describe("parseArgs - resume", () => {
         prompt: undefined,
         danger: false,
         pane: false,
+        quiet: false,
         verbose: false,
       },
     });
@@ -1099,6 +1164,7 @@ describe("parseArgs - resume", () => {
         prompt: undefined,
         danger: false,
         pane: false,
+        quiet: false,
         verbose: false,
       },
     });
@@ -1113,6 +1179,7 @@ describe("parseArgs - resume", () => {
         prompt: "Continue work",
         danger: false,
         pane: false,
+        quiet: false,
         verbose: false,
       },
     });
@@ -1127,6 +1194,7 @@ describe("parseArgs - resume", () => {
         prompt: undefined,
         danger: true,
         pane: true,
+        quiet: false,
         verbose: false,
       },
     });
@@ -1145,6 +1213,7 @@ describe("parseResumeArgs", () => {
       prompt: undefined,
       danger: false,
       pane: false,
+      quiet: false,
       verbose: false,
     });
   });
@@ -1156,6 +1225,7 @@ describe("parseResumeArgs", () => {
       prompt: undefined,
       danger: false,
       pane: false,
+      quiet: false,
       verbose: false,
     });
   });
@@ -1167,6 +1237,7 @@ describe("parseResumeArgs", () => {
       prompt: "Continue the work",
       danger: false,
       pane: false,
+      quiet: false,
       verbose: false,
     });
   });
@@ -1197,6 +1268,16 @@ describe("parseResumeArgs", () => {
     expect(result.danger).toBe(true);
   });
 
+  test("-quiet option", () => {
+    const result = parseResumeArgs(["feature/test", "-quiet"]);
+    expect(result.quiet).toBe(true);
+  });
+
+  test("-q option (alias for -quiet)", () => {
+    const result = parseResumeArgs(["feature/test", "-q"]);
+    expect(result.quiet).toBe(true);
+  });
+
   test("-verbose option", () => {
     const result = parseResumeArgs(["feature/test", "-verbose"]);
     expect(result.verbose).toBe(true);
@@ -1214,6 +1295,7 @@ describe("parseResumeArgs", () => {
       prompt: "prompt",
       pane: true,
       danger: true,
+      quiet: false,
       verbose: true,
     });
   });
@@ -1225,6 +1307,7 @@ describe("parseResumeArgs", () => {
       prompt: "fix the bug",
       pane: false,
       danger: false,
+      quiet: false,
       verbose: true,
     });
   });
@@ -1272,6 +1355,12 @@ vi.mock("./commands/run-in-pane.ts", () => ({
 
 vi.mock("./ui/logger.ts", () => ({
   logInfo: vi.fn(),
+  setLogger: vi.fn(),
+  createQuietLogger: vi.fn(() => ({})),
+}));
+
+vi.mock("./ui/spinner.ts", () => ({
+  setQuietMode: vi.fn(),
 }));
 
 vi.mock("./version.ts", () => ({
@@ -1284,7 +1373,8 @@ const { runResume } = await import("./commands/resume.ts");
 const { executeList } = await import("./commands/list.ts");
 const { executeClean } = await import("./commands/clean.ts");
 const { parseRunInPaneArgs, executeRunInPane } = await import("./commands/run-in-pane.ts");
-const { logInfo } = await import("./ui/logger.ts");
+const { logInfo, setLogger, createQuietLogger } = await import("./ui/logger.ts");
+const { setQuietMode } = await import("./ui/spinner.ts");
 
 describe("run", () => {
   test("dispatches 'create' to runCreate", async () => {
@@ -1296,6 +1386,7 @@ describe("run", () => {
       draft: false,
       pull: false,
       pane: false,
+      quiet: false,
       verbose: false,
       dryRun: false,
     };
@@ -1304,19 +1395,19 @@ describe("run", () => {
   });
 
   test("dispatches 'resume' to runResume", async () => {
-    const args = { branchName: "feature/auth", danger: false, pane: false, verbose: false };
+    const args = { branchName: "feature/auth", danger: false, pane: false, quiet: false, verbose: false };
     await run({ type: "resume", args });
     expect(runResume).toHaveBeenCalledWith(args);
   });
 
   test("dispatches 'list' to executeList", async () => {
-    const args = { json: false, verbose: false, noStatus: false };
+    const args = { json: false, verbose: false, noStatus: false, quiet: false };
     await run({ type: "list", args });
     expect(executeList).toHaveBeenCalledWith(args);
   });
 
   test("dispatches 'clean' to executeClean", async () => {
-    const args = { force: false, all: false, dryRun: false, verbose: false, branches: [] };
+    const args = { force: false, all: false, dryRun: false, quiet: false, verbose: false, branches: [] as string[] };
     await run({ type: "clean", args });
     expect(executeClean).toHaveBeenCalledWith(args);
   });
@@ -1362,6 +1453,22 @@ describe("run", () => {
     expect(output).toContain("Resume a Claude session");
   });
 
+  test("enables quiet mode when quiet flag is set", async () => {
+    const args = { json: false, verbose: false, noStatus: false, quiet: true };
+    await run({ type: "list", args });
+    expect(setLogger).toHaveBeenCalledWith(createQuietLogger());
+    expect(setQuietMode).toHaveBeenCalledWith(true);
+  });
+
+  test("does not enable quiet mode when quiet flag is false", async () => {
+    vi.mocked(setLogger).mockClear();
+    vi.mocked(setQuietMode).mockClear();
+    const args = { json: false, verbose: false, noStatus: false, quiet: false };
+    await run({ type: "list", args });
+    expect(setLogger).not.toHaveBeenCalled();
+    expect(setQuietMode).not.toHaveBeenCalled();
+  });
+
   test("dispatches '_run-in-pane' to parseRunInPaneArgs then executeRunInPane", async () => {
     const mockArgs = {
       worktreePath: "/tmp/wt",
@@ -1371,6 +1478,7 @@ describe("run", () => {
       preCleanTimeout: 600,
       postCleanTimeout: 600,
       verbose: false,
+      quiet: false,
     };
     vi.mocked(parseRunInPaneArgs).mockResolvedValue(mockArgs);
     vi.mocked(executeRunInPane).mockResolvedValue(undefined);

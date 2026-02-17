@@ -44,3 +44,12 @@ export function createSilentLogger(): Logger {
     debug: () => {},
   };
 }
+
+export function createQuietLogger(): Logger {
+  return {
+    log: () => {},
+    warn: (msg) => console.warn(msg),
+    error: (msg) => console.error(msg),
+    debug: () => {},
+  };
+}

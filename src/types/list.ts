@@ -7,6 +7,7 @@ export type ListArgs = {
   json: boolean;
   verbose: boolean;
   noStatus: boolean;
+  quiet: boolean;
 };
 
 export type WorktreeListEntry = {
