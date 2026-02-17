@@ -5,7 +5,7 @@ export { runCreate } from "./commands/create.ts";
 export { executeList } from "./commands/list.ts";
 export { runResume } from "./commands/resume.ts";
 // Public API — errors
-export { DependencyError, GitError, HookError, toExitCode, UsageError } from "./core/errors.ts";
+export { DependencyError, GitError, HookError, SlotError, toExitCode, UsageError } from "./core/errors.ts";
 export type {
   AheadBehind,
   CleanArgs,

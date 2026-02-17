@@ -7,6 +7,7 @@ import {
   getErrorMessage,
   HookError,
   isNodeError,
+  SlotError,
   toExitCode,
   UsageError,
 } from "./errors.ts";
@@ -103,6 +104,7 @@ describe("ExitCode", () => {
     expect(ExitCode.git).toBe(3);
     expect(ExitCode.dependency).toBe(4);
     expect(ExitCode.hook).toBe(5);
+    expect(ExitCode.slot).toBe(6);
     expect(ExitCode.interrupted).toBe(130);
   });
 });
@@ -139,6 +141,14 @@ describe("typed error classes", () => {
     expect(err.name).toBe("HookError");
     expect(err.message).toBe("hook timed out");
   });
+
+  test("SlotError has correct name and message", () => {
+    const err = new SlotError("no available slots");
+    expect(err).toBeInstanceOf(Error);
+    expect(err).toBeInstanceOf(SlotError);
+    expect(err.name).toBe("SlotError");
+    expect(err.message).toBe("no available slots");
+  });
 });
 
 describe("toExitCode", () => {
@@ -156,6 +166,10 @@ describe("toExitCode", () => {
 
   test("returns hook for HookError", () => {
     expect(toExitCode(new HookError("timeout"))).toBe(ExitCode.hook);
+  });
+
+  test("returns slot for SlotError", () => {
+    expect(toExitCode(new SlotError("no slots"))).toBe(ExitCode.slot);
   });
 
   test("returns general for plain Error", () => {

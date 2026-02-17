@@ -17,6 +17,7 @@ import { createServer } from "node:net";
 
 import { saveEnv } from "../__test-utils__.ts";
 import { getCacheDir } from "./cache.ts";
+import { SlotError } from "./errors.ts";
 import { assignSlot, deleteSlot, findAvailableSlot, isPortInUse, readSlot, saveSlot } from "./slot.ts";
 
 describe("slot cache", () => {
@@ -108,30 +109,37 @@ describe("slot cache", () => {
 
 describe("findAvailableSlot validation", () => {
   test("rejects basePort less than 1", async () => {
+    await expect(findAvailableSlot(0)).rejects.toThrow(SlotError);
     await expect(findAvailableSlot(0)).rejects.toThrow("Invalid basePort: 0");
   });
 
   test("rejects basePort greater than 65535", async () => {
+    await expect(findAvailableSlot(65536)).rejects.toThrow(SlotError);
     await expect(findAvailableSlot(65536)).rejects.toThrow("Invalid basePort: 65536");
   });
 
   test("rejects non-integer basePort", async () => {
+    await expect(findAvailableSlot(8880.5)).rejects.toThrow(SlotError);
     await expect(findAvailableSlot(8880.5)).rejects.toThrow("Invalid basePort: 8880.5");
   });
 
   test("rejects negative basePort", async () => {
+    await expect(findAvailableSlot(-1)).rejects.toThrow(SlotError);
     await expect(findAvailableSlot(-1)).rejects.toThrow("Invalid basePort: -1");
   });
 
   test("rejects maxSlots less than 1", async () => {
+    await expect(findAvailableSlot(8880, 0)).rejects.toThrow(SlotError);
     await expect(findAvailableSlot(8880, 0)).rejects.toThrow("Invalid maxSlots: 0");
   });
 
   test("rejects maxSlots that would exceed port range", async () => {
+    await expect(findAvailableSlot(65530, 10)).rejects.toThrow(SlotError);
     await expect(findAvailableSlot(65530, 10)).rejects.toThrow("Invalid maxSlots: 10");
   });
 
   test("rejects non-integer maxSlots", async () => {
+    await expect(findAvailableSlot(8880, 1.5)).rejects.toThrow(SlotError);
     await expect(findAvailableSlot(8880, 1.5)).rejects.toThrow("Invalid maxSlots: 1.5");
   });
 });
@@ -206,15 +214,16 @@ describe("assignSlot", () => {
     expect(slot).toBeLessThanOrEqual(9);
   });
 
-  test("throws when all slots are assigned", async () => {
+  test("throws SlotError when all slots are assigned", async () => {
     // Use maxSlots=2 to make it easy to exhaust
     await saveSlot("/tmp/repo-1", 1);
     await saveSlot("/tmp/repo-2", 2);
 
+    await expect(assignSlot("/tmp/repo-3", 8880, 2)).rejects.toThrow(SlotError);
     await expect(assignSlot("/tmp/repo-3", 8880, 2)).rejects.toThrow("all 2 slots are assigned");
   });
 
-  test("throws when all candidate ports are in use", async () => {
+  test("throws SlotError when all candidate ports are in use", async () => {
     // Occupy port by binding it, and use a single slot
     const server = createServer();
     const port = await new Promise<number>((resolve) => {
@@ -225,7 +234,7 @@ describe("assignSlot", () => {
     });
     try {
       // basePort = port - 1, maxSlots = 1 → only checks port
-      await expect(assignSlot("/tmp/repo-x", port - 1, 1)).rejects.toThrow("all ports");
+      await expect(assignSlot("/tmp/repo-x", port - 1, 1)).rejects.toThrow(SlotError);
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
@@ -238,10 +247,12 @@ describe("assignSlot", () => {
   });
 
   test("rejects invalid basePort", async () => {
+    await expect(assignSlot("/tmp/x", 0)).rejects.toThrow(SlotError);
     await expect(assignSlot("/tmp/x", 0)).rejects.toThrow("Invalid basePort: 0");
   });
 
   test("rejects invalid maxSlots", async () => {
+    await expect(assignSlot("/tmp/x", 8880, 0)).rejects.toThrow(SlotError);
     await expect(assignSlot("/tmp/x", 8880, 0)).rejects.toThrow("Invalid maxSlots: 0");
   });
 });

@@ -9,6 +9,7 @@
  * | 3    | Git operation failed                         |
  * | 4    | External tool not available (WezTerm, Claude) |
  * | 5    | Hook execution failed or timed out           |
+ * | 6    | Slot exhaustion (no available slots/ports)    |
  * | 130  | Interrupted (Ctrl+C)                         |
  */
 export const ExitCode = {
@@ -18,6 +19,7 @@ export const ExitCode = {
   git: 3,
   dependency: 4,
   hook: 5,
+  slot: 6,
   interrupted: 130,
 } as const;
 

@@ -44,6 +44,16 @@ export class HookError extends Error {
 }
 
 /**
+ * Error thrown when no slots are available (all ports or slot assignments exhausted).
+ */
+export class SlotError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SlotError";
+  }
+}
+
+/**
  * Maps an error to the appropriate exit code.
  */
 export function toExitCode(error: unknown): ExitCodeValue {
@@ -51,6 +61,7 @@ export function toExitCode(error: unknown): ExitCodeValue {
   if (error instanceof GitError) return ExitCode.git;
   if (error instanceof DependencyError) return ExitCode.dependency;
   if (error instanceof HookError) return ExitCode.hook;
+  if (error instanceof SlotError) return ExitCode.slot;
   return ExitCode.general;
 }
 
