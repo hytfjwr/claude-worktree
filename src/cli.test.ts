@@ -37,7 +37,7 @@ describe("parseArgs", () => {
       const result = parseArgs(["clean"]);
       expect(result).toEqual({
         type: "clean",
-        args: { force: false, all: false, dryRun: false, verbose: false },
+        args: { force: false, all: false, dryRun: false, verbose: false, branches: [] },
       });
     });
 
@@ -744,7 +744,7 @@ describe("parseCreateArgs", () => {
 describe("parseCleanArgs", () => {
   test("no options", () => {
     const result = parseCleanArgs([]);
-    expect(result).toEqual({ force: false, all: false, dryRun: false, verbose: false });
+    expect(result).toEqual({ force: false, all: false, dryRun: false, verbose: false, branches: [] });
   });
 
   test("-force flag", () => {
@@ -779,17 +779,17 @@ describe("parseCleanArgs", () => {
 
   test("combined flags -force -all -dry-run -verbose", () => {
     const result = parseCleanArgs(["-force", "-all", "-dry-run", "-verbose"]);
-    expect(result).toEqual({ force: true, all: true, dryRun: true, verbose: true });
+    expect(result).toEqual({ force: true, all: true, dryRun: true, verbose: true, branches: [] });
   });
 
   test("combined short flags -f -a -n -v", () => {
     const result = parseCleanArgs(["-f", "-a", "-n", "-v"]);
-    expect(result).toEqual({ force: true, all: true, dryRun: true, verbose: true });
+    expect(result).toEqual({ force: true, all: true, dryRun: true, verbose: true, branches: [] });
   });
 
   test("-h/-help is ignored (does not throw)", () => {
     const result = parseCleanArgs(["-h"]);
-    expect(result).toEqual({ force: false, all: false, dryRun: false, verbose: false });
+    expect(result).toEqual({ force: false, all: false, dryRun: false, verbose: false, branches: [] });
   });
 
   test("-verbose flag", () => {
@@ -810,6 +810,32 @@ describe("parseCleanArgs", () => {
     expect(() => parseCleanArgs(["--force"])).toThrow(
       'Unknown option for clean command: "--force" (did you mean "-force"?)',
     );
+  });
+
+  test("single branch name", () => {
+    const result = parseCleanArgs(["feature/auth"]);
+    expect(result).toEqual({ force: false, all: false, dryRun: false, verbose: false, branches: ["feature/auth"] });
+  });
+
+  test("multiple branch names", () => {
+    const result = parseCleanArgs(["feature/auth", "fix/bug-123"]);
+    expect(result.branches).toEqual(["feature/auth", "fix/bug-123"]);
+  });
+
+  test("branch names with flags", () => {
+    const result = parseCleanArgs(["feature/auth", "-force", "fix/bug-123"]);
+    expect(result.force).toBe(true);
+    expect(result.branches).toEqual(["feature/auth", "fix/bug-123"]);
+  });
+
+  test("branch names + -dry-run", () => {
+    const result = parseCleanArgs(["feature/auth", "-dry-run"]);
+    expect(result.dryRun).toBe(true);
+    expect(result.branches).toEqual(["feature/auth"]);
+  });
+
+  test("branch names + -all throws", () => {
+    expect(() => parseCleanArgs(["feature/auth", "-all"])).toThrow("Cannot use both branch names and -all option");
   });
 });
 
@@ -1290,7 +1316,7 @@ describe("run", () => {
   });
 
   test("dispatches 'clean' to executeClean", async () => {
-    const args = { force: false, all: false, dryRun: false, verbose: false };
+    const args = { force: false, all: false, dryRun: false, verbose: false, branches: [] };
     await run({ type: "clean", args });
     expect(executeClean).toHaveBeenCalledWith(args);
   });

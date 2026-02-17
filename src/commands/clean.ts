@@ -95,7 +95,7 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
   // Filter out main worktrees for display
   const cleanableStatuses = statuses.filter((s) => !s.worktree.isMain);
 
-  if (cleanableStatuses.length === 0) {
+  if (cleanableStatuses.length === 0 && args.branches.length === 0) {
     logInfo("No cleanable worktrees found.");
     return result;
   }
@@ -122,7 +122,43 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
 
   let toDelete: WorktreeStatus[];
 
-  if (args.all) {
+  if (args.branches.length > 0) {
+    // Specific branch mode: find worktrees matching the given branch names
+    const matched: WorktreeStatus[] = [];
+
+    for (const branchName of args.branches) {
+      const found = cleanableStatuses.find((s) => s.worktree.branch === branchName);
+      if (found) {
+        matched.push(found);
+      } else {
+        // Distinguish between "exists but is main" and "truly not found"
+        const isMain = statuses.some((s) => s.worktree.branch === branchName && s.worktree.isMain);
+        if (isMain) {
+          logWarn(`Branch "${branchName}" is the main worktree and cannot be cleaned.`);
+        } else {
+          logWarn(`Worktree for branch "${branchName}" not found.`);
+        }
+      }
+    }
+
+    if (matched.length === 0) {
+      logInfo("No matching worktrees to delete.");
+      return result;
+    }
+
+    logInfo(`\n${icons.trash()}  Deletion targets:`);
+    for (const status of matched) {
+      const branch = status.worktree.branch || "(detached)";
+      logInfo(`  ${icons.bullet()} ${cyan(branch)}`);
+      logInfo(`    ${dim(`Path: ${status.worktree.path}`)}`);
+      const pr = status.worktree.branch ? prMap.get(status.worktree.branch) : undefined;
+      if (pr) {
+        logInfo(`    ${dim(`PR: #${pr.number} ${pr.title} (${pr.state}) ${pr.url}`)}`);
+      }
+    }
+
+    toDelete = matched;
+  } else if (args.all) {
     // Manual selection mode: enrich reason with PR info for display
     const enrichedStatuses = cleanableStatuses.map((s) => {
       const pr = s.worktree.branch ? prMap.get(s.worktree.branch) : undefined;

@@ -42,7 +42,7 @@ function makeDeps(overrides: Partial<CleanDeps> = {}): CleanDeps {
   };
 }
 
-const defaultArgs: CleanArgs = { force: false, all: false, dryRun: false, verbose: false };
+const defaultArgs: CleanArgs = { force: false, all: false, dryRun: false, verbose: false, branches: [] };
 
 // Suppress console output
 let consoleWarnSpy: ReturnType<typeof vi.spyOn>;
@@ -877,6 +877,140 @@ describe("executeClean", () => {
       await executeClean({ ...defaultArgs, force: true }, deps);
 
       expect(deleteLocalBranchCalled).toBe(false);
+    });
+  });
+
+  describe("specific branch mode", () => {
+    test("deletes specified branch worktree", async () => {
+      const wt1 = makeWorktree({ path: "/tmp/repo-a", branch: "feature/a" });
+      const wt2 = makeWorktree({ path: "/tmp/repo-b", branch: "feature/b" });
+      const status1 = makeStatus({ path: "/tmp/repo-a", branch: "feature/a" }, { canAutoClean: false });
+      const status2 = makeStatus({ path: "/tmp/repo-b", branch: "feature/b" }, { canAutoClean: false });
+      const deps = makeDeps({
+        listWorktrees: async () => ({ worktrees: [wt1, wt2], mainBranch: "main" }),
+        getWorktreeStatuses: async () => [status1, status2],
+      });
+
+      const result = await executeClean({ ...defaultArgs, force: true, branches: ["feature/a"] }, deps);
+
+      expect(result.deleted).toEqual(["/tmp/repo-a"]);
+    });
+
+    test("deletes multiple specified branches", async () => {
+      const wt1 = makeWorktree({ path: "/tmp/repo-a", branch: "feature/a" });
+      const wt2 = makeWorktree({ path: "/tmp/repo-b", branch: "feature/b" });
+      const status1 = makeStatus({ path: "/tmp/repo-a", branch: "feature/a" });
+      const status2 = makeStatus({ path: "/tmp/repo-b", branch: "feature/b" });
+      const deps = makeDeps({
+        listWorktrees: async () => ({ worktrees: [wt1, wt2], mainBranch: "main" }),
+        getWorktreeStatuses: async () => [status1, status2],
+      });
+
+      const result = await executeClean({ ...defaultArgs, force: true, branches: ["feature/a", "feature/b"] }, deps);
+
+      expect(result.deleted).toEqual(["/tmp/repo-a", "/tmp/repo-b"]);
+    });
+
+    test("warns and returns empty when branch not found", async () => {
+      const wt = makeWorktree({ path: "/tmp/repo-a", branch: "feature/a" });
+      const status = makeStatus({ path: "/tmp/repo-a", branch: "feature/a" });
+      const deps = makeDeps({
+        listWorktrees: async () => ({ worktrees: [wt], mainBranch: "main" }),
+        getWorktreeStatuses: async () => [status],
+      });
+
+      const result = await executeClean({ ...defaultArgs, force: true, branches: ["feature/nonexistent"] }, deps);
+
+      expect(result.deleted).toEqual([]);
+      expect(consoleWarnSpy).toHaveBeenCalled();
+    });
+
+    test("deletes found branches and warns about not-found branches", async () => {
+      const wt = makeWorktree({ path: "/tmp/repo-a", branch: "feature/a" });
+      const status = makeStatus({ path: "/tmp/repo-a", branch: "feature/a" });
+      const deps = makeDeps({
+        listWorktrees: async () => ({ worktrees: [wt], mainBranch: "main" }),
+        getWorktreeStatuses: async () => [status],
+      });
+
+      const result = await executeClean(
+        { ...defaultArgs, force: true, branches: ["feature/a", "feature/nonexistent"] },
+        deps,
+      );
+
+      expect(result.deleted).toEqual(["/tmp/repo-a"]);
+      expect(consoleWarnSpy).toHaveBeenCalled();
+    });
+
+    test("respects dry-run with specific branches", async () => {
+      const wt = makeWorktree({ path: "/tmp/repo-a", branch: "feature/a" });
+      const status = makeStatus({ path: "/tmp/repo-a", branch: "feature/a" });
+      let removeWorktreeCalled = false;
+      const deps = makeDeps({
+        listWorktrees: async () => ({ worktrees: [wt], mainBranch: "main" }),
+        getWorktreeStatuses: async () => [status],
+        removeWorktree: async () => {
+          removeWorktreeCalled = true;
+        },
+      });
+
+      const result = await executeClean({ ...defaultArgs, dryRun: true, branches: ["feature/a"] }, deps);
+
+      expect(removeWorktreeCalled).toBe(false);
+      expect(result.deleted).toEqual([]);
+    });
+
+    test("warns with specific message when targeting main worktree", async () => {
+      const mainWt = makeWorktree({ path: "/tmp/repo-main", branch: "main", isMain: true });
+      const mainStatus = makeStatus(
+        { path: "/tmp/repo-main", branch: "main", isMain: true },
+        { reason: "Main worktree" },
+      );
+      const deps = makeDeps({
+        listWorktrees: async () => ({ worktrees: [mainWt], mainBranch: "main" }),
+        getWorktreeStatuses: async () => [mainStatus],
+      });
+
+      const result = await executeClean({ ...defaultArgs, force: true, branches: ["main"] }, deps);
+
+      expect(result.deleted).toEqual([]);
+      const warnMessages = consoleWarnSpy.mock.calls.map((c) => c[0]);
+      expect(warnMessages.some((msg) => typeof msg === "string" && msg.includes("main worktree"))).toBe(true);
+    });
+
+    test("deletes non-auto-cleanable worktree when explicitly specified", async () => {
+      const wt = makeWorktree({ path: "/tmp/repo-active", branch: "feature/active" });
+      const status = makeStatus(
+        { path: "/tmp/repo-active", branch: "feature/active" },
+        { canAutoClean: false, reason: "Active" },
+      );
+      const deps = makeDeps({
+        listWorktrees: async () => ({ worktrees: [wt], mainBranch: "main" }),
+        getWorktreeStatuses: async () => [status],
+      });
+
+      const result = await executeClean({ ...defaultArgs, force: true, branches: ["feature/active"] }, deps);
+
+      expect(result.deleted).toEqual(["/tmp/repo-active"]);
+    });
+
+    test("respects confirmation prompt with specific branches", async () => {
+      const wt = makeWorktree({ path: "/tmp/repo-a", branch: "feature/a" });
+      const status = makeStatus({ path: "/tmp/repo-a", branch: "feature/a" });
+      let removeWorktreeCalled = false;
+      const deps = makeDeps({
+        listWorktrees: async () => ({ worktrees: [wt], mainBranch: "main" }),
+        getWorktreeStatuses: async () => [status],
+        confirm: async () => false,
+        removeWorktree: async () => {
+          removeWorktreeCalled = true;
+        },
+      });
+
+      const result = await executeClean({ ...defaultArgs, branches: ["feature/a"] }, deps);
+
+      expect(removeWorktreeCalled).toBe(false);
+      expect(result.deleted).toEqual([]);
     });
   });
 

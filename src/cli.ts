@@ -17,7 +17,7 @@ Usage:
   claude-worktree <branch-name> -plan <file-path>
   claude-worktree resume [<branch-name>] [<prompt>]
   claude-worktree list [options]
-  claude-worktree clean [options]
+  claude-worktree clean [<branch-name>...] [options]
 
 Commands:
   <branch-name>  Create a new worktree with Claude Code
@@ -53,6 +53,7 @@ List options:
   -v, -verbose     Show full paths and details
 
 Clean options:
+  <branch-name>  Specific branch(es) to clean (can specify multiple)
   -f, -force     Skip confirmation prompt
   -a, -all       Show all worktrees for manual selection
   -n, -dry-run   Preview targets without deleting
@@ -74,6 +75,8 @@ Examples:
   claude-worktree list
   claude-worktree list -json
   claude-worktree clean
+  claude-worktree clean feature/auth
+  claude-worktree clean feature/auth fix/bug-123
   claude-worktree clean -dry-run`);
 }
 
@@ -140,9 +143,13 @@ export function showCleanHelp(): void {
 
 Identifies worktrees that can be safely removed (merged branches, deleted remote
 branches) and prompts for confirmation before deleting.
+Specify branch names to clean specific worktrees directly.
 
 Usage:
-  claude-worktree clean [options]
+  claude-worktree clean [<branch-name>...] [options]
+
+Arguments:
+  <branch-name>  Specific branch(es) to clean (can specify multiple)
 
 Options:
   -f, -force     Skip confirmation prompt
@@ -153,8 +160,10 @@ Options:
 
 Examples:
   claude-worktree clean
+  claude-worktree clean feature/auth
+  claude-worktree clean feature/auth fix/bug-123
+  claude-worktree clean feature/auth -force
   claude-worktree clean -dry-run
-  claude-worktree clean -force
   claude-worktree clean -all`);
 }
 
@@ -342,7 +351,7 @@ export function parseResumeArgs(args: string[]): ResumeArgs {
 }
 
 export function parseCleanArgs(args: string[]): CleanArgs {
-  const { booleans } = extractOptions(args, {
+  const { booleans, remaining } = extractOptions(args, {
     options: {
       force: { type: "boolean", flag: "-force", alias: "-f" },
       all: { type: "boolean", flag: "-all", alias: "-a" },
@@ -354,11 +363,18 @@ export function parseCleanArgs(args: string[]): CleanArgs {
     unknownErrorPrefix: "Unknown option for clean command",
   });
 
+  const branches = remaining;
+
+  if (branches.length > 0 && booleans.all) {
+    throw new UsageError("Cannot use both branch names and -all option.");
+  }
+
   return {
     force: booleans.force,
     all: booleans.all,
     dryRun: booleans.dryRun,
     verbose: booleans.verbose,
+    branches,
   };
 }
 
