@@ -89,5 +89,6 @@ jobs:
             gh pr create \
               --title "chore: release v${VERSION}" \
               --body "$BODY" \
-              --base main
+              --base main \
+              --reviewer hytfjwr
           fi
