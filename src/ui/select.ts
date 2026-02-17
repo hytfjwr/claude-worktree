@@ -4,7 +4,7 @@ import type { SelectItem } from "../types/index.ts";
 import { cyan, dim, green } from "./color.ts";
 import { icons } from "./icons.ts";
 import { logInfo } from "./logger.ts";
-import { stripAnsi } from "./spinner.ts";
+import { countVisualLines, stripAnsi } from "./spinner.ts";
 
 export type { SelectItem } from "../types/index.ts";
 
@@ -204,8 +204,8 @@ function runTTYSelect<R>(
       const output = `${headerLine}\n${body}${footerLine}\n`;
       write(output);
 
-      // Count lines rendered (for next overwrite)
-      renderedLines = output.split("\n").length - 1;
+      // Count visual lines rendered (accounts for line wrapping in narrow terminals)
+      renderedLines = countVisualLines(output);
     };
 
     const cleanup = () => {

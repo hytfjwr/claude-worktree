@@ -35,6 +35,23 @@ export function stripAnsi(str: string): string {
   return str.replace(/\x1b(?:\[[0-9;?]*[a-zA-Z]|\][^\x07]*(?:\x07|\x1b\\)|\[[0-9;]*m)/g, "");
 }
 
+/**
+ * Count visual terminal lines a string occupies, accounting for line wrapping in narrow terminals.
+ * Handles multi-line strings (split by \n) and trailing newlines.
+ */
+export function countVisualLines(text: string, cols?: number): number {
+  const termCols = cols ?? process.stdout.columns ?? 80;
+  const lines = text.split("\n");
+  // Skip trailing empty element from strings ending with \n
+  const count = text.endsWith("\n") ? lines.length - 1 : lines.length;
+  let total = 0;
+  for (let i = 0; i < count; i++) {
+    const width = stripAnsi(lines[i]).length;
+    total += width === 0 ? 1 : Math.ceil(width / termCols);
+  }
+  return total;
+}
+
 export function formatTailLine(line: string, maxWidth: number): string {
   const stripped = stripAnsi(line);
   const safeWidth = Math.max(1, maxWidth);
@@ -208,6 +225,9 @@ export function startSpinner(message: string, options?: { timeoutSec?: number })
   const dimCode = colorEnabled ? "\x1b[38;5;245m" : "";
   const resetCode = colorEnabled ? "\x1b[0m" : "";
 
+  // Plain text representation of spinner line (frame char + space + message) for visual line counting
+  const spinnerPlainText = `x ${message}`;
+
   const writeFrame = () => {
     if (extraLines > 0) {
       process.stdout.write(`\x1b[${extraLines}A`);
@@ -241,7 +261,9 @@ export function startSpinner(message: string, options?: { timeoutSec?: number })
     }
 
     process.stdout.write(output);
-    extraLines = (expanded ? 0 : tailLines.length) + (timeoutSec != null ? 1 : 0);
+    // Account for line wrapping of the main spinner line in narrow terminals
+    const spinnerWrapExtra = countVisualLines(spinnerPlainText) - 1;
+    extraLines = spinnerWrapExtra + (expanded ? 0 : tailLines.length) + (timeoutSec != null ? 1 : 0);
   };
 
   const clearRenderedArea = () => {

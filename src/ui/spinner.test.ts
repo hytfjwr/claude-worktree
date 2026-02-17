@@ -5,6 +5,7 @@ import { _resetColorCache } from "./color.ts";
 import {
   COLOR_THEMES,
   type ColorTheme,
+  countVisualLines,
   createTailUpdater,
   formatDuration,
   formatInfoLine,
@@ -730,6 +731,45 @@ describe("stripAnsi", () => {
 
   test("handles empty string", () => {
     expect(stripAnsi("")).toBe("");
+  });
+});
+
+describe("countVisualLines", () => {
+  test("counts single short line as 1", () => {
+    expect(countVisualLines("hello", 80)).toBe(1);
+  });
+
+  test("counts line that exactly fits terminal width as 1", () => {
+    expect(countVisualLines("a".repeat(40), 40)).toBe(1);
+  });
+
+  test("counts line exceeding terminal width as wrapped", () => {
+    expect(countVisualLines("a".repeat(41), 40)).toBe(2);
+    expect(countVisualLines("a".repeat(80), 40)).toBe(2);
+    expect(countVisualLines("a".repeat(81), 40)).toBe(3);
+  });
+
+  test("counts multiple lines", () => {
+    expect(countVisualLines("line1\nline2\nline3", 80)).toBe(3);
+  });
+
+  test("handles trailing newline without extra line", () => {
+    expect(countVisualLines("line1\nline2\n", 80)).toBe(2);
+  });
+
+  test("counts wrapping across multiple lines", () => {
+    // First line wraps (50 chars in 40-col terminal = 2 visual lines)
+    // Second line fits (10 chars = 1 visual line)
+    expect(countVisualLines(`${"a".repeat(50)}\n${"b".repeat(10)}`, 40)).toBe(3);
+  });
+
+  test("strips ANSI codes before measuring width", () => {
+    const ansiText = `\x1b[31m${"a".repeat(30)}\x1b[0m`;
+    expect(countVisualLines(ansiText, 40)).toBe(1);
+  });
+
+  test("counts empty line as 1 visual line", () => {
+    expect(countVisualLines("hello\n\nworld", 80)).toBe(3);
   });
 });
 
