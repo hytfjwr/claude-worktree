@@ -504,6 +504,47 @@ export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps
     }
   }
 
+  // Dry-run: preview what would happen and exit
+  if (args.dryRun) {
+    logInfo("\nDry Run Preview:");
+    let step = 1;
+
+    if (args.pull) {
+      logInfo(`  ${step++}. Fetch remote:      git fetch origin ${effectiveBaseBranch}`);
+    }
+
+    if (existingWorktree) {
+      if (config?.preClean) {
+        const hookPreview = config.preClean.replace("{path}", existingWorktree.path).replace("{slot}", "<existing>");
+        logInfo(`  ${step++}. Pre-clean hook:    ${hookPreview}`);
+      }
+
+      logInfo(`  ${step++}. Replace worktree:  ${existingWorktree.path} (delete and recreate)`);
+
+      if (config?.postClean) {
+        const hookPreview = config.postClean.replace("{path}", existingWorktree.path).replace("{slot}", "<existing>");
+        logInfo(`  ${step++}. Post-clean hook:   ${hookPreview}`);
+      }
+    }
+
+    logInfo(`  ${step++}. Create worktree:   ${buildWorktreeCommand(branchName, worktreePath, worktreeBaseBranch)}`);
+
+    if (config?.postCreate) {
+      const hookPreview = config.postCreate.replace("{path}", worktreePath).replace("{slot}", "<auto>");
+      logInfo(`  ${step++}. Post-create hook:  ${hookPreview}`);
+    }
+
+    logInfo(`  ${step++}. Launch mode:       ${pane ? "WezTerm pane" : "Current terminal"}`);
+
+    const claudeOptions = buildClaudeOptions({ ...args, prompt }, git, worktreePath, effectiveBaseBranch, branchName);
+    const claudeCmd = deps.buildClaudeCommand(claudeOptions);
+    const claudeCmdLines = claudeCmd.split("\n");
+    const claudeCmdPreview = claudeCmdLines.length > 1 ? `${claudeCmdLines[0]} ...` : claudeCmdLines[0];
+    logInfo(`  ${step++}. Claude command:    ${claudeCmdPreview}`);
+
+    return;
+  }
+
   // Display info
   logInfo(`${icons.pin()} Current branch: ${git.currentBranch}`);
   if (baseBranch) {
@@ -522,33 +563,6 @@ export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps
   }
   if (args.pull) {
     logInfo(`${icons.sparkle()} Pull: fetch latest from remote`);
-  }
-
-  // Dry-run: preview what would happen and exit
-  if (args.dryRun) {
-    logInfo(`\n--- Dry Run ---`);
-    if (args.pull) {
-      logInfo(`Fetch: git fetch origin ${effectiveBaseBranch}`);
-      logInfo(`Worktree base: ${worktreeBaseBranch} (remote)`);
-    }
-    logInfo(`Git command: ${buildWorktreeCommand(branchName, worktreePath, worktreeBaseBranch)}`);
-    logInfo(`Launch mode: ${pane ? "WezTerm pane" : "current terminal"}`);
-    if (config?.postCreate) {
-      const hookPreview = config.postCreate.replace("{path}", worktreePath).replace("{slot}", "<auto>");
-      logInfo(`postCreate hook: ${hookPreview}`);
-    }
-    if (config?.preClean) {
-      const hookPreview = config.preClean.replace("{path}", worktreePath).replace("{slot}", "<auto>");
-      logInfo(`preClean hook: ${hookPreview}`);
-    }
-    if (config?.postClean) {
-      const hookPreview = config.postClean.replace("{path}", worktreePath).replace("{slot}", "<auto>");
-      logInfo(`postClean hook: ${hookPreview}`);
-    }
-    if (existingWorktree) {
-      logInfo(`\nNote: Existing worktree at ${existingWorktree.path} would be replaced.`);
-    }
-    return;
   }
 
   // Handle existing worktree

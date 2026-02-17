@@ -651,6 +651,68 @@ describe("runCreate", () => {
       expect(deps.saveSession).not.toHaveBeenCalled();
     });
 
+    test("outputs structured numbered steps", async () => {
+      const deps = makeDeps();
+      await runCreate({ ...defaultPaneArgs, dryRun: true }, deps);
+
+      const logs = vi.mocked(console.log).mock.calls.map((c) => c[0]);
+      expect(logs).toContainEqual(expect.stringContaining("Dry Run Preview:"));
+      expect(logs).toContainEqual(expect.stringContaining("1. Create worktree:"));
+      expect(logs).toContainEqual(expect.stringContaining("2. Launch mode:"));
+      expect(logs).toContainEqual(expect.stringContaining("WezTerm pane"));
+      expect(logs).toContainEqual(expect.stringContaining("3. Claude command:"));
+    });
+
+    test("includes fetch step when pull is enabled", async () => {
+      const deps = makeDeps();
+      await runCreate({ ...defaultPaneArgs, pull: true, dryRun: true }, deps);
+
+      const logs = vi.mocked(console.log).mock.calls.map((c) => c[0]);
+      expect(logs).toContainEqual(expect.stringContaining("1. Fetch remote:"));
+      expect(logs).toContainEqual(expect.stringContaining("git fetch origin main"));
+      expect(logs).toContainEqual(expect.stringContaining("2. Create worktree:"));
+    });
+
+    test("includes replace step when existing worktree found", async () => {
+      const deps = makeDeps({
+        listWorktrees: vi.fn(async () => ({
+          worktrees: [
+            makeWorktree({ path: "/repo", branch: "main", isMain: true }),
+            makeWorktree({ path: "/repo/.worktrees/feat-x", branch: "feat/x" }),
+          ],
+          mainBranch: "main",
+        })),
+      });
+      await runCreate({ ...defaultPaneArgs, dryRun: true }, deps);
+
+      const logs = vi.mocked(console.log).mock.calls.map((c) => c[0]);
+      expect(logs).toContainEqual(expect.stringContaining("1. Replace worktree:"));
+      expect(logs).toContainEqual(expect.stringContaining("delete and recreate"));
+      expect(logs).toContainEqual(expect.stringContaining("2. Create worktree:"));
+    });
+
+    test("includes post-create hook step when configured", async () => {
+      const config: ProjectConfig = {
+        postCreate: "cd {path} && docker-compose up -d",
+      };
+      const deps = makeDeps({
+        loadProjectConfig: vi.fn(async () => config),
+      });
+      await runCreate({ ...defaultPaneArgs, dryRun: true }, deps);
+
+      const logs = vi.mocked(console.log).mock.calls.map((c) => c[0]);
+      expect(logs).toContainEqual(expect.stringContaining("Post-create hook:"));
+      expect(logs).toContainEqual(expect.stringContaining("docker-compose up -d"));
+    });
+
+    test("shows current terminal for non-pane mode", async () => {
+      const deps = makeDeps();
+      await runCreate({ ...defaultTerminalArgs, dryRun: true }, deps);
+
+      const logs = vi.mocked(console.log).mock.calls.map((c) => c[0]);
+      expect(logs).toContainEqual(expect.stringContaining("Current terminal"));
+    });
+
     test("does not prompt user for existing worktree in dry-run", async () => {
       const deps = makeDeps({
         listWorktrees: vi.fn(async () => ({
@@ -678,6 +740,59 @@ describe("runCreate", () => {
       await runCreate({ ...defaultPaneArgs, dryRun: true }, deps);
 
       expect(deps.executeHookWithSpinner).not.toHaveBeenCalled();
+    });
+
+    test("calls buildClaudeCommand to preview the command", async () => {
+      const deps = makeDeps();
+      await runCreate({ ...defaultPaneArgs, dryRun: true }, deps);
+
+      expect(deps.buildClaudeCommand).toHaveBeenCalled();
+    });
+
+    test("includes pre/post-clean hooks when replacing existing worktree", async () => {
+      const config: ProjectConfig = {
+        preClean: "cd {path} && docker-compose down",
+        postClean: "cd {path} && docker system prune -f",
+      };
+      const deps = makeDeps({
+        loadProjectConfig: vi.fn(async () => config),
+        listWorktrees: vi.fn(async () => ({
+          worktrees: [
+            makeWorktree({ path: "/repo", branch: "main", isMain: true }),
+            makeWorktree({ path: "/repo/.worktrees/feat-x", branch: "feat/x" }),
+          ],
+          mainBranch: "main",
+        })),
+      });
+      await runCreate({ ...defaultPaneArgs, dryRun: true }, deps);
+
+      const logs = vi.mocked(console.log).mock.calls.map((c) => String(c[0]));
+      const preCleanIdx = logs.findIndex((l) => l.includes("Pre-clean hook:"));
+      const replaceIdx = logs.findIndex((l) => l.includes("Replace worktree:"));
+      const postCleanIdx = logs.findIndex((l) => l.includes("Post-clean hook:"));
+
+      expect(preCleanIdx).toBeGreaterThanOrEqual(0);
+      expect(replaceIdx).toBeGreaterThanOrEqual(0);
+      expect(postCleanIdx).toBeGreaterThanOrEqual(0);
+      expect(preCleanIdx).toBeLessThan(replaceIdx);
+      expect(replaceIdx).toBeLessThan(postCleanIdx);
+      expect(logs[preCleanIdx]).toContain("docker-compose down");
+      expect(logs[postCleanIdx]).toContain("docker system prune -f");
+    });
+
+    test("omits pre/post-clean hooks when no existing worktree", async () => {
+      const config: ProjectConfig = {
+        preClean: "cd {path} && docker-compose down",
+        postClean: "cd {path} && docker system prune -f",
+      };
+      const deps = makeDeps({
+        loadProjectConfig: vi.fn(async () => config),
+      });
+      await runCreate({ ...defaultPaneArgs, dryRun: true }, deps);
+
+      const logs = vi.mocked(console.log).mock.calls.map((c) => String(c[0]));
+      expect(logs.some((l) => l.includes("Pre-clean hook:"))).toBe(false);
+      expect(logs.some((l) => l.includes("Post-clean hook:"))).toBe(false);
     });
   });
 
