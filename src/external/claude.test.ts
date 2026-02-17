@@ -222,6 +222,69 @@ PROMPT_END`);
     expect(result).toContain("--dangerously-skip-permissions");
     expect(result).toContain("Create a Draft PR");
   });
+
+  test("with prInstructions - PR instructions are included", () => {
+    const result = buildClaudeCommand({
+      prompt: "Test",
+      prInstructions: {
+        baseBranch: "main",
+        branchName: "feature/test",
+      },
+    });
+
+    expect(result).toContain("[IMPORTANT] Post-Task Steps");
+    expect(result).toContain("Create a PR");
+    expect(result).toContain("gh pr create --base main");
+    expect(result).not.toContain("--draft");
+  });
+
+  test("prInstructions - base branch name is correctly embedded", () => {
+    const result = buildClaudeCommand({
+      prompt: "Test",
+      prInstructions: {
+        baseBranch: "develop",
+        branchName: "feature/test",
+      },
+    });
+
+    expect(result).toContain("gh pr create --base develop");
+  });
+
+  test("prInstructions - branch name is correctly embedded", () => {
+    const result = buildClaudeCommand({
+      prompt: "Test",
+      prInstructions: {
+        baseBranch: "main",
+        branchName: "feature/my-feature",
+      },
+    });
+
+    expect(result).toContain("git push -u origin feature/my-feature");
+  });
+
+  test("without prInstructions - PR instructions are not included", () => {
+    const result = buildClaudeCommand({
+      prompt: "Test",
+    });
+
+    expect(result).not.toContain("Create a PR");
+    expect(result).not.toContain("gh pr create --base");
+  });
+
+  test("prInstructions + dangerouslySkipPermissions combined", () => {
+    const result = buildClaudeCommand({
+      prompt: "Test",
+      dangerouslySkipPermissions: true,
+      prInstructions: {
+        baseBranch: "main",
+        branchName: "feature/test",
+      },
+    });
+
+    expect(result).toContain("--dangerously-skip-permissions");
+    expect(result).toContain("Create a PR");
+    expect(result).not.toContain("--draft");
+  });
 });
 
 // ============================================================================

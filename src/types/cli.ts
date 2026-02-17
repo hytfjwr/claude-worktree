@@ -8,6 +8,7 @@ export type CreateArgs = {
   danger?: boolean;
   merge?: boolean;
   draft?: boolean;
+  pr?: boolean;
   baseBranch?: string;
   pull?: boolean;
   pane?: boolean;

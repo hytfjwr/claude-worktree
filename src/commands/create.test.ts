@@ -862,6 +862,34 @@ describe("runCreate", () => {
       );
     });
 
+    test("passes pr instructions to buildClaudeCommand", async () => {
+      const deps = makeDeps();
+      await runCreate({ ...defaultPaneArgs, pr: true }, deps);
+
+      expect(deps.buildClaudeCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prInstructions: {
+            baseBranch: "main",
+            branchName: "feat/x",
+          },
+        }),
+      );
+    });
+
+    test("passes pr instructions with explicit base branch", async () => {
+      const deps = makeDeps();
+      await runCreate({ ...defaultPaneArgs, pr: true, baseBranch: "develop" }, deps);
+
+      expect(deps.buildClaudeCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prInstructions: {
+            baseBranch: "develop",
+            branchName: "feat/x",
+          },
+        }),
+      );
+    });
+
     test("passes danger flag to buildClaudeCommand", async () => {
       const deps = makeDeps();
       await runCreate({ ...defaultPaneArgs, danger: true }, deps);

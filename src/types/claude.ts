@@ -8,6 +8,11 @@ export type DraftInstructions = {
   branchName: string;
 };
 
+export type PrInstructions = {
+  baseBranch: string;
+  branchName: string;
+};
+
 export type PermissionMode = "plan" | "auto-edit" | "full-auto";
 
 export const VALID_PERMISSION_MODES: readonly PermissionMode[] = ["plan", "auto-edit", "full-auto"];
@@ -19,6 +24,7 @@ export type ClaudeOptions = {
   dangerouslySkipPermissions?: boolean;
   mergeInstructions?: MergeInstructions;
   draftInstructions?: DraftInstructions;
+  prInstructions?: PrInstructions;
 };
 
 export type ResumeCommandOptions = {

@@ -101,6 +101,7 @@ describe("parseArgs", () => {
           danger: false,
           merge: false,
           draft: false,
+          pr: false,
           pull: false,
           baseBranch: undefined,
           pane: false,
@@ -187,6 +188,7 @@ describe("parseCreateArgs", () => {
       danger: false,
       merge: false,
       draft: false,
+      pr: false,
       pull: false,
       baseBranch: undefined,
       pane: false,
@@ -205,6 +207,7 @@ describe("parseCreateArgs", () => {
       danger: false,
       merge: false,
       draft: false,
+      pr: false,
       pull: false,
       baseBranch: undefined,
       pane: false,
@@ -223,6 +226,7 @@ describe("parseCreateArgs", () => {
       danger: true,
       merge: false,
       draft: false,
+      pr: false,
       pull: false,
       baseBranch: undefined,
       pane: false,
@@ -241,6 +245,7 @@ describe("parseCreateArgs", () => {
       danger: true,
       merge: false,
       draft: false,
+      pr: false,
       pull: false,
       baseBranch: undefined,
       pane: false,
@@ -259,6 +264,7 @@ describe("parseCreateArgs", () => {
       danger: true,
       merge: false,
       draft: false,
+      pr: false,
       pull: false,
       baseBranch: undefined,
       pane: false,
@@ -277,6 +283,7 @@ describe("parseCreateArgs", () => {
       danger: false,
       merge: true,
       draft: false,
+      pr: false,
       pull: false,
       baseBranch: undefined,
       pane: false,
@@ -295,6 +302,7 @@ describe("parseCreateArgs", () => {
       danger: false,
       merge: true,
       draft: false,
+      pr: false,
       pull: false,
       baseBranch: undefined,
       pane: false,
@@ -313,6 +321,7 @@ describe("parseCreateArgs", () => {
       danger: true,
       merge: true,
       draft: false,
+      pr: false,
       pull: false,
       baseBranch: undefined,
       pane: false,
@@ -331,6 +340,7 @@ describe("parseCreateArgs", () => {
       danger: false,
       merge: true,
       draft: false,
+      pr: false,
       pull: false,
       baseBranch: undefined,
       pane: false,
@@ -359,6 +369,7 @@ describe("parseCreateArgs", () => {
       danger: true,
       merge: false,
       draft: true,
+      pr: false,
       pull: true,
       baseBranch: undefined,
       pane: true,
@@ -377,6 +388,7 @@ describe("parseCreateArgs", () => {
       danger: false,
       merge: false,
       draft: false,
+      pr: false,
       pull: false,
       baseBranch: "develop",
       pane: false,
@@ -395,6 +407,7 @@ describe("parseCreateArgs", () => {
       danger: false,
       merge: false,
       draft: false,
+      pr: false,
       pull: false,
       baseBranch: "develop",
       pane: false,
@@ -413,6 +426,7 @@ describe("parseCreateArgs", () => {
       danger: true,
       merge: false,
       draft: false,
+      pr: false,
       pull: false,
       baseBranch: "develop",
       pane: false,
@@ -431,6 +445,7 @@ describe("parseCreateArgs", () => {
       danger: false,
       merge: true,
       draft: false,
+      pr: false,
       pull: false,
       baseBranch: "develop",
       pane: false,
@@ -449,6 +464,7 @@ describe("parseCreateArgs", () => {
       danger: false,
       merge: false,
       draft: false,
+      pr: false,
       pull: false,
       baseBranch: "develop",
       pane: false,
@@ -479,6 +495,7 @@ describe("parseCreateArgs", () => {
       danger: true,
       merge: false,
       draft: true,
+      pr: false,
       pull: true,
       baseBranch: "develop",
       pane: true,
@@ -497,6 +514,7 @@ describe("parseCreateArgs", () => {
       danger: false,
       merge: false,
       draft: true,
+      pr: false,
       pull: false,
       baseBranch: undefined,
       pane: false,
@@ -515,6 +533,7 @@ describe("parseCreateArgs", () => {
       danger: true,
       merge: false,
       draft: true,
+      pr: false,
       pull: false,
       baseBranch: undefined,
       pane: false,
@@ -533,6 +552,7 @@ describe("parseCreateArgs", () => {
       danger: false,
       merge: false,
       draft: true,
+      pr: false,
       pull: false,
       baseBranch: "develop",
       pane: false,
@@ -551,6 +571,7 @@ describe("parseCreateArgs", () => {
       danger: false,
       merge: false,
       draft: true,
+      pr: false,
       pull: false,
       baseBranch: undefined,
       pane: false,
@@ -569,6 +590,7 @@ describe("parseCreateArgs", () => {
       danger: false,
       merge: false,
       draft: false,
+      pr: false,
       pull: false,
       baseBranch: undefined,
       pane: true,
@@ -587,6 +609,7 @@ describe("parseCreateArgs", () => {
       danger: false,
       merge: false,
       draft: false,
+      pr: false,
       pull: false,
       baseBranch: undefined,
       pane: true,
@@ -605,6 +628,7 @@ describe("parseCreateArgs", () => {
       danger: true,
       merge: false,
       draft: false,
+      pr: false,
       pull: false,
       baseBranch: undefined,
       pane: true,
@@ -623,6 +647,7 @@ describe("parseCreateArgs", () => {
       danger: false,
       merge: false,
       draft: true,
+      pr: false,
       pull: false,
       baseBranch: "develop",
       pane: true,
@@ -641,6 +666,7 @@ describe("parseCreateArgs", () => {
       danger: false,
       merge: false,
       draft: false,
+      pr: false,
       pull: true,
       baseBranch: undefined,
       pane: false,
@@ -659,6 +685,7 @@ describe("parseCreateArgs", () => {
       danger: false,
       merge: false,
       draft: false,
+      pr: false,
       pull: true,
       baseBranch: "main",
       pane: false,
@@ -716,9 +743,78 @@ describe("parseCreateArgs", () => {
     expect(result.prompt).toBe("Prompt");
   });
 
+  test("-pr option", () => {
+    const result = parseCreateArgs(["feature/test", "Prompt", "-pr"]);
+    expect(result).toEqual({
+      branchName: "feature/test",
+      prompt: "Prompt",
+      planFile: undefined,
+      danger: false,
+      merge: false,
+      draft: false,
+      pr: true,
+      pull: false,
+      baseBranch: undefined,
+      pane: false,
+      quiet: false,
+      verbose: false,
+      dryRun: false,
+    });
+  });
+
+  test("-pr + -base options", () => {
+    const result = parseCreateArgs(["feature/test", "Prompt", "-pr", "-base", "develop"]);
+    expect(result).toEqual({
+      branchName: "feature/test",
+      prompt: "Prompt",
+      planFile: undefined,
+      danger: false,
+      merge: false,
+      draft: false,
+      pr: true,
+      pull: false,
+      baseBranch: "develop",
+      pane: false,
+      quiet: false,
+      verbose: false,
+      dryRun: false,
+    });
+  });
+
+  test("-pr + -danger options", () => {
+    const result = parseCreateArgs(["feature/test", "Prompt", "-pr", "-danger"]);
+    expect(result).toEqual({
+      branchName: "feature/test",
+      prompt: "Prompt",
+      planFile: undefined,
+      danger: true,
+      merge: false,
+      draft: false,
+      pr: true,
+      pull: false,
+      baseBranch: undefined,
+      pane: false,
+      quiet: false,
+      verbose: false,
+      dryRun: false,
+    });
+  });
+
   test("-merge + -draft throws mutually exclusive error", () => {
     expect(() => parseCreateArgs(["feature/test", "Prompt", "-merge", "-draft"])).toThrow(
       "Cannot use both -merge and -draft options",
+    );
+  });
+
+  test("-merge + -pr throws mutually exclusive error", () => {
+    expect(() => parseCreateArgs(["feature/test", "Prompt", "-merge", "-pr"])).toThrow(
+      "Cannot use both -merge and -pr options",
+    );
+  });
+
+  test("-draft + -pr throws mutually exclusive error", () => {
+    expect(() => parseCreateArgs(["feature/test", "Prompt", "-draft", "-pr"])).toThrow(
+      "Cannot use both -draft and -pr options",
     );
   });
 
@@ -1384,6 +1480,7 @@ describe("run", () => {
       danger: false,
       merge: false,
       draft: false,
+      pr: false,
       pull: false,
       pane: false,
       quiet: false,

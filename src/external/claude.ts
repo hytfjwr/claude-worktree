@@ -1,4 +1,10 @@
-import type { ClaudeOptions, DraftInstructions, MergeInstructions, ResumeCommandOptions } from "../types/index.ts";
+import type {
+  ClaudeOptions,
+  DraftInstructions,
+  MergeInstructions,
+  PrInstructions,
+  ResumeCommandOptions,
+} from "../types/index.ts";
 
 const DEFAULT_PROMPT_SUFFIX = "\n\nIf anything is unclear, always confirm with the user before proceeding.";
 
@@ -39,6 +45,27 @@ After completing the task, execute the following steps:
 4. **Report completion**
    - Report the URL of the created PR`;
 
+const PR_INSTRUCTION_TEMPLATE = `
+
+---
+## [IMPORTANT] Post-Task Steps
+
+After completing the task, execute the following steps:
+
+1. **Commit all changes**
+   - Commit the changes appropriately
+
+2. **Push to remote**
+   - git push -u origin {branchName}
+
+3. **Create a PR**
+   - Command: gh pr create --base {baseBranch}
+   - Title: Generate an appropriate title summarizing the changes
+   - Body: If a PR template exists under .github in the current directory, follow that format. Otherwise, write a summary of the changes
+
+4. **Report completion**
+   - Report the URL of the created PR`;
+
 function buildMergeInstructions(mergeInstructions: MergeInstructions): string {
   return MERGE_INSTRUCTION_TEMPLATE.replace("{baseBranch}", mergeInstructions.baseBranch).replace(
     "{worktreePath}",
@@ -50,6 +77,13 @@ function buildDraftInstructions(draftInstructions: DraftInstructions): string {
   return DRAFT_INSTRUCTION_TEMPLATE.replace("{baseBranch}", draftInstructions.baseBranch).replace(
     "{branchName}",
     draftInstructions.branchName,
+  );
+}
+
+function buildPrInstructions(prInstructions: PrInstructions): string {
+  return PR_INSTRUCTION_TEMPLATE.replace("{baseBranch}", prInstructions.baseBranch).replace(
+    "{branchName}",
+    prInstructions.branchName,
   );
 }
 
@@ -89,6 +123,7 @@ export function buildClaudeCommand(options: ClaudeOptions): string {
     dangerouslySkipPermissions = false,
     mergeInstructions,
     draftInstructions,
+    prInstructions,
   } = options;
 
   let fullPrompt = prompt + promptSuffix;
@@ -99,6 +134,10 @@ export function buildClaudeCommand(options: ClaudeOptions): string {
 
   if (draftInstructions) {
     fullPrompt += buildDraftInstructions(draftInstructions);
+  }
+
+  if (prInstructions) {
+    fullPrompt += buildPrInstructions(prInstructions);
   }
 
   const dangerFlag = dangerouslySkipPermissions ? "--dangerously-skip-permissions " : "";

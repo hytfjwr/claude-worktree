@@ -36,7 +36,8 @@ Options:
   -b, -base <branch>  Specify base branch (default: current branch)
   -d, -danger     Skip workspace warning (uses --dangerously-skip-permissions)
   -m, -merge      Auto-merge into base branch and cleanup after task completion
-  -draft          Auto-create Draft PR after task completion (cannot be used with -merge)
+  -draft          Auto-create Draft PR after task completion (cannot be used with -merge or -pr)
+  -pr             Auto-create PR after task completion (cannot be used with -merge or -draft)
   -pull           Fetch latest base branch from remote before creating worktree
   -n, -dry-run    Preview what would be created without executing
   -q, -quiet      Suppress informational output (errors only)
@@ -73,6 +74,8 @@ Examples:
   claude-worktree feature/auth 'Implement authentication feature' -merge
   claude-worktree feature/auth 'Implement authentication feature' -draft
   claude-worktree feature/auth 'Implement authentication feature' -draft -base main
+  claude-worktree feature/auth 'Implement authentication feature' -pr
+  claude-worktree feature/auth 'Implement authentication feature' -pr -base main
   claude-worktree feature/auth 'Prompt' -dry-run
   claude-worktree resume feature/auth
   claude-worktree resume feature/auth 'Continue implementation'
@@ -105,7 +108,8 @@ Options:
   -b, -base <branch>   Specify base branch (default: current branch)
   -d, -danger          Skip workspace warning (uses --dangerously-skip-permissions)
   -m, -merge           Auto-merge into base branch and cleanup after task completion
-  -draft               Auto-create Draft PR after task completion (cannot be used with -merge)
+  -draft               Auto-create Draft PR after task completion (cannot be used with -merge or -pr)
+  -pr                  Auto-create PR after task completion (cannot be used with -merge or -draft)
   -pull                Fetch latest base branch from remote before creating worktree
   -n, -dry-run         Preview what would be created without executing
   -q, -quiet           Suppress informational output (errors only)
@@ -119,6 +123,7 @@ Examples:
   claude-worktree feature/auth 'Implement auth' -base develop
   claude-worktree feature/auth 'Implement auth' -merge
   claude-worktree feature/auth 'Implement auth' -draft -base main
+  claude-worktree feature/auth 'Implement auth' -pr -base main
   claude-worktree feature/auth 'Implement auth' -dry-run`);
 }
 
@@ -279,6 +284,7 @@ export function parseCreateArgs(args: string[]): CreateArgs {
       danger: { type: "boolean", flag: "-danger", alias: "-d" },
       merge: { type: "boolean", flag: "-merge", alias: "-m" },
       draft: { type: "boolean", flag: "-draft" },
+      pr: { type: "boolean", flag: "-pr" },
       pull: { type: "boolean", flag: "-pull" },
       dryRun: { type: "boolean", flag: "-dry-run", alias: "-n" },
       quiet: { type: "boolean", flag: "-quiet", alias: "-q" },
@@ -291,18 +297,19 @@ export function parseCreateArgs(args: string[]): CreateArgs {
     unknownErrorPrefix: "Unknown option",
   });
 
-  const { pane, danger, merge, draft, pull, dryRun, quiet, verbose } = booleans;
+  const { pane, danger, merge, draft, pr, pull, dryRun, quiet, verbose } = booleans;
   const { baseBranch, planFile } = strings;
 
-  // Mutual exclusivity check for -merge and -draft
-  if (merge && draft) {
+  // Mutual exclusivity check for -merge, -draft, and -pr
+  const exclusiveFlags = [merge && "-merge", draft && "-draft", pr && "-pr"].filter(Boolean) as string[];
+
+  if (exclusiveFlags.length > 1) {
     throw new UsageError(
-      "Cannot use both -merge and -draft options.\n\n" +
+      `Cannot use both ${exclusiveFlags[0]} and ${exclusiveFlags[1]} options.\n\n` +
         "  -merge  Auto-merge into base branch and cleanup after task completion\n" +
-        "  -draft  Auto-create a Draft PR after task completion\n\n" +
-        "Example:\n" +
-        "  claude-worktree feature/auth 'Implement auth' -merge\n" +
-        "  claude-worktree feature/auth 'Implement auth' -draft -base main",
+        "  -draft  Auto-create a Draft PR after task completion\n" +
+        "  -pr     Auto-create a PR after task completion\n\n" +
+        "These options are mutually exclusive. Use only one.",
     );
   }
 
@@ -325,6 +332,7 @@ export function parseCreateArgs(args: string[]): CreateArgs {
     danger,
     merge,
     draft,
+    pr,
     pull,
     baseBranch,
     pane,

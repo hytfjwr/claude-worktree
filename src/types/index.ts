@@ -4,6 +4,7 @@ export type {
   DraftInstructions,
   MergeInstructions,
   PermissionMode,
+  PrInstructions,
   ResumeCommandOptions,
 } from "./claude.ts";
 export { VALID_PERMISSION_MODES } from "./claude.ts";

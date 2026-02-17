@@ -144,7 +144,7 @@ export function getSelfCommand(): string {
  * Build Claude command options from create args and git context.
  */
 export function buildClaudeOptions(
-  args: Pick<CreateArgs, "prompt" | "danger" | "merge" | "draft">,
+  args: Pick<CreateArgs, "prompt" | "danger" | "merge" | "draft" | "pr">,
   git: GitContext,
   worktreePath: string,
   effectiveBaseBranch: string,
@@ -163,6 +163,12 @@ export function buildClaudeOptions(
     }),
     ...(args.draft && {
       draftInstructions: {
+        baseBranch: effectiveBaseBranch,
+        branchName,
+      },
+    }),
+    ...(args.pr && {
+      prInstructions: {
         baseBranch: effectiveBaseBranch,
         branchName,
       },
@@ -436,7 +442,7 @@ async function launchClaudeInTerminal(
 // =============================================================================
 
 export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps): Promise<void> {
-  const { branchName, planFile, merge, draft, baseBranch, pane } = args;
+  const { branchName, planFile, merge, draft, pr, baseBranch, pane } = args;
   let { prompt } = args;
 
   // Check WezTerm availability when -pane is specified
@@ -569,6 +575,9 @@ export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps
   }
   if (draft) {
     logInfo(`${icons.memo()} Draft PR to: ${effectiveBaseBranch}`);
+  }
+  if (pr) {
+    logInfo(`${icons.memo()} PR to: ${effectiveBaseBranch}`);
   }
   if (args.pull) {
     logInfo(`${icons.sparkle()} Pull: fetch latest from remote`);
