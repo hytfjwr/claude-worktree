@@ -4,6 +4,7 @@ import {
   fetchAndPrune,
   getAheadBehind,
   getLastCommit,
+  getRemoteBranches,
   getRemoteTrackingBranches,
   getWorktreeStatuses,
   listWorktrees,
@@ -26,6 +27,7 @@ import { startSpinner } from "../ui/spinner.ts";
 
 const defaultDeps: ListDeps = {
   getRemoteTrackingBranches,
+  getRemoteBranches,
   fetchAndPrune,
   listWorktrees,
   getWorktreeStatuses,
@@ -176,8 +178,12 @@ export async function executeList(args: ListArgs, deps: ListDeps = defaultDeps):
   try {
     // Capture remote tracking branches BEFORE fetching/pruning
     let trackedBranches: Set<string> | undefined;
+    let remoteBranches: Set<string> | undefined;
     try {
-      trackedBranches = await deps.getRemoteTrackingBranches();
+      [trackedBranches, remoteBranches] = await Promise.all([
+        deps.getRemoteTrackingBranches(),
+        deps.getRemoteBranches(),
+      ]);
     } catch {
       // Continue without tracking info
     }
@@ -192,7 +198,7 @@ export async function executeList(args: ListArgs, deps: ListDeps = defaultDeps):
     const { worktrees, mainBranch } = await deps.listWorktrees();
 
     if (worktrees.length > 0) {
-      const statuses = await deps.getWorktreeStatuses(worktrees, mainBranch, trackedBranches);
+      const statuses = await deps.getWorktreeStatuses(worktrees, mainBranch, trackedBranches, remoteBranches);
 
       // Fetch panes and sessions by default (skip with -no-status)
       const panes = args.noStatus ? null : await deps.listWeztermPanes();

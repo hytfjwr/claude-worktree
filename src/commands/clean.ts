@@ -4,6 +4,7 @@ import {
   deleteLocalBranch,
   fetchAndPrune,
   getGitContext,
+  getRemoteBranches,
   getRemoteTrackingBranches,
   getWorktreeStatuses,
   listWorktrees,
@@ -29,6 +30,7 @@ import { createTailUpdater, startSpinner } from "../ui/spinner.ts";
 
 const defaultDeps: CleanDeps = {
   getRemoteTrackingBranches,
+  getRemoteBranches,
   fetchAndPrune,
   listWorktrees,
   getWorktreeStatuses,
@@ -60,8 +62,9 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
   // Capture remote tracking branches BEFORE fetching/pruning
   // so we can distinguish "never pushed" from "remote deleted"
   let trackedBranches: Set<string> | undefined;
+  let remoteBranches: Set<string> | undefined;
   try {
-    trackedBranches = await deps.getRemoteTrackingBranches();
+    [trackedBranches, remoteBranches] = await Promise.all([deps.getRemoteTrackingBranches(), deps.getRemoteBranches()]);
   } catch {
     // Continue without tracking info
   }
@@ -88,7 +91,7 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
       return result;
     }
 
-    statuses = await deps.getWorktreeStatuses(worktrees, listResult.mainBranch, trackedBranches);
+    statuses = await deps.getWorktreeStatuses(worktrees, listResult.mainBranch, trackedBranches, remoteBranches);
     listSpinner.stop(`${icons.success()} Done fetching worktree list.`);
   } catch (error) {
     listSpinner.fail("Failed to fetch worktree list");

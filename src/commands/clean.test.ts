@@ -16,6 +16,7 @@ function makeSpinner() {
 function makeDeps(overrides: Partial<CleanDeps> = {}): CleanDeps {
   return {
     getRemoteTrackingBranches: async () => new Set<string>(),
+    getRemoteBranches: async () => new Set<string>(),
     fetchAndPrune: async () => {},
     listWorktrees: async () => ({ worktrees: [], mainBranch: "main" }),
     getWorktreeStatuses: async () => [],

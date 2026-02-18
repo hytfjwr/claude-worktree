@@ -222,6 +222,37 @@ export async function getRemoteTrackingBranches(): Promise<Set<string>> {
   return new Set(branches.filter((b) => b !== "HEAD"));
 }
 
+/**
+ * Fetch all remote branch names in a single `git ls-remote --heads origin` call.
+ * Returns a Set of branch names (e.g. "main", "feature/foo").
+ */
+export async function getRemoteBranches(): Promise<Set<string>> {
+  const result = await exec("git", ["ls-remote", "--heads", "origin"]).nothrow().quiet();
+  if (result.exitCode !== 0) {
+    return new Set();
+  }
+  const branches = result
+    .text()
+    .trim()
+    .split("\n")
+    .filter((line) => line.length > 0)
+    .map((line) => line.replace(/.*refs\/heads\//, ""));
+  return new Set(branches);
+}
+
+/**
+ * Pure function: check if a branch was deleted from remote using pre-fetched data.
+ * No network call — O(1) lookup.
+ */
+export function isRemoteBranchDeletedFrom(
+  branch: string,
+  trackedBranches: Set<string>,
+  remoteBranches: Set<string>,
+): boolean {
+  if (!trackedBranches.has(branch)) return false;
+  return !remoteBranches.has(branch);
+}
+
 export async function isRemoteBranchDeleted(branch: string, trackedBranches: Set<string>): Promise<boolean> {
   // If the branch was never tracked on remote, it's not "remote deleted"
   if (!trackedBranches.has(branch)) {
@@ -326,6 +357,7 @@ export async function getWorktreeStatuses(
   worktrees: WorktreeInfo[],
   mainBranch: string,
   trackedBranches?: Set<string>,
+  remoteBranches?: Set<string>,
 ): Promise<WorktreeStatus[]> {
   const effectiveTracked = trackedBranches ?? new Set<string>();
   return promiseAllLimit(
@@ -360,10 +392,14 @@ export async function getWorktreeStatuses(
         };
       }
 
-      const [branchMerged, branchDeletedOnRemote] = await Promise.all([
-        worktree.branch ? isBranchMerged(worktree.branch, mainBranch) : false,
-        worktree.branch ? isRemoteBranchDeleted(worktree.branch, effectiveTracked) : false,
-      ]);
+      // Use batched remoteBranches (sync) when available, otherwise fall back to per-branch network call
+      const branchDeletedOnRemote = worktree.branch
+        ? remoteBranches
+          ? isRemoteBranchDeletedFrom(worktree.branch, effectiveTracked, remoteBranches)
+          : await isRemoteBranchDeleted(worktree.branch, effectiveTracked)
+        : false;
+
+      const branchMerged = worktree.branch ? await isBranchMerged(worktree.branch, mainBranch) : false;
       const canAutoClean = branchMerged || branchDeletedOnRemote;
 
       let reason = "";

@@ -20,12 +20,14 @@ export type CleanResult = {
 
 export type CleanDeps = {
   getRemoteTrackingBranches: () => Promise<Set<string>>;
+  getRemoteBranches: () => Promise<Set<string>>;
   fetchAndPrune: () => Promise<void>;
   listWorktrees: () => Promise<ListWorktreesResult>;
   getWorktreeStatuses: (
     worktrees: WorktreeInfo[],
     mainBranch: string,
     trackedBranches?: Set<string>,
+    remoteBranches?: Set<string>,
   ) => Promise<WorktreeStatus[]>;
   removeWorktree: (path: string, force?: boolean) => Promise<void>;
   deleteLocalBranch: (branchName: string, force?: boolean) => Promise<void>;

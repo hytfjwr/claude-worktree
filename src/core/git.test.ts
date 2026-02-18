@@ -628,6 +628,92 @@ describe("isRemoteBranchDeleted", () => {
   });
 });
 
+describe("getRemoteBranches", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    mockExecImpl.current = null;
+  });
+  afterEach(() => {
+    mockExecImpl.current = null;
+  });
+
+  test("returns set of remote branch names", async () => {
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("ls-remote") && args.includes("--heads")) {
+        return {
+          stdout: "abc123\trefs/heads/main\ndef456\trefs/heads/feature/test\nghi789\trefs/heads/develop\n",
+        };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { getRemoteBranches } = await import("./git.ts");
+    const branches = await getRemoteBranches();
+
+    expect(branches).toEqual(new Set(["main", "feature/test", "develop"]));
+  });
+
+  test("returns empty set when command fails", async () => {
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("ls-remote")) {
+        return { stdout: "", exitCode: 128 };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { getRemoteBranches } = await import("./git.ts");
+    const branches = await getRemoteBranches();
+
+    expect(branches).toEqual(new Set());
+  });
+
+  test("returns empty set on empty output", async () => {
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("ls-remote") && args.includes("--heads")) {
+        return { stdout: "" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { getRemoteBranches } = await import("./git.ts");
+    const branches = await getRemoteBranches();
+
+    expect(branches).toEqual(new Set());
+  });
+});
+
+describe("isRemoteBranchDeletedFrom", () => {
+  test("branch exists on remote - false", async () => {
+    const { isRemoteBranchDeletedFrom } = await import("./git.ts");
+    const tracked = new Set(["main", "feature/test"]);
+    const remote = new Set(["main", "feature/test"]);
+
+    expect(isRemoteBranchDeletedFrom("feature/test", tracked, remote)).toBe(false);
+  });
+
+  test("branch deleted from remote - true", async () => {
+    const { isRemoteBranchDeletedFrom } = await import("./git.ts");
+    const tracked = new Set(["main", "feature/deleted"]);
+    const remote = new Set(["main"]);
+
+    expect(isRemoteBranchDeletedFrom("feature/deleted", tracked, remote)).toBe(true);
+  });
+
+  test("branch never tracked - false", async () => {
+    const { isRemoteBranchDeletedFrom } = await import("./git.ts");
+    const tracked = new Set(["main"]);
+    const remote = new Set(["main"]);
+
+    expect(isRemoteBranchDeletedFrom("feature/local-only", tracked, remote)).toBe(false);
+  });
+
+  test("empty tracked set - always false", async () => {
+    const { isRemoteBranchDeletedFrom } = await import("./git.ts");
+
+    expect(isRemoteBranchDeletedFrom("feature/test", new Set(), new Set())).toBe(false);
+  });
+});
+
 describe("listWorktrees", () => {
   beforeEach(() => {
     vi.resetModules();
@@ -1374,6 +1460,51 @@ describe("getWorktreeStatuses", () => {
 
     expect(statuses[0].branchDeletedOnRemote).toBe(false);
     expect(statuses[0].canAutoClean).toBe(false);
+    expect(statuses[0].reason).toBe("Active");
+  });
+
+  test("uses batched remoteBranches when provided (no ls-remote calls)", async () => {
+    let lsRemoteCalled = false;
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("ls-remote")) {
+        lsRemoteCalled = true;
+        return { stdout: "" };
+      }
+      if (args.includes("--merged")) {
+        return { stdout: "  main\n" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { getWorktreeStatuses } = await import("./git.ts");
+    const worktree = createWorktree();
+    const tracked = new Set(["feature/test"]);
+    const remote = new Set(["main"]); // feature/test not on remote => deleted
+
+    const statuses = await getWorktreeStatuses([worktree], "main", tracked, remote);
+
+    expect(lsRemoteCalled).toBe(false);
+    expect(statuses[0].branchDeletedOnRemote).toBe(true);
+    expect(statuses[0].canAutoClean).toBe(true);
+    expect(statuses[0].reason).toBe("Remote deleted");
+  });
+
+  test("batched remoteBranches: branch exists on remote", async () => {
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("--merged")) {
+        return { stdout: "  main\n" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { getWorktreeStatuses } = await import("./git.ts");
+    const worktree = createWorktree();
+    const tracked = new Set(["feature/test"]);
+    const remote = new Set(["main", "feature/test"]); // feature/test exists on remote
+
+    const statuses = await getWorktreeStatuses([worktree], "main", tracked, remote);
+
+    expect(statuses[0].branchDeletedOnRemote).toBe(false);
     expect(statuses[0].reason).toBe("Active");
   });
 });
