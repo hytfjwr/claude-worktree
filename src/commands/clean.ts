@@ -9,8 +9,8 @@ import {
   listWorktrees,
   removeWorktree,
 } from "../core/git.ts";
-import { deleteSession } from "../core/session.ts";
-import { deleteSlot, readSlot } from "../core/slot.ts";
+import { deleteSession, gcSessions } from "../core/session.ts";
+import { deleteSlot, gcSlots, readSlot } from "../core/slot.ts";
 import { checkGhAvailable, getPullRequestForBranch } from "../external/github.ts";
 import type {
   CleanArgs,
@@ -40,6 +40,8 @@ const defaultDeps: CleanDeps = {
   readSlot,
   deleteSlot,
   deleteSession,
+  gcSessions,
+  gcSlots,
   confirm,
   selectMultiple,
   startSpinner,
@@ -295,6 +297,19 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
       spinner.fail(`${label}: ${message}`);
       result.errors.push({ path: worktree.path, error: message });
     }
+  }
+
+  // Garbage collect stale cache entries
+  try {
+    const freshList = await deps.listWorktrees();
+    const validPaths = new Set(freshList.worktrees.map((w) => w.path));
+    const [gcSessionCount, gcSlotCount] = await Promise.all([deps.gcSessions(validPaths), deps.gcSlots(validPaths)]);
+    if (gcSessionCount > 0 || gcSlotCount > 0) {
+      logDebug(`GC: removed ${gcSessionCount} stale session(s) and ${gcSlotCount} stale slot(s)`);
+    }
+  } catch (error) {
+    const message = getErrorMessage(error);
+    logDebug(`GC failed (non-critical): ${message}`);
   }
 
   // Summary

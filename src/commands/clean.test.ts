@@ -33,6 +33,8 @@ function makeDeps(overrides: Partial<CleanDeps> = {}): CleanDeps {
     readSlot: async () => undefined,
     deleteSlot: async () => {},
     deleteSession: async () => {},
+    gcSessions: async () => 0,
+    gcSlots: async () => 0,
     confirm: async () => true,
     selectMultiple: async () => [],
     startSpinner: () => makeSpinner(),
@@ -1195,6 +1197,108 @@ describe("executeClean", () => {
       expect(receivedStatuses[0].reason).toContain("PR: #789");
       expect(receivedStatuses[0].reason).toContain("New feature");
       expect(receivedStatuses[0].reason).toContain("OPEN");
+    });
+  });
+
+  describe("garbage collection", () => {
+    test("calls gcSessions and gcSlots after deletion", async () => {
+      const worktree = makeWorktree({ path: "/tmp/repo-gc", branch: "feature/gc" });
+      const status = makeStatus({ path: "/tmp/repo-gc", branch: "feature/gc" }, { canAutoClean: true });
+      let gcSessionsCalled = false;
+      let gcSlotsCalled = false;
+      const deps = makeDeps({
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
+        getWorktreeStatuses: async () => [status],
+        gcSessions: async () => {
+          gcSessionsCalled = true;
+          return 0;
+        },
+        gcSlots: async () => {
+          gcSlotsCalled = true;
+          return 0;
+        },
+      });
+
+      await executeClean({ ...defaultArgs, force: true }, deps);
+
+      expect(gcSessionsCalled).toBe(true);
+      expect(gcSlotsCalled).toBe(true);
+    });
+
+    test("passes current worktree paths to GC functions", async () => {
+      const worktree = makeWorktree({ path: "/tmp/repo-gc-paths", branch: "feature/gc-paths" });
+      const status = makeStatus({ path: "/tmp/repo-gc-paths", branch: "feature/gc-paths" }, { canAutoClean: true });
+      const mainWorktree = makeWorktree({ path: "/repo", branch: "main", isMain: true });
+      let sessionPaths: Set<string> | undefined;
+      let slotPaths: Set<string> | undefined;
+      // After deletion, listWorktrees returns only the main worktree
+      let listCallCount = 0;
+      const deps = makeDeps({
+        listWorktrees: async () => {
+          listCallCount++;
+          if (listCallCount === 1) {
+            return { worktrees: [worktree, mainWorktree], mainBranch: "main" };
+          }
+          return { worktrees: [mainWorktree], mainBranch: "main" };
+        },
+        getWorktreeStatuses: async () => [status],
+        gcSessions: async (paths) => {
+          sessionPaths = paths;
+          return 0;
+        },
+        gcSlots: async (paths) => {
+          slotPaths = paths;
+          return 0;
+        },
+      });
+
+      await executeClean({ ...defaultArgs, force: true }, deps);
+
+      expect(sessionPaths).toEqual(new Set(["/repo"]));
+      expect(slotPaths).toEqual(new Set(["/repo"]));
+    });
+
+    test("does not fail when GC throws", async () => {
+      const worktree = makeWorktree({ path: "/tmp/repo-gc-fail", branch: "feature/gc-fail" });
+      const status = makeStatus({ path: "/tmp/repo-gc-fail", branch: "feature/gc-fail" }, { canAutoClean: true });
+      const deps = makeDeps({
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
+        getWorktreeStatuses: async () => [status],
+        gcSessions: async () => {
+          throw new Error("GC error");
+        },
+        gcSlots: async () => {
+          throw new Error("GC error");
+        },
+      });
+
+      const result = await executeClean({ ...defaultArgs, force: true }, deps);
+
+      expect(result.deleted).toEqual(["/tmp/repo-gc-fail"]);
+    });
+
+    test("does not call GC in dry-run mode", async () => {
+      const worktree = makeWorktree({ path: "/tmp/repo-gc-dry", branch: "feature/gc-dry" });
+      const status = makeStatus({ path: "/tmp/repo-gc-dry", branch: "feature/gc-dry" }, { canAutoClean: true });
+      let gcSessionsCalled = false;
+      let gcSlotsCalled = false;
+      const deps = makeDeps({
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
+        getWorktreeStatuses: async () => [status],
+        gcSessions: async () => {
+          gcSessionsCalled = true;
+          return 0;
+        },
+        gcSlots: async () => {
+          gcSlotsCalled = true;
+          return 0;
+        },
+      });
+
+      await executeClean({ ...defaultArgs, dryRun: true }, deps);
+
+      expect(gcSessionsCalled).toBe(false);
+      expect(gcSlotsCalled).toBe(false);
     });
   });
 });

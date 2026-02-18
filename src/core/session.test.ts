@@ -22,6 +22,8 @@ import {
   deleteSession,
   determineSessionStatus,
   formatElapsed,
+  gcSessions,
+  readAllSessions,
   readSession,
   saveSession,
 } from "./session.ts";
@@ -255,5 +257,73 @@ describe("session file I/O", () => {
     const { LockAcquisitionError } = await import("./errors.ts");
     const session: SessionInfo = { mode: "terminal", startedAt: "2025-01-15T11:00:00Z" };
     await expect(saveSession("/tmp/wt-lock-test", session)).rejects.toThrow(LockAcquisitionError);
+  });
+});
+
+// ============================================================================
+// GC tests
+// ============================================================================
+
+describe("gcSessions", () => {
+  let tempDir: string;
+  let restoreEnv: () => void;
+
+  beforeEach(async () => {
+    tempDir = join(tmpdir(), `claude-worktree-gc-session-test-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+    await mkdir(tempDir, { recursive: true });
+    restoreEnv = saveEnv("CLAUDE_WORKTREE_CACHE_DIR");
+    process.env.CLAUDE_WORKTREE_CACHE_DIR = tempDir;
+  });
+
+  afterEach(async () => {
+    restoreEnv();
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  test("removes sessions not in validPaths", async () => {
+    await saveSession("/tmp/wt-valid", { mode: "terminal", startedAt: "2025-01-15T11:00:00Z" });
+    await saveSession("/tmp/wt-stale", { mode: "pane", paneId: 1, startedAt: "2025-01-15T12:00:00Z" });
+
+    const removed = await gcSessions(new Set(["/tmp/wt-valid"]));
+
+    expect(removed).toBe(1);
+    expect(await readSession("/tmp/wt-valid")).toBeDefined();
+    expect(await readSession("/tmp/wt-stale")).toBeUndefined();
+  });
+
+  test("returns 0 when all sessions are valid", async () => {
+    await saveSession("/tmp/wt-a", { mode: "terminal", startedAt: "2025-01-15T11:00:00Z" });
+
+    const removed = await gcSessions(new Set(["/tmp/wt-a"]));
+
+    expect(removed).toBe(0);
+    expect(await readSession("/tmp/wt-a")).toBeDefined();
+  });
+
+  test("returns 0 when no sessions exist", async () => {
+    const removed = await gcSessions(new Set(["/tmp/wt-a"]));
+
+    expect(removed).toBe(0);
+  });
+
+  test("removes file when all sessions are stale", async () => {
+    await saveSession("/tmp/wt-stale", { mode: "terminal", startedAt: "2025-01-15T11:00:00Z" });
+
+    const removed = await gcSessions(new Set());
+
+    expect(removed).toBe(1);
+    expect(existsSync(join(tempDir, "sessions.json"))).toBe(false);
+  });
+
+  test("removes multiple stale sessions", async () => {
+    await saveSession("/tmp/wt-valid", { mode: "terminal", startedAt: "2025-01-15T11:00:00Z" });
+    await saveSession("/tmp/wt-stale1", { mode: "terminal", startedAt: "2025-01-15T12:00:00Z" });
+    await saveSession("/tmp/wt-stale2", { mode: "pane", paneId: 2, startedAt: "2025-01-15T13:00:00Z" });
+
+    const removed = await gcSessions(new Set(["/tmp/wt-valid"]));
+
+    expect(removed).toBe(2);
+    const all = await readAllSessions();
+    expect(Object.keys(all)).toEqual(["/tmp/wt-valid"]);
   });
 });

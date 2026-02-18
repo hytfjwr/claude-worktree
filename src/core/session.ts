@@ -94,6 +94,35 @@ export function determineSessionStatus(
   return { status: "running", elapsedMs, mode: session.mode, paneId: session.paneId };
 }
 
+export async function gcSessions(validPaths: Set<string>): Promise<number> {
+  let removed = 0;
+
+  await withLock(getLockFile(), async () => {
+    const cache = await readJsonFile<SessionCache>(getSessionFile(), {});
+    for (const path of Object.keys(cache)) {
+      if (!validPaths.has(path)) {
+        delete cache[path];
+        removed++;
+      }
+    }
+
+    if (removed === 0) return;
+
+    if (Object.keys(cache).length === 0) {
+      try {
+        await unlink(getSessionFile());
+      } catch {
+        // File may already be deleted
+      }
+      return;
+    }
+
+    await atomicWriteJson(getSessionFile(), cache);
+  });
+
+  return removed;
+}
+
 export function formatElapsed(elapsedMs: number): string {
   const totalMin = Math.floor(elapsedMs / 60_000);
   if (totalMin < 60) {

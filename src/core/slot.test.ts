@@ -18,7 +18,7 @@ import { createServer } from "node:net";
 import { saveEnv } from "../__test-utils__.ts";
 import { getCacheDir } from "./cache.ts";
 import { SlotError } from "./errors.ts";
-import { assignSlot, deleteSlot, findAvailableSlot, isPortInUse, readSlot, saveSlot } from "./slot.ts";
+import { assignSlot, deleteSlot, findAvailableSlot, gcSlots, isPortInUse, readSlot, saveSlot } from "./slot.ts";
 
 describe("slot cache", () => {
   let tempDir: string;
@@ -254,5 +254,73 @@ describe("assignSlot", () => {
   test("rejects invalid maxSlots", async () => {
     await expect(assignSlot("/tmp/x", 8880, 0)).rejects.toThrow(SlotError);
     await expect(assignSlot("/tmp/x", 8880, 0)).rejects.toThrow("Invalid maxSlots: 0");
+  });
+});
+
+describe("gcSlots", () => {
+  let tempDir: string;
+  let restoreEnv: () => void;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), "claude-worktree-gc-slot-test-"));
+    restoreEnv = saveEnv("CLAUDE_WORKTREE_CACHE_DIR");
+    process.env.CLAUDE_WORKTREE_CACHE_DIR = tempDir;
+  });
+
+  afterEach(() => {
+    restoreEnv();
+    try {
+      rmSync(tempDir, { recursive: true });
+    } catch {
+      // Ignore cleanup errors
+    }
+  });
+
+  test("removes slots not in validPaths", async () => {
+    await saveSlot("/tmp/repo-valid", 1);
+    await saveSlot("/tmp/repo-stale", 2);
+
+    const removed = await gcSlots(new Set(["/tmp/repo-valid"]));
+
+    expect(removed).toBe(1);
+    expect(await readSlot("/tmp/repo-valid")).toBe(1);
+    expect(await readSlot("/tmp/repo-stale")).toBeUndefined();
+  });
+
+  test("returns 0 when all slots are valid", async () => {
+    await saveSlot("/tmp/repo-a", 1);
+
+    const removed = await gcSlots(new Set(["/tmp/repo-a"]));
+
+    expect(removed).toBe(0);
+    expect(await readSlot("/tmp/repo-a")).toBe(1);
+  });
+
+  test("returns 0 when no slots exist", async () => {
+    const removed = await gcSlots(new Set(["/tmp/repo-a"]));
+
+    expect(removed).toBe(0);
+  });
+
+  test("removes file when all slots are stale", async () => {
+    await saveSlot("/tmp/repo-stale", 1);
+
+    const removed = await gcSlots(new Set());
+
+    expect(removed).toBe(1);
+    expect(existsSync(join(getCacheDir(), "slots.json"))).toBe(false);
+  });
+
+  test("removes multiple stale slots", async () => {
+    await saveSlot("/tmp/repo-valid", 1);
+    await saveSlot("/tmp/repo-stale1", 2);
+    await saveSlot("/tmp/repo-stale2", 3);
+
+    const removed = await gcSlots(new Set(["/tmp/repo-valid"]));
+
+    expect(removed).toBe(2);
+    expect(await readSlot("/tmp/repo-valid")).toBe(1);
+    expect(await readSlot("/tmp/repo-stale1")).toBeUndefined();
+    expect(await readSlot("/tmp/repo-stale2")).toBeUndefined();
   });
 });
