@@ -18,7 +18,7 @@ const CONCURRENCY_LIMIT = 5;
  * Run async task factories with a concurrency limit.
  * Each element in `tasks` is a zero-arg function that returns a Promise.
  */
-async function promiseAllLimit<T>(tasks: Array<() => Promise<T>>, limit = CONCURRENCY_LIMIT): Promise<T[]> {
+export async function promiseAllLimit<T>(tasks: Array<() => Promise<T>>, limit = CONCURRENCY_LIMIT): Promise<T[]> {
   const results: T[] = new Array(tasks.length);
   let nextIndex = 0;
 

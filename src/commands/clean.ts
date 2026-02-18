@@ -7,6 +7,7 @@ import {
   getRemoteTrackingBranches,
   getWorktreeStatuses,
   listWorktrees,
+  promiseAllLimit,
   removeWorktree,
 } from "../core/git.ts";
 import { deleteSession, gcSessions } from "../core/session.ts";
@@ -110,7 +111,7 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
     if (branches.length > 0) {
       const prSpinner = deps.startSpinner("Fetching PR information...");
       try {
-        const results = await Promise.all(branches.map((b) => deps.getPullRequestForBranch(b)));
+        const results = await promiseAllLimit(branches.map((b) => () => deps.getPullRequestForBranch(b)));
         for (let i = 0; i < branches.length; i++) {
           const pr = results[i];
           if (pr) prMap.set(branches[i], pr);
