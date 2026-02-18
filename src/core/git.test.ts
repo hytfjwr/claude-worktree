@@ -286,6 +286,60 @@ describe("getMainBranch", () => {
 
     expect(mainBranch).toBe("main");
   });
+
+  test("does not falsely match 'maintenance' as main branch", async () => {
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("symbolic-ref")) {
+        return { stdout: "", exitCode: 128 };
+      }
+      if (args.includes("-a")) {
+        return { stdout: "* maintenance\n  remotes/origin/maintenance\n  remotes/origin/master\n" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { getMainBranch } = await import("./git.ts");
+    const mainBranch = await getMainBranch();
+
+    expect(mainBranch).toBe("master");
+  });
+
+  test("does not falsely match 'mainly-refactor' or 'domain/maintenance'", async () => {
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("symbolic-ref")) {
+        return { stdout: "", exitCode: 128 };
+      }
+      if (args.includes("-a")) {
+        return {
+          stdout:
+            "  mainly-refactor\n  remotes/origin/mainly-refactor\n  remotes/origin/domain/maintenance\n  remotes/origin/master\n",
+        };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { getMainBranch } = await import("./git.ts");
+    const mainBranch = await getMainBranch();
+
+    expect(mainBranch).toBe("master");
+  });
+
+  test("returns main as ultimate fallback when neither main nor master exists", async () => {
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("symbolic-ref")) {
+        return { stdout: "", exitCode: 128 };
+      }
+      if (args.includes("-a")) {
+        return { stdout: "  develop\n  remotes/origin/develop\n" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { getMainBranch } = await import("./git.ts");
+    const mainBranch = await getMainBranch();
+
+    expect(mainBranch).toBe("main");
+  });
 });
 
 describe("isWorktreeDirty", () => {

@@ -99,11 +99,18 @@ export async function getMainBranch(): Promise<string> {
   if (branchResult.exitCode !== 0) {
     return "main"; // Default fallback
   }
-  const branches = branchResult.text().trim();
-  if (branches.includes("remotes/origin/main") || branches.includes(" main")) {
+  const branchLines = branchResult
+    .text()
+    .trim()
+    .split("\n")
+    .map((b) => b.trim().replace(/^\* /, ""));
+  if (branchLines.some((b) => b === "remotes/origin/main" || b === "main")) {
     return "main";
   }
-  return "master";
+  if (branchLines.some((b) => b === "remotes/origin/master" || b === "master")) {
+    return "master";
+  }
+  return "main"; // Ultimate fallback
 }
 
 /**
