@@ -605,24 +605,48 @@ export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps
   // Create worktree
   await deps.createWorktree(branchName, worktreePath, worktreeBaseBranch);
 
-  // Allocate and persist slot if any hook uses {slot}
-  let slot: number | undefined;
-  if (config) {
-    const anyHookUsesSlot = [config.postCreate, config.preClean, config.postClean].some((h) => h?.includes("{slot}"));
-    if (anyHookUsesSlot) {
-      slot = await deps.assignSlot(worktreePath);
-    }
-  }
+  // Register signal handlers for graceful cleanup during creation phase.
+  // Removed before launching Claude (spawnInteractive has its own signal forwarding,
+  // launchClaudeInPane has its own error handling with rollback).
+  let rollbackCtx = buildRollbackOptions(worktreePath, git.repoRoot, config, undefined, !!args.verbose, false, deps);
 
-  // Build Claude options (use local prompt which may be overridden by plan file)
-  const claudeOptions = buildClaudeOptions(
-    { ...args, prompt },
-    git,
-    worktreePath,
-    effectiveBaseBranch,
-    branchName,
-    config,
-  );
+  const createSignalHandler = (exitCode: number) => async () => {
+    try {
+      await deps.performRollback(rollbackCtx);
+    } catch {
+      // performRollback handles its own errors, but ensure we still exit
+    } finally {
+      process.exit(exitCode);
+    }
+  };
+
+  const handleSigint = createSignalHandler(130); // 128 + SIGINT(2)
+  const handleSigterm = createSignalHandler(143); // 128 + SIGTERM(15)
+
+  process.once("SIGINT", handleSigint);
+  process.once("SIGTERM", handleSigterm);
+
+  let slot: number | undefined;
+  let claudeOptions: ClaudeOptions;
+
+  try {
+    // Allocate and persist slot if any hook uses {slot}
+    if (config) {
+      const anyHookUsesSlot = [config.postCreate, config.preClean, config.postClean].some((h) => h?.includes("{slot}"));
+      if (anyHookUsesSlot) {
+        slot = await deps.assignSlot(worktreePath);
+        // Update rollback context with slot info
+        rollbackCtx = buildRollbackOptions(worktreePath, git.repoRoot, config, slot, !!args.verbose, false, deps);
+      }
+    }
+
+    // Build Claude options (use local prompt which may be overridden by plan file)
+    claudeOptions = buildClaudeOptions({ ...args, prompt }, git, worktreePath, effectiveBaseBranch, branchName, config);
+  } finally {
+    // Remove signal handlers before launching Claude
+    process.removeListener("SIGINT", handleSigint);
+    process.removeListener("SIGTERM", handleSigterm);
+  }
 
   // Launch Claude in pane or terminal
   if (pane) {

@@ -952,4 +952,129 @@ describe("runCreate", () => {
       expect(deps.performRollback).toHaveBeenCalled();
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // Signal handling during creation phase
+  // ---------------------------------------------------------------------------
+
+  describe("signal handling during creation phase", () => {
+    beforeEach(() => {
+      vi.spyOn(process, "exit").mockImplementation((() => {}) as never);
+    });
+
+    afterEach(() => {
+      vi.mocked(process.exit).mockRestore();
+    });
+
+    test("triggers rollback on SIGINT after worktree creation", async () => {
+      const deps = makeDeps({
+        loadProjectConfig: vi.fn(async () => ({
+          postCreate: "cd {path} && start -p {slot}",
+        })),
+        assignSlot: vi.fn(async () => {
+          // Simulate SIGINT during slot assignment (after worktree creation)
+          process.emit("SIGINT");
+          return 1;
+        }),
+      });
+
+      await runCreate(defaultTerminalArgs, deps);
+      // Allow async signal handler to complete
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+      expect(deps.performRollback).toHaveBeenCalledWith(
+        expect.objectContaining({
+          worktreePath: "/repo/.worktrees/feat-x",
+          repoRoot: "/repo",
+        }),
+      );
+      expect(process.exit).toHaveBeenCalledWith(130);
+    });
+
+    test("does not trigger signal-based rollback during Claude launch", async () => {
+      // SIGINT during spawnInteractive should NOT trigger our handler
+      // (it has been removed before launch)
+      vi.mocked(spawnInteractive).mockImplementation(async () => {
+        process.emit("SIGINT");
+        return 0;
+      });
+
+      const deps = makeDeps();
+      await runCreate(defaultTerminalArgs, deps);
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+      expect(deps.performRollback).not.toHaveBeenCalled();
+    });
+
+    test("does not leave stale signal listeners after normal completion", async () => {
+      const sigintBefore = process.listenerCount("SIGINT");
+      const sigtermBefore = process.listenerCount("SIGTERM");
+
+      const deps = makeDeps();
+      await runCreate(defaultTerminalArgs, deps);
+
+      expect(process.listenerCount("SIGINT")).toBe(sigintBefore);
+      expect(process.listenerCount("SIGTERM")).toBe(sigtermBefore);
+    });
+
+    test("triggers rollback on SIGTERM with correct exit code", async () => {
+      const deps = makeDeps({
+        loadProjectConfig: vi.fn(async () => ({
+          postCreate: "cd {path} && start -p {slot}",
+        })),
+        assignSlot: vi.fn(async () => {
+          process.emit("SIGTERM");
+          return 1;
+        }),
+      });
+
+      await runCreate(defaultTerminalArgs, deps);
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+      expect(deps.performRollback).toHaveBeenCalled();
+      expect(process.exit).toHaveBeenCalledWith(143); // 128 + SIGTERM(15)
+    });
+
+    test("triggers rollback on SIGINT in pane mode", async () => {
+      const deps = makeDeps({
+        loadProjectConfig: vi.fn(async () => ({
+          postCreate: "cd {path} && start -p {slot}",
+        })),
+        assignSlot: vi.fn(async () => {
+          process.emit("SIGINT");
+          return 1;
+        }),
+      });
+
+      await runCreate(defaultPaneArgs, deps);
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+      expect(deps.performRollback).toHaveBeenCalledWith(
+        expect.objectContaining({
+          worktreePath: "/repo/.worktrees/feat-x",
+          repoRoot: "/repo",
+        }),
+      );
+      expect(process.exit).toHaveBeenCalledWith(130);
+    });
+
+    test("cleans up signal handlers when error occurs during creation phase", async () => {
+      const sigintBefore = process.listenerCount("SIGINT");
+      const sigtermBefore = process.listenerCount("SIGTERM");
+
+      const deps = makeDeps({
+        loadProjectConfig: vi.fn(async () => ({
+          postCreate: "cd {path} && start -p {slot}",
+        })),
+        assignSlot: vi.fn(async () => {
+          throw new Error("slot assignment failed");
+        }),
+      });
+
+      await expect(runCreate(defaultTerminalArgs, deps)).rejects.toThrow("slot assignment failed");
+
+      expect(process.listenerCount("SIGINT")).toBe(sigintBefore);
+      expect(process.listenerCount("SIGTERM")).toBe(sigtermBefore);
+    });
+  });
 });
