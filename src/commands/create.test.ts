@@ -517,6 +517,68 @@ describe("runCreate", () => {
   });
 
   // ---------------------------------------------------------------------------
+  // Path collision detection
+  // ---------------------------------------------------------------------------
+
+  describe("path collision detection", () => {
+    test("throws when different branch maps to same path as existing worktree", async () => {
+      const deps = makeDeps({
+        listWorktrees: vi.fn(async () => ({
+          worktrees: [
+            makeWorktree({ path: "/repo", branch: "main", isMain: true }),
+            makeWorktree({ path: "/repo/.worktrees/feature-auth", branch: "feature/auth" }),
+          ],
+          mainBranch: "main",
+        })),
+        getWorktreePath: vi.fn(() => "/repo/.worktrees/feature-auth"),
+      });
+
+      await expect(runCreate({ branchName: "feature-auth", prompt: "test", pane: true }, deps)).rejects.toThrow(
+        "Path collision",
+      );
+    });
+
+    test("includes colliding branch name as copy-pasteable command in error message", async () => {
+      const deps = makeDeps({
+        listWorktrees: vi.fn(async () => ({
+          worktrees: [
+            makeWorktree({ path: "/repo", branch: "main", isMain: true }),
+            makeWorktree({ path: "/repo/.worktrees/feature-auth", branch: "feature/auth" }),
+          ],
+          mainBranch: "main",
+        })),
+        getWorktreePath: vi.fn(() => "/repo/.worktrees/feature-auth"),
+      });
+
+      await expect(runCreate({ branchName: "feature-auth", prompt: "test", pane: true }, deps)).rejects.toThrow(
+        "claude-worktree feature/auth",
+      );
+    });
+
+    test("does not throw for same branch (handled by existing worktree flow)", async () => {
+      const deps = makeDeps({
+        listWorktrees: vi.fn(async () => ({
+          worktrees: [
+            makeWorktree({ path: "/repo", branch: "main", isMain: true }),
+            makeWorktree({ path: "/repo/.worktrees/feat-x", branch: "feat/x" }),
+          ],
+          mainBranch: "main",
+        })),
+      });
+
+      await runCreate(defaultPaneArgs, deps);
+      expect(deps.createWorktree).toHaveBeenCalled();
+    });
+
+    test("does not throw when no path collision exists", async () => {
+      const deps = makeDeps();
+      await runCreate(defaultPaneArgs, deps);
+
+      expect(deps.createWorktree).toHaveBeenCalled();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // Worktree limit
   // ---------------------------------------------------------------------------
 

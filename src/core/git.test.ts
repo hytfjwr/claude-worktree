@@ -46,6 +46,13 @@ describe("getWorktreePath", () => {
     const result = getWorktreePath("/home/user/projects/my-app", "my-app", "fix/bug-123");
     expect(result).toBe("/home/user/projects/my-app-fix-bug-123");
   });
+
+  test("branches differing only in / vs - produce the same path (collision scenario)", () => {
+    const result1 = getWorktreePath("/path/to/repo", "repo", "feature/auth");
+    const result2 = getWorktreePath("/path/to/repo", "repo", "feature-auth");
+    expect(result1).toBe(result2);
+    expect(result1).toBe("/path/to/repo-feature-auth");
+  });
 });
 
 describe("buildWorktreeCommand", () => {

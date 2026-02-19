@@ -503,6 +503,19 @@ export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps
   const { worktrees } = await deps.listWorktrees();
   const existingWorktree = worktrees.find((w) => w.branch === branchName) ?? null;
 
+  // Detect worktree path collision (e.g., "feature/auth" and "feature-auth" both map to the same path)
+  if (!existingWorktree) {
+    const collidingWorktree = worktrees.find((w) => w.path === worktreePath);
+    if (collidingWorktree) {
+      throw new UsageError(
+        `Path collision: branch "${branchName}" maps to the same directory as existing worktree for branch "${collidingWorktree.branch}".\n` +
+          `  Path: ${worktreePath}\n\n` +
+          `Choose a different branch name, or remove the existing worktree:\n` +
+          `  claude-worktree ${collidingWorktree.branch}`,
+      );
+    }
+  }
+
   // Check worktree limit
   if (config?.maxWorktrees != null) {
     const nonMainCount = worktrees.filter((w) => !w.isMain).length;
