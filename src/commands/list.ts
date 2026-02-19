@@ -204,7 +204,14 @@ export async function executeList(args: ListArgs, deps: ListDeps = defaultDeps):
       const statuses = await deps.getWorktreeStatuses(worktrees, mainBranch, trackedBranches, remoteBranches);
 
       // Fetch panes and sessions by default (skip with -no-status)
-      const panes = args.noStatus ? null : await deps.listWeztermPanes();
+      let panes = null;
+      if (!args.noStatus) {
+        try {
+          panes = await deps.listWeztermPanes();
+        } catch {
+          // Continue without pane info - session status will show as unknown
+        }
+      }
       const sessions = args.noStatus ? {} : await deps.readAllSessions();
 
       // Build entries (parallelize per-worktree git operations with concurrency limit)

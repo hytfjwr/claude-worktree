@@ -675,6 +675,33 @@ describe("executeList", () => {
     expect(parsed.worktrees[0].session.mode).toBe("terminal");
   });
 
+  test("listWeztermPanes failure does not crash list command", async () => {
+    const featureWt = makeWorktree({ branch: "feature/auth", path: "/repo-feature-auth" });
+    const featureStatus = makeStatus({ branch: "feature/auth", path: "/repo-feature-auth" });
+
+    const deps = makeListDeps({
+      listWorktrees: async () => ({ worktrees: [featureWt], mainBranch: "main" }),
+      getWorktreeStatuses: async () => [featureStatus],
+      getLastCommit: async () => makeCommitInfo(),
+      readAllSessions: async () => ({
+        "/repo-feature-auth": {
+          mode: "pane" as const,
+          paneId: 42,
+          startedAt: new Date(Date.now() - 15 * 60_000).toISOString(),
+        },
+      }),
+      listWeztermPanes: async () => {
+        throw new Error("WezTerm socket error");
+      },
+    });
+
+    const result = await executeList(defaultArgs, deps);
+
+    expect(result.entries).toHaveLength(1);
+    // Session status should still be determined (with null panes)
+    expect(result.entries[0].session).toBeDefined();
+  });
+
   test("listWeztermPanes is not called when noStatus flag is true", async () => {
     const mainWt = makeWorktree({ isMain: true, branch: "main", path: "/repo" });
     const mainStatus = makeStatus({ isMain: true, branch: "main", path: "/repo" });
