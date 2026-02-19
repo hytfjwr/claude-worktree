@@ -18,18 +18,27 @@ export function isPortInUse(port: number): Promise<boolean> {
   });
 }
 
-export async function findAvailableSlot(basePort: number = 8880, maxSlots: number = 9): Promise<number> {
+function validateSlotParams(basePort: number, maxSlots: number): void {
   if (!Number.isInteger(basePort) || basePort < 1 || basePort > 65535) {
     throw new SlotError(`Invalid basePort: ${basePort}. Must be an integer between 1 and 65535`);
   }
   if (!Number.isInteger(maxSlots) || maxSlots < 1 || maxSlots > 65535 - basePort) {
     throw new SlotError(`Invalid maxSlots: ${maxSlots}. Must be a positive integer and basePort + maxSlots <= 65535`);
   }
-  // Check all ports in parallel
-  const results = await Promise.all(Array.from({ length: maxSlots }, (_, i) => isPortInUse(basePort + i + 1)));
-  const slotIndex = results.indexOf(false);
-  if (slotIndex !== -1) {
-    return slotIndex + 1;
+}
+
+async function findAvailablePort(basePort: number, slots: number[]): Promise<number | null> {
+  const results = await Promise.all(slots.map((s) => isPortInUse(basePort + s)));
+  const index = results.indexOf(false);
+  return index !== -1 ? slots[index] : null;
+}
+
+export async function findAvailableSlot(basePort: number = 8880, maxSlots: number = 9): Promise<number> {
+  validateSlotParams(basePort, maxSlots);
+  const allSlots = Array.from({ length: maxSlots }, (_, i) => i + 1);
+  const slot = await findAvailablePort(basePort, allSlots);
+  if (slot !== null) {
+    return slot;
   }
   throw new SlotError(`No available slots (all ports ${basePort + 1}-${basePort + maxSlots} are in use)`);
 }
@@ -47,12 +56,7 @@ export async function findAvailableSlot(basePort: number = 8880, maxSlots: numbe
  * and removed.
  */
 export async function assignSlot(worktreePath: string, basePort: number = 8880, maxSlots: number = 9): Promise<number> {
-  if (!Number.isInteger(basePort) || basePort < 1 || basePort > 65535) {
-    throw new SlotError(`Invalid basePort: ${basePort}. Must be an integer between 1 and 65535`);
-  }
-  if (!Number.isInteger(maxSlots) || maxSlots < 1 || maxSlots > 65535 - basePort) {
-    throw new SlotError(`Invalid maxSlots: ${maxSlots}. Must be a positive integer and basePort + maxSlots <= 65535`);
-  }
+  validateSlotParams(basePort, maxSlots);
 
   return withLock(getLockFile(), async () => {
     const cache = await readJsonFile<SlotCache>(getCacheFile(), {}, "fallback");
@@ -63,20 +67,16 @@ export async function assignSlot(worktreePath: string, basePort: number = 8880, 
     }
 
     const assignedSlots = new Set(Object.values(cache));
-
-    // Check ports in parallel, but only for slots not already assigned in cache
     const candidates = Array.from({ length: maxSlots }, (_, i) => i + 1).filter((s) => !assignedSlots.has(s));
     if (candidates.length === 0) {
       throw new SlotError(`No available slots (all ${maxSlots} slots are assigned)`);
     }
 
-    const portResults = await Promise.all(candidates.map((s) => isPortInUse(basePort + s)));
-    const availableIndex = portResults.indexOf(false);
-    if (availableIndex === -1) {
+    const slot = await findAvailablePort(basePort, candidates);
+    if (slot === null) {
       throw new SlotError(`No available slots (all ports ${basePort + 1}-${basePort + maxSlots} are in use)`);
     }
 
-    const slot = candidates[availableIndex];
     cache[worktreePath] = slot;
     await atomicWriteJson(getCacheFile(), cache);
     return slot;
