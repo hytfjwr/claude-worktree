@@ -59,7 +59,39 @@ async function launchResumeInTerminal(worktree: WorktreeInfo, claudeCommand: str
     startedAt: new Date().toISOString(),
   });
 
-  await spawnInteractive({ command: claudeCommand, cwd: worktree.path });
+  // Register signal handlers for graceful session cleanup on interruption.
+  // spawnInteractive handles the first signal by forwarding it to the child process.
+  // These handlers catch a subsequent signal to ensure completeSession() is called
+  // before the process exits (otherwise the session stays "Running" forever).
+  let signalReceived = false;
+
+  const createSignalHandler = (exitCode: number) => () => {
+    if (!signalReceived) {
+      // First signal: let spawnInteractive forward it to the child process
+      signalReceived = true;
+      return;
+    }
+    // Subsequent signal: clean up session and exit
+    process.removeListener("SIGINT", handleSigint);
+    process.removeListener("SIGTERM", handleSigterm);
+    deps
+      .completeSession(worktree.path)
+      .catch(() => {})
+      .finally(() => process.exit(exitCode));
+  };
+
+  const handleSigint = createSignalHandler(130); // 128 + SIGINT(2)
+  const handleSigterm = createSignalHandler(143); // 128 + SIGTERM(15)
+
+  process.on("SIGINT", handleSigint);
+  process.on("SIGTERM", handleSigterm);
+
+  try {
+    await spawnInteractive({ command: claudeCommand, cwd: worktree.path });
+  } finally {
+    process.removeListener("SIGINT", handleSigint);
+    process.removeListener("SIGTERM", handleSigterm);
+  }
 
   // Always mark session as completed in terminal mode since the process has ended
   await deps.completeSession(worktree.path);

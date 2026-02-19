@@ -85,6 +85,91 @@ describe("runResume", () => {
       expect(deps.saveSession).toHaveBeenCalled();
       expect(deps.completeSession).not.toHaveBeenCalled();
     });
+
+    test("registers signal handlers during spawnInteractive and removes them after", async () => {
+      const onSpy = vi.spyOn(process, "on");
+      const removeListenerSpy = vi.spyOn(process, "removeListener");
+
+      vi.mocked(spawnInteractive).mockResolvedValueOnce(0);
+      const deps = makeDeps();
+      await runResume({ branchName: "feature/test" }, deps);
+
+      expect(onSpy).toHaveBeenCalledWith("SIGINT", expect.any(Function));
+      expect(onSpy).toHaveBeenCalledWith("SIGTERM", expect.any(Function));
+      expect(removeListenerSpy).toHaveBeenCalledWith("SIGINT", expect.any(Function));
+      expect(removeListenerSpy).toHaveBeenCalledWith("SIGTERM", expect.any(Function));
+
+      onSpy.mockRestore();
+      removeListenerSpy.mockRestore();
+    });
+
+    test("signal handler calls completeSession and exits on repeated signal", async () => {
+      const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+      const handlers: Record<string, ((...args: unknown[]) => void)[]> = {};
+      const originalOn = process.on.bind(process);
+      const onSpy = vi.spyOn(process, "on").mockImplementation(((
+        event: string,
+        handler: (...args: unknown[]) => void,
+      ) => {
+        if (event === "SIGINT" || event === "SIGTERM") {
+          handlers[event] = handlers[event] || [];
+          handlers[event].push(handler);
+        }
+        return originalOn(event, handler);
+      }) as typeof process.on);
+
+      vi.mocked(spawnInteractive).mockImplementation(async () => {
+        // Simulate double SIGINT: first is forwarded to child, second triggers cleanup
+        for (const handler of handlers.SIGINT || []) handler();
+        for (const handler of handlers.SIGINT || []) handler();
+        // Wait for async completeSession in the handler
+        await new Promise((r) => setTimeout(r, 10));
+        return 0;
+      });
+
+      const deps = makeDeps();
+      await runResume({ branchName: "feature/test" }, deps);
+
+      // completeSession is called by the signal handler AND by normal flow
+      expect(deps.completeSession).toHaveBeenCalled();
+      expect(exitSpy).toHaveBeenCalledWith(130);
+
+      exitSpy.mockRestore();
+      onSpy.mockRestore();
+    });
+
+    test("first signal is ignored by signal handler to let spawnInteractive forward it", async () => {
+      const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+      const handlers: Record<string, ((...args: unknown[]) => void)[]> = {};
+      const originalOn = process.on.bind(process);
+      const onSpy = vi.spyOn(process, "on").mockImplementation(((
+        event: string,
+        handler: (...args: unknown[]) => void,
+      ) => {
+        if (event === "SIGINT" || event === "SIGTERM") {
+          handlers[event] = handlers[event] || [];
+          handlers[event].push(handler);
+        }
+        return originalOn(event, handler);
+      }) as typeof process.on);
+
+      vi.mocked(spawnInteractive).mockImplementation(async () => {
+        // Simulate only one SIGINT (first signal)
+        for (const handler of handlers.SIGINT || []) handler();
+        return 0;
+      });
+
+      const deps = makeDeps();
+      await runResume({ branchName: "feature/test" }, deps);
+
+      // process.exit should NOT be called on first signal
+      expect(exitSpy).not.toHaveBeenCalled();
+      // completeSession is still called via normal flow after spawnInteractive resolves
+      expect(deps.completeSession).toHaveBeenCalled();
+
+      exitSpy.mockRestore();
+      onSpy.mockRestore();
+    });
   });
 
   describe("branch name specified", () => {
