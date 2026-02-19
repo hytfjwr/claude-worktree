@@ -188,11 +188,13 @@ export async function executeList(args: ListArgs, deps: ListDeps = defaultDeps):
       // Continue without tracking info
     }
 
-    // Fetch and prune (graceful failure)
-    try {
-      await deps.fetchAndPrune();
-    } catch {
-      // Silently continue
+    // Fetch and prune only when explicitly requested
+    if (args.fetch) {
+      try {
+        await deps.fetchAndPrune();
+      } catch {
+        // Silently continue
+      }
     }
 
     const { worktrees, mainBranch } = await deps.listWorktrees();

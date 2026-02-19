@@ -71,6 +71,7 @@ claude-worktree resume feature/auth
 claude-worktree resume feature/auth 'Continue implementation'
 claude-worktree resume
 claude-worktree list
+claude-worktree list -fetch
 claude-worktree list -json
 claude-worktree list -no-status
 claude-worktree list -v
@@ -102,6 +103,7 @@ claude-worktree clean -dry-run
 
 - `-j, -json` - Output as JSON
 - `-no-status` - Hide Claude session status (shown by default)
+- `-fetch` - Fetch from remote before listing (default: local only)
 - `-v, -verbose` - Show full paths and details
 
 ### Clean Options

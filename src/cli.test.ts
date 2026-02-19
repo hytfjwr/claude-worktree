@@ -52,7 +52,7 @@ describe("parseArgs", () => {
       const result = parseArgs(["list"]);
       expect(result).toEqual({
         type: "list",
-        args: { json: false, quiet: false, verbose: false, noStatus: false },
+        args: { json: false, quiet: false, verbose: false, noStatus: false, fetch: false },
       });
     });
 
@@ -60,7 +60,7 @@ describe("parseArgs", () => {
       const result = parseArgs(["list", "-json"]);
       expect(result).toEqual({
         type: "list",
-        args: { json: true, quiet: false, verbose: false, noStatus: false },
+        args: { json: true, quiet: false, verbose: false, noStatus: false, fetch: false },
       });
     });
 
@@ -68,7 +68,7 @@ describe("parseArgs", () => {
       const result = parseArgs(["list", "-verbose"]);
       expect(result).toEqual({
         type: "list",
-        args: { json: false, quiet: false, verbose: true, noStatus: false },
+        args: { json: false, quiet: false, verbose: true, noStatus: false, fetch: false },
       });
     });
 
@@ -76,7 +76,7 @@ describe("parseArgs", () => {
       const result = parseArgs(["list", "-v"]);
       expect(result).toEqual({
         type: "list",
-        args: { json: false, quiet: false, verbose: true, noStatus: false },
+        args: { json: false, quiet: false, verbose: true, noStatus: false, fetch: false },
       });
     });
 
@@ -84,7 +84,7 @@ describe("parseArgs", () => {
       const result = parseArgs(["list", "-json", "-verbose"]);
       expect(result).toEqual({
         type: "list",
-        args: { json: true, quiet: false, verbose: true, noStatus: false },
+        args: { json: true, quiet: false, verbose: true, noStatus: false, fetch: false },
       });
     });
   });
@@ -992,7 +992,7 @@ describe("parseCleanArgs", () => {
 describe("parseListArgs", () => {
   test("no options", () => {
     const result = parseListArgs([]);
-    expect(result).toEqual({ json: false, quiet: false, verbose: false, noStatus: false });
+    expect(result).toEqual({ json: false, quiet: false, verbose: false, noStatus: false, fetch: false });
   });
 
   test("-json flag", () => {
@@ -1038,24 +1038,29 @@ describe("parseListArgs", () => {
     expect(result.quiet).toBe(true);
   });
 
+  test("-fetch flag", () => {
+    const result = parseListArgs(["-fetch"]);
+    expect(result.fetch).toBe(true);
+  });
+
   test("-json + -verbose", () => {
     const result = parseListArgs(["-json", "-verbose"]);
-    expect(result).toEqual({ json: true, quiet: false, verbose: true, noStatus: false });
+    expect(result).toEqual({ json: true, quiet: false, verbose: true, noStatus: false, fetch: false });
   });
 
   test("-no-status + -json", () => {
     const result = parseListArgs(["-no-status", "-json"]);
-    expect(result).toEqual({ json: true, quiet: false, verbose: false, noStatus: true });
+    expect(result).toEqual({ json: true, quiet: false, verbose: false, noStatus: true, fetch: false });
   });
 
   test("-no-status + -v", () => {
     const result = parseListArgs(["-no-status", "-v"]);
-    expect(result).toEqual({ json: false, quiet: false, verbose: true, noStatus: true });
+    expect(result).toEqual({ json: false, quiet: false, verbose: true, noStatus: true, fetch: false });
   });
 
   test("-h/-help is ignored (does not throw)", () => {
     const result = parseListArgs(["-h"]);
-    expect(result).toEqual({ json: false, quiet: false, verbose: false, noStatus: false });
+    expect(result).toEqual({ json: false, quiet: false, verbose: false, noStatus: false, fetch: false });
   });
 
   test("unknown option throws", () => {
@@ -1498,7 +1503,7 @@ describe("run", () => {
   });
 
   test("dispatches 'list' to executeList", async () => {
-    const args = { json: false, verbose: false, noStatus: false, quiet: false };
+    const args = { json: false, verbose: false, noStatus: false, quiet: false, fetch: false };
     await run({ type: "list", args });
     expect(executeList).toHaveBeenCalledWith(args);
   });
@@ -1551,7 +1556,7 @@ describe("run", () => {
   });
 
   test("enables quiet mode when quiet flag is set", async () => {
-    const args = { json: false, verbose: false, noStatus: false, quiet: true };
+    const args = { json: false, verbose: false, noStatus: false, quiet: true, fetch: false };
     await run({ type: "list", args });
     expect(setLogger).toHaveBeenCalledWith(createQuietLogger());
     expect(setQuietMode).toHaveBeenCalledWith(true);
@@ -1560,7 +1565,7 @@ describe("run", () => {
   test("does not enable quiet mode when quiet flag is false", async () => {
     vi.mocked(setLogger).mockClear();
     vi.mocked(setQuietMode).mockClear();
-    const args = { json: false, verbose: false, noStatus: false, quiet: false };
+    const args = { json: false, verbose: false, noStatus: false, quiet: false, fetch: false };
     await run({ type: "list", args });
     expect(setLogger).not.toHaveBeenCalled();
     expect(setQuietMode).not.toHaveBeenCalled();

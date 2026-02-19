@@ -58,7 +58,7 @@ function makeListDeps(overrides: Partial<ListDeps> = {}): ListDeps {
   };
 }
 
-const defaultArgs: ListArgs = { json: false, verbose: false, noStatus: false, quiet: false };
+const defaultArgs: ListArgs = { json: false, verbose: false, noStatus: false, quiet: false, fetch: false };
 
 // Suppress console output
 beforeEach(() => {
@@ -378,7 +378,7 @@ describe("executeList", () => {
       getLastCommit: async () => makeCommitInfo(),
     });
 
-    const result = await executeList({ json: true, verbose: false, noStatus: true, quiet: false }, deps);
+    const result = await executeList({ json: true, verbose: false, noStatus: true, quiet: false, fetch: false }, deps);
 
     expect(result.entries).toHaveLength(1);
     const parsed = JSON.parse(jsonOutput);
@@ -387,7 +387,45 @@ describe("executeList", () => {
     expect(parsed.worktrees[0].status).toBe("Main");
   });
 
-  test("fetchAndPrune failure does not block list", async () => {
+  test("fetchAndPrune is not called by default", async () => {
+    const mainWt = makeWorktree({ isMain: true, branch: "main", path: "/repo" });
+    const mainStatus = makeStatus({ isMain: true, branch: "main", path: "/repo" });
+
+    let fetchCalled = false;
+    const deps = makeListDeps({
+      fetchAndPrune: async () => {
+        fetchCalled = true;
+      },
+      listWorktrees: async () => ({ worktrees: [mainWt], mainBranch: "main" }),
+      getWorktreeStatuses: async () => [mainStatus],
+      getLastCommit: async () => makeCommitInfo(),
+    });
+
+    await executeList(defaultArgs, deps);
+
+    expect(fetchCalled).toBe(false);
+  });
+
+  test("fetchAndPrune is called when fetch flag is true", async () => {
+    const mainWt = makeWorktree({ isMain: true, branch: "main", path: "/repo" });
+    const mainStatus = makeStatus({ isMain: true, branch: "main", path: "/repo" });
+
+    let fetchCalled = false;
+    const deps = makeListDeps({
+      fetchAndPrune: async () => {
+        fetchCalled = true;
+      },
+      listWorktrees: async () => ({ worktrees: [mainWt], mainBranch: "main" }),
+      getWorktreeStatuses: async () => [mainStatus],
+      getLastCommit: async () => makeCommitInfo(),
+    });
+
+    await executeList({ ...defaultArgs, fetch: true }, deps);
+
+    expect(fetchCalled).toBe(true);
+  });
+
+  test("fetchAndPrune failure does not block list when fetch flag is true", async () => {
     const mainWt = makeWorktree({ isMain: true, branch: "main", path: "/repo" });
     const mainStatus = makeStatus({ isMain: true, branch: "main", path: "/repo" });
 
@@ -400,7 +438,7 @@ describe("executeList", () => {
       getLastCommit: async () => makeCommitInfo(),
     });
 
-    const result = await executeList(defaultArgs, deps);
+    const result = await executeList({ ...defaultArgs, fetch: true }, deps);
 
     expect(result.entries).toHaveLength(1);
   });
@@ -456,7 +494,7 @@ describe("executeList", () => {
       getLastCommit: async () => null,
     });
 
-    await executeList({ json: true, verbose: false, noStatus: true, quiet: false }, deps);
+    await executeList({ json: true, verbose: false, noStatus: true, quiet: false, fetch: false }, deps);
 
     const parsed = JSON.parse(jsonOutput);
     expect(parsed.worktrees[0].commit).toBeNull();
@@ -472,7 +510,7 @@ describe("executeList", () => {
       listWorktrees: async () => ({ worktrees: [], mainBranch: "main" }),
     });
 
-    await executeList({ json: true, verbose: false, noStatus: true, quiet: false }, deps);
+    await executeList({ json: true, verbose: false, noStatus: true, quiet: false, fetch: false }, deps);
 
     const parsed = JSON.parse(jsonOutput);
     expect(parsed.worktrees).toEqual([]);
@@ -492,7 +530,7 @@ describe("executeList", () => {
       },
     });
 
-    await executeList({ json: true, verbose: false, noStatus: true, quiet: false }, deps);
+    await executeList({ json: true, verbose: false, noStatus: true, quiet: false, fetch: false }, deps);
 
     expect(spinnerStarted).toBe(false);
   });
@@ -557,7 +595,7 @@ describe("executeList", () => {
       },
     });
 
-    await executeList({ json: false, verbose: false, noStatus: true, quiet: false }, deps);
+    await executeList({ json: false, verbose: false, noStatus: true, quiet: false, fetch: false }, deps);
 
     expect(readAllSessionsCalled).toBe(false);
   });
@@ -629,7 +667,7 @@ describe("executeList", () => {
       }),
     });
 
-    await executeList({ json: true, verbose: false, noStatus: false, quiet: false }, deps);
+    await executeList({ json: true, verbose: false, noStatus: false, quiet: false, fetch: false }, deps);
 
     const parsed = JSON.parse(jsonOutput);
     expect(parsed.worktrees[0].session).toBeDefined();
@@ -652,7 +690,7 @@ describe("executeList", () => {
       },
     });
 
-    await executeList({ json: false, verbose: false, noStatus: true, quiet: false }, deps);
+    await executeList({ json: false, verbose: false, noStatus: true, quiet: false, fetch: false }, deps);
 
     expect(panesCalled).toBe(false);
   });

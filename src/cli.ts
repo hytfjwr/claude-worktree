@@ -54,6 +54,7 @@ Resume options:
 List options:
   -j, -json        Output as JSON
   -no-status       Hide Claude session status (shown by default)
+  -fetch           Fetch from remote before listing (default: local only)
   -q, -quiet       Suppress informational output (errors only)
   -v, -verbose     Show full paths and details
 
@@ -139,12 +140,14 @@ Usage:
 Options:
   -j, -json        Output as JSON (machine-readable format)
   -no-status       Hide Claude session status (shown by default)
+  -fetch           Fetch from remote before listing (default: local only)
   -q, -quiet       Suppress informational output (errors only)
   -v, -verbose     Show full paths and details
   -h, -help        Show this help
 
 Examples:
   claude-worktree list
+  claude-worktree list -fetch
   claude-worktree list -no-status
   claude-worktree list -json
   claude-worktree list -verbose`);
@@ -406,6 +409,7 @@ export function parseListArgs(args: string[]): ListArgs {
     options: {
       json: { type: "boolean", flag: "-json", alias: "-j" },
       noStatus: { type: "boolean", flag: "-no-status" },
+      fetch: { type: "boolean", flag: "-fetch" },
       quiet: { type: "boolean", flag: "-quiet", alias: "-q" },
       verbose: { type: "boolean", flag: "-verbose", alias: "-v" },
     },
@@ -419,6 +423,7 @@ export function parseListArgs(args: string[]): ListArgs {
     quiet: booleans.quiet,
     verbose: booleans.verbose,
     noStatus: booleans.noStatus,
+    fetch: booleans.fetch,
   };
 }
 
