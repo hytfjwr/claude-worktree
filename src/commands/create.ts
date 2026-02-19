@@ -511,7 +511,7 @@ export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps
         `Path collision: branch "${branchName}" maps to the same directory as existing worktree for branch "${collidingWorktree.branch}".\n` +
           `  Path: ${worktreePath}\n\n` +
           `Choose a different branch name, or remove the existing worktree:\n` +
-          `  claude-worktree ${collidingWorktree.branch}`,
+          `  claude-worktree clean ${collidingWorktree.branch}`,
       );
     }
   }

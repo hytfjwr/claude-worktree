@@ -538,7 +538,7 @@ describe("runCreate", () => {
       );
     });
 
-    test("includes colliding branch name as copy-pasteable command in error message", async () => {
+    test("includes clean command as copy-pasteable command in error message", async () => {
       const deps = makeDeps({
         listWorktrees: vi.fn(async () => ({
           worktrees: [
@@ -551,7 +551,7 @@ describe("runCreate", () => {
       });
 
       await expect(runCreate({ branchName: "feature-auth", prompt: "test", pane: true }, deps)).rejects.toThrow(
-        "claude-worktree feature/auth",
+        "claude-worktree clean feature/auth",
       );
     });
 
