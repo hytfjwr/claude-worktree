@@ -203,6 +203,56 @@ describe("chaining patterns", () => {
 });
 
 // ============================================================================
+// timeout tests
+// ============================================================================
+
+describe("timeout", () => {
+  test("command completes before timeout - returns result", async () => {
+    const result = await exec("echo", ["hello"]).timeout(5000).nothrow().quiet();
+    expect(result.exitCode).toBe(0);
+    expect(result.text().trim()).toBe("hello");
+  });
+
+  test("command exceeds timeout - throws ExecError with exit code 124", async () => {
+    try {
+      await exec("sleep", ["10"]).timeout(100).quiet();
+      expect.unreachable("Should have thrown");
+    } catch (err) {
+      expect(err).toBeInstanceOf(ExecError);
+      const execErr = err as ExecError;
+      expect(execErr.exitCode).toBe(124);
+      expect(execErr.message).toContain("timed out after 100ms");
+    }
+  });
+
+  test("timeout works with .text()", async () => {
+    try {
+      await exec("sleep", ["10"]).timeout(100).text();
+      expect.unreachable("Should have thrown");
+    } catch (err) {
+      expect(err).toBeInstanceOf(ExecError);
+      expect((err as ExecError).exitCode).toBe(124);
+    }
+  });
+
+  test("timeout with nothrow still throws on timeout", async () => {
+    // Timeout should always throw, even with nothrow (nothrow only suppresses non-zero exit codes)
+    try {
+      await exec("sleep", ["10"]).timeout(100).nothrow().quiet();
+      expect.unreachable("Should have thrown");
+    } catch (err) {
+      expect(err).toBeInstanceOf(ExecError);
+      expect((err as ExecError).exitCode).toBe(124);
+    }
+  });
+
+  test("chaining order: .timeout().nothrow().quiet()", async () => {
+    const result = await exec("echo", ["ok"]).timeout(5000).nothrow().quiet();
+    expect(result.text().trim()).toBe("ok");
+  });
+});
+
+// ============================================================================
 // Real command tests (using git, matching existing test patterns)
 // ============================================================================
 

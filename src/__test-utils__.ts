@@ -44,6 +44,7 @@ export function makeCommitInfo(overrides: Partial<CommitInfo> = {}): CommitInfo 
  * - .text() on builder returns Promise<string>
  * - .nothrow() suppresses rejection on non-zero exitCode (matching real ExecBuilder)
  * - .quiet() is a chainable no-op
+ * - .timeout() is a chainable no-op
  * Throws for unhandled commands to catch regressions early.
  */
 export function createExecStub(
@@ -71,6 +72,9 @@ export function createExecStub(
         return this;
       },
       quiet() {
+        return this;
+      },
+      timeout() {
         return this;
       },
       text: () => rejectIfNeeded(() => Promise.resolve(stdout)),

@@ -207,7 +207,7 @@ export async function getRemoteTrackingBranches(): Promise<Set<string>> {
  * Returns a Set of branch names (e.g. "main", "feature/foo").
  */
 export async function getRemoteBranches(): Promise<Set<string>> {
-  const result = await exec("git", ["ls-remote", "--heads", "origin"]).nothrow().quiet();
+  const result = await exec("git", ["ls-remote", "--heads", "origin"]).timeout(30_000).nothrow().quiet();
   if (result.exitCode !== 0) {
     return new Set();
   }
@@ -305,12 +305,12 @@ export async function getAheadBehind(branch: string, baseBranch: string): Promis
 }
 
 export async function fetchAndPrune(): Promise<void> {
-  await exec("git", ["fetch", "--prune"]).quiet();
+  await exec("git", ["fetch", "--prune"]).timeout(30_000).quiet();
 }
 
 export async function fetchOrigin(branch?: string): Promise<void> {
   const args = branch ? ["fetch", "origin", branch] : ["fetch", "origin"];
-  const result = await exec("git", args).nothrow().quiet();
+  const result = await exec("git", args).timeout(30_000).nothrow().quiet();
   if (result.exitCode !== 0) {
     const stderr = result.stderr.toString().trim();
     throw new GitError(`Failed to fetch from origin: ${stderr}`);

@@ -28,7 +28,7 @@ export class ExecError extends Error {
 
 /**
  * Builder for constructing and executing a shell command.
- * Supports chaining `.nothrow()`, `.quiet()`, and `.cwd()` before awaiting.
+ * Supports chaining `.nothrow()`, `.quiet()`, `.cwd()`, and `.timeout()` before awaiting.
  *
  * Can be awaited directly (returns ExecResult) or call `.text()` for stdout string.
  */
@@ -36,6 +36,7 @@ export class ExecBuilder implements PromiseLike<ExecResult> {
   private _nothrow = false;
   private _quiet = false;
   private _cwd: string | undefined;
+  private _timeout: number | undefined;
 
   constructor(
     private readonly cmd: string,
@@ -57,6 +58,12 @@ export class ExecBuilder implements PromiseLike<ExecResult> {
   /** Set the working directory for the command. */
   cwd(dir: string): ExecBuilder {
     this._cwd = dir;
+    return this;
+  }
+
+  /** Kill the process after the specified duration (milliseconds). */
+  timeout(ms: number): ExecBuilder {
+    this._timeout = ms;
     return this;
   }
 
@@ -84,6 +91,16 @@ export class ExecBuilder implements PromiseLike<ExecResult> {
         stdio: ["pipe", "pipe", "pipe"],
       });
 
+      let timedOut = false;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+
+      if (this._timeout) {
+        timer = setTimeout(() => {
+          timedOut = true;
+          proc.kill("SIGTERM");
+        }, this._timeout);
+      }
+
       const stdoutChunks: Buffer[] = [];
       const stderrChunks: Buffer[] = [];
 
@@ -109,12 +126,30 @@ export class ExecBuilder implements PromiseLike<ExecResult> {
         }
       });
 
-      proc.on("error", reject);
+      proc.on("error", (err) => {
+        if (timer) clearTimeout(timer);
+        reject(err);
+      });
 
       proc.on("close", (code) => {
-        const exitCode = code ?? 1;
+        if (timer) clearTimeout(timer);
+
         const stdout = Buffer.concat(stdoutChunks);
         const stderr = Buffer.concat(stderrChunks);
+
+        if (timedOut) {
+          reject(
+            new ExecError(
+              `Command timed out after ${this._timeout}ms: ${this.cmd} ${this.args.map((a) => JSON.stringify(a)).join(" ")}`,
+              124,
+              stdout,
+              stderr,
+            ),
+          );
+          return;
+        }
+
+        const exitCode = code ?? 1;
 
         if (exitCode !== 0 && !this._nothrow) {
           reject(
