@@ -9,29 +9,9 @@ import type {
   WorktreeInfo,
   WorktreeStatus,
 } from "../types/index.ts";
+import { promiseAllLimit } from "./concurrency.ts";
 import { GitError } from "./errors.ts";
 import { exec } from "./exec.ts";
-
-const CONCURRENCY_LIMIT = 5;
-
-/**
- * Run async task factories with a concurrency limit.
- * Each element in `tasks` is a zero-arg function that returns a Promise.
- */
-export async function promiseAllLimit<T>(tasks: Array<() => Promise<T>>, limit = CONCURRENCY_LIMIT): Promise<T[]> {
-  const results: T[] = new Array(tasks.length);
-  let nextIndex = 0;
-
-  async function worker() {
-    while (nextIndex < tasks.length) {
-      const i = nextIndex++;
-      results[i] = await tasks[i]();
-    }
-  }
-
-  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, () => worker()));
-  return results;
-}
 
 export async function getGitContext(): Promise<GitContext> {
   let repoRoot: string;

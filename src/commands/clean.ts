@@ -1,3 +1,4 @@
+import { promiseAllLimit } from "../core/concurrency.ts";
 import { buildHookCommand, loadProjectConfig, resolveHookTimeout, runHook } from "../core/config.ts";
 import { getErrorMessage } from "../core/errors.ts";
 import {
@@ -8,7 +9,6 @@ import {
   getRemoteTrackingBranches,
   getWorktreeStatuses,
   listWorktrees,
-  promiseAllLimit,
   removeWorktree,
 } from "../core/git.ts";
 import { deleteSession, gcSessions } from "../core/session.ts";

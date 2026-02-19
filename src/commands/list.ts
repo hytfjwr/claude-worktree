@@ -1,5 +1,6 @@
 import { relative } from "node:path";
 
+import { promiseAllLimit } from "../core/concurrency.ts";
 import {
   fetchAndPrune,
   getAheadBehind,
@@ -206,9 +207,9 @@ export async function executeList(args: ListArgs, deps: ListDeps = defaultDeps):
       const panes = args.noStatus ? null : await deps.listWeztermPanes();
       const sessions = args.noStatus ? {} : await deps.readAllSessions();
 
-      // Build entries (parallelize per-worktree git operations)
-      result.entries = await Promise.all(
-        statuses.map(async (status) => {
+      // Build entries (parallelize per-worktree git operations with concurrency limit)
+      result.entries = await promiseAllLimit(
+        statuses.map((status) => async () => {
           const [commit, aheadBehind] = await Promise.all([
             deps.getLastCommit(status.worktree.path),
             status.worktree.branch && !status.worktree.isMain
