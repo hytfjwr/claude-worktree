@@ -6,7 +6,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, test, vi } from "vit
 import { makeWorktree } from "../__test-utils__.ts";
 import { spawnInteractive } from "../core/spawn.ts";
 import type { CreateArgs, CreateDeps, ProjectConfig } from "../types/index.ts";
-import { checkWorktreeLimit, getSelfCommand, readPlanFile, runCreate } from "./create.ts";
+import { checkWorktreeLimit, getSelfCommand, previewHookTemplate, readPlanFile, runCreate } from "./create.ts";
 
 // Mock spawnInteractive to avoid spawning real processes in terminal mode
 vi.mock("../core/spawn.ts", () => ({
@@ -74,6 +74,23 @@ describe("getSelfCommand", () => {
     process.argv[1] = "/path with spaces/script.ts";
     const result = getSelfCommand();
     expect(result).toBe(`"/usr/local/bin/my node" "${resolve("/path with spaces/script.ts")}"`);
+  });
+});
+
+describe("previewHookTemplate", () => {
+  test("replaces path and slot placeholders", () => {
+    const result = previewHookTemplate("cd {path} && start -p {slot}", { path: "/repo/.worktrees/feat-x", slot: "3" });
+    expect(result).toBe("cd /repo/.worktrees/feat-x && start -p 3");
+  });
+
+  test("returns template unchanged when no matching placeholders", () => {
+    const result = previewHookTemplate("echo hello", { path: "/repo", slot: "1" });
+    expect(result).toBe("echo hello");
+  });
+
+  test("handles template with only path placeholder", () => {
+    const result = previewHookTemplate("cd {path}", { path: "/repo/.worktrees/feat-x", slot: "<auto>" });
+    expect(result).toBe("cd /repo/.worktrees/feat-x");
   });
 });
 

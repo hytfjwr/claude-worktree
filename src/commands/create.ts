@@ -136,6 +136,10 @@ export function checkWorktreeLimit(
   return null;
 }
 
+export function previewHookTemplate(template: string, vars: Record<string, string>): string {
+  return Object.entries(vars).reduce((result, [key, value]) => result.replace(`{${key}}`, value), template);
+}
+
 export function getSelfCommand(): string {
   return `"${process.argv[0]}" "${resolve(process.argv[1])}"`;
 }
@@ -535,24 +539,25 @@ export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps
     }
 
     if (existingWorktree) {
+      const existingVars = { path: existingWorktree.path, slot: "<existing>" };
+
       if (config?.preClean) {
-        const hookPreview = config.preClean.replace("{path}", existingWorktree.path).replace("{slot}", "<existing>");
-        logInfo(`  ${step++}. Pre-clean hook:    ${hookPreview}`);
+        logInfo(`  ${step++}. Pre-clean hook:    ${previewHookTemplate(config.preClean, existingVars)}`);
       }
 
       logInfo(`  ${step++}. Replace worktree:  ${existingWorktree.path} (delete and recreate)`);
 
       if (config?.postClean) {
-        const hookPreview = config.postClean.replace("{path}", existingWorktree.path).replace("{slot}", "<existing>");
-        logInfo(`  ${step++}. Post-clean hook:   ${hookPreview}`);
+        logInfo(`  ${step++}. Post-clean hook:   ${previewHookTemplate(config.postClean, existingVars)}`);
       }
     }
 
     logInfo(`  ${step++}. Create worktree:   ${buildWorktreeCommand(branchName, worktreePath, worktreeBaseBranch)}`);
 
     if (config?.postCreate) {
-      const hookPreview = config.postCreate.replace("{path}", worktreePath).replace("{slot}", "<auto>");
-      logInfo(`  ${step++}. Post-create hook:  ${hookPreview}`);
+      logInfo(
+        `  ${step++}. Post-create hook:  ${previewHookTemplate(config.postCreate, { path: worktreePath, slot: "<auto>" })}`,
+      );
     }
 
     logInfo(`  ${step++}. Launch mode:       ${pane ? "WezTerm pane" : "Current terminal"}`);
