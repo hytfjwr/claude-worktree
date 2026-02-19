@@ -61,22 +61,18 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
 
   // Capture remote tracking branches BEFORE fetching/pruning
   // so we can distinguish "never pushed" from "remote deleted"
+  // Note: getRemoteBranches() calls `git ls-remote` (network I/O), so show a spinner
   let trackedBranches: Set<string> | undefined;
   let remoteBranches: Set<string> | undefined;
+  const fetchSpinner = deps.startSpinner("Updating remote references...");
   try {
     [trackedBranches, remoteBranches] = await Promise.all([deps.getRemoteTrackingBranches(), deps.getRemoteBranches()]);
-  } catch {
-    // Continue without tracking info
-  }
-
-  if (!args.dryRun) {
-    const fetchSpinner = deps.startSpinner("Updating remote references...");
-    try {
+    if (!args.dryRun) {
       await deps.fetchAndPrune();
-      fetchSpinner.stop(`${icons.success()} Done updating remote references.`);
-    } catch {
-      fetchSpinner.fail("Failed to update remote references (continuing)");
     }
+    fetchSpinner.stop(`${icons.success()} Done updating remote references.`);
+  } catch {
+    fetchSpinner.fail("Failed to update remote references (continuing)");
   }
 
   const listSpinner = deps.startSpinner("Fetching worktree list...");
