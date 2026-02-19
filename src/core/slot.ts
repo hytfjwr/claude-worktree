@@ -102,8 +102,10 @@ export async function saveSlot(worktreePath: string, slot: number): Promise<void
 }
 
 export async function readSlot(worktreePath: string): Promise<number | undefined> {
-  const cache = await readJsonFile<SlotCache>(getCacheFile(), {}, "fallback");
-  return cache[worktreePath];
+  return withLock(getLockFile(), async () => {
+    const cache = await readJsonFile<SlotCache>(getCacheFile(), {}, "fallback");
+    return cache[worktreePath];
+  });
 }
 
 export async function gcSlots(validPaths: Set<string>): Promise<number> {

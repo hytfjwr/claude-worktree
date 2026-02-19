@@ -23,12 +23,16 @@ export async function saveSession(worktreePath: string, session: SessionInfo): P
 }
 
 export async function readSession(worktreePath: string): Promise<SessionInfo | undefined> {
-  const cache = await readJsonFile<SessionCache>(getSessionFile(), {});
-  return cache[worktreePath];
+  return withLock(getLockFile(), async () => {
+    const cache = await readJsonFile<SessionCache>(getSessionFile(), {});
+    return cache[worktreePath];
+  });
 }
 
 export async function readAllSessions(): Promise<Record<string, SessionInfo>> {
-  return readJsonFile<SessionCache>(getSessionFile(), {});
+  return withLock(getLockFile(), async () => {
+    return readJsonFile<SessionCache>(getSessionFile(), {});
+  });
 }
 
 export async function completeSession(worktreePath: string): Promise<void> {
