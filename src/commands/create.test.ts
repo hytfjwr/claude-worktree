@@ -159,6 +159,7 @@ describe("checkWorktreeLimit", () => {
 function makeDeps(overrides: Partial<CreateDeps> = {}): CreateDeps {
   return {
     checkWeztermAvailable: vi.fn(async () => true),
+    isRunningInsideWezterm: vi.fn(() => true),
     getGitContext: vi.fn(async () => ({
       repoRoot: "/repo",
       repoName: "repo",

@@ -21,7 +21,13 @@ import { completeSession, deleteSession, saveSession } from "../core/session.ts"
 import { assignSlot, deleteSlot, readSlot } from "../core/slot.ts";
 import { spawnInteractive } from "../core/spawn.ts";
 import { buildClaudeCommand } from "../external/claude.ts";
-import { checkWeztermAvailable, createPane, ensureWeztermAvailable, sendCommand } from "../external/wezterm.ts";
+import {
+  checkWeztermAvailable,
+  createPane,
+  ensureWeztermAvailable,
+  isRunningInsideWezterm,
+  sendCommand,
+} from "../external/wezterm.ts";
 import type {
   ClaudeOptions,
   CreateArgs,
@@ -45,6 +51,7 @@ import { performRollback } from "./rollback.ts";
 
 const defaultDeps: CreateDeps = {
   checkWeztermAvailable,
+  isRunningInsideWezterm,
   getGitContext,
   getWorktreePath,
   loadProjectConfig,
@@ -451,7 +458,11 @@ export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps
 
   // Check WezTerm availability when -pane is specified
   if (pane) {
-    await ensureWeztermAvailable(deps.checkWeztermAvailable, `claude-worktree ${branchName} '...'`);
+    await ensureWeztermAvailable(
+      deps.checkWeztermAvailable,
+      `claude-worktree ${branchName} '...'`,
+      deps.isRunningInsideWezterm,
+    );
   }
 
   // Read prompt from plan file

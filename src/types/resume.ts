@@ -5,6 +5,7 @@ import type { PaneOptions } from "./wezterm.ts";
 
 export type ResumeDeps = {
   checkWeztermAvailable: () => Promise<boolean>;
+  isRunningInsideWezterm: () => boolean;
   getGitContext: () => Promise<GitContext>;
   listWorktrees: () => Promise<ListWorktreesResult>;
   saveSession: (worktreePath: string, session: SessionInfo) => Promise<void>;

@@ -5,7 +5,13 @@ import { getGitContext, listWorktrees } from "../core/git.ts";
 import { completeSession, saveSession } from "../core/session.ts";
 import { spawnInteractive } from "../core/spawn.ts";
 import { buildResumeCommand } from "../external/claude.ts";
-import { checkWeztermAvailable, createPane, ensureWeztermAvailable, sendCommand } from "../external/wezterm.ts";
+import {
+  checkWeztermAvailable,
+  createPane,
+  ensureWeztermAvailable,
+  isRunningInsideWezterm,
+  sendCommand,
+} from "../external/wezterm.ts";
 import type { ResumeArgs, ResumeDeps, WorktreeInfo } from "../types/index.ts";
 import { icons } from "../ui/icons.ts";
 import { logDebug, logInfo } from "../ui/logger.ts";
@@ -17,6 +23,7 @@ import { selectWorktree } from "../ui/prompt.ts";
 
 const defaultDeps: ResumeDeps = {
   checkWeztermAvailable,
+  isRunningInsideWezterm,
   getGitContext,
   listWorktrees,
   saveSession,
@@ -126,7 +133,11 @@ export async function runResume(args: ResumeArgs, deps: ResumeDeps = defaultDeps
   const { branchName, prompt, pane, verbose } = args;
 
   if (pane) {
-    await ensureWeztermAvailable(deps.checkWeztermAvailable, "claude-worktree resume <branch-name>");
+    await ensureWeztermAvailable(
+      deps.checkWeztermAvailable,
+      "claude-worktree resume <branch-name>",
+      deps.isRunningInsideWezterm,
+    );
   }
 
   // Get worktree list

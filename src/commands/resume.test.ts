@@ -30,6 +30,7 @@ afterAll(async () => {
 function makeDeps(overrides: Partial<ResumeDeps> = {}): ResumeDeps {
   return {
     checkWeztermAvailable: async () => true,
+    isRunningInsideWezterm: () => true,
     getGitContext: async () => ({
       repoRoot: "/repo",
       repoName: "repo",

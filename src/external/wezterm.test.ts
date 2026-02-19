@@ -321,6 +321,89 @@ describe("activatePane", () => {
   });
 });
 
+describe("isRunningInsideWezterm", () => {
+  let restoreEnv: () => void;
+
+  beforeEach(() => {
+    vi.resetModules();
+    restoreEnv = saveEnv("WEZTERM_PANE");
+  });
+
+  afterEach(() => {
+    restoreEnv();
+  });
+
+  test("returns true when WEZTERM_PANE is set", async () => {
+    process.env.WEZTERM_PANE = "42";
+    const { isRunningInsideWezterm } = await import("./wezterm.ts");
+    expect(isRunningInsideWezterm()).toBe(true);
+  });
+
+  test("returns false when WEZTERM_PANE is not set", async () => {
+    delete process.env.WEZTERM_PANE;
+    const { isRunningInsideWezterm } = await import("./wezterm.ts");
+    expect(isRunningInsideWezterm()).toBe(false);
+  });
+});
+
+describe("ensureWeztermAvailable", () => {
+  let restoreEnv: () => void;
+
+  beforeEach(() => {
+    vi.resetModules();
+    restoreEnv = saveEnv("TERM_PROGRAM");
+  });
+
+  afterEach(() => {
+    restoreEnv();
+  });
+
+  test("throws when WezTerm CLI is not installed", async () => {
+    const { ensureWeztermAvailable } = await import("./wezterm.ts");
+    const checkFn = async () => false;
+    const isInsideFn = () => true;
+    await expect(ensureWeztermAvailable(checkFn, "claude-worktree test '...'", isInsideFn)).rejects.toThrow(
+      "WezTerm CLI is not installed",
+    );
+  });
+
+  test("throws when not running inside WezTerm", async () => {
+    process.env.TERM_PROGRAM = "ghostty";
+    const { ensureWeztermAvailable } = await import("./wezterm.ts");
+    const checkFn = async () => true;
+    const isInsideFn = () => false;
+    await expect(ensureWeztermAvailable(checkFn, "claude-worktree test '...'", isInsideFn)).rejects.toThrow(
+      "current terminal is ghostty",
+    );
+  });
+
+  test("includes usage hint in error message when not inside WezTerm", async () => {
+    const { ensureWeztermAvailable } = await import("./wezterm.ts");
+    const checkFn = async () => true;
+    const isInsideFn = () => false;
+    await expect(ensureWeztermAvailable(checkFn, "claude-worktree test '...'", isInsideFn)).rejects.toThrow(
+      "claude-worktree test '...'",
+    );
+  });
+
+  test("shows 'unknown terminal' when TERM_PROGRAM is not set", async () => {
+    delete process.env.TERM_PROGRAM;
+    const { ensureWeztermAvailable } = await import("./wezterm.ts");
+    const checkFn = async () => true;
+    const isInsideFn = () => false;
+    await expect(ensureWeztermAvailable(checkFn, "claude-worktree test '...'", isInsideFn)).rejects.toThrow(
+      "current terminal is unknown terminal",
+    );
+  });
+
+  test("does not throw when running inside WezTerm with CLI available", async () => {
+    const { ensureWeztermAvailable } = await import("./wezterm.ts");
+    const checkFn = async () => true;
+    const isInsideFn = () => true;
+    await expect(ensureWeztermAvailable(checkFn, "claude-worktree test '...'", isInsideFn)).resolves.toBeUndefined();
+  });
+});
+
 describe("createPane", () => {
   let restoreEnv: () => void;
 

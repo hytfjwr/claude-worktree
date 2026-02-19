@@ -44,7 +44,15 @@ export async function checkWeztermAvailable(): Promise<boolean> {
   }
 }
 
-export async function ensureWeztermAvailable(checkFn: () => Promise<boolean>, usageHint: string): Promise<void> {
+export function isRunningInsideWezterm(): boolean {
+  return process.env.WEZTERM_PANE !== undefined;
+}
+
+export async function ensureWeztermAvailable(
+  checkFn: () => Promise<boolean>,
+  usageHint: string,
+  isInsideFn: () => boolean = isRunningInsideWezterm,
+): Promise<void> {
   const available = await checkFn();
   if (!available) {
     const installHint =
@@ -58,6 +66,15 @@ export async function ensureWeztermAvailable(checkFn: () => Promise<boolean>, us
       "WezTerm CLI is not installed. The -pane option requires WezTerm.\n\n" +
         `Install WezTerm:\n${installHint}\n\n` +
         "Or run without -pane to use the current terminal:\n" +
+        `  ${usageHint}`,
+    );
+  }
+
+  if (!isInsideFn()) {
+    const currentTerminal = process.env.TERM_PROGRAM || "unknown terminal";
+    throw new DependencyError(
+      `The -pane option requires running inside WezTerm, but the current terminal is ${currentTerminal}.\n\n` +
+        "Run without -pane to use the current terminal:\n" +
         `  ${usageHint}`,
     );
   }

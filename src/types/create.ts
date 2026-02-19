@@ -9,6 +9,7 @@ import type { PaneOptions } from "./wezterm.ts";
 export type CreateDeps = {
   // Git operations
   checkWeztermAvailable: () => Promise<boolean>;
+  isRunningInsideWezterm: () => boolean;
   getGitContext: () => Promise<GitContext>;
   getWorktreePath: (repoRoot: string, repoName: string, branchName: string) => string;
   loadProjectConfig: (repoRoot: string) => Promise<ProjectConfig | null>;
