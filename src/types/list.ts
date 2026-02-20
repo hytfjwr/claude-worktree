@@ -1,7 +1,7 @@
 import type { AheadBehind, CommitInfo, ListWorktreesResult, WorktreeInfo, WorktreeStatus } from "./git.ts";
 import type { SessionInfo, SessionState } from "./session.ts";
 import type { Spinner } from "./spinner.ts";
-import type { WeztermPane } from "./wezterm.ts";
+import type { TmuxPane, WeztermPane } from "./wezterm.ts";
 
 export type ListArgs = {
   json: boolean;
@@ -39,4 +39,5 @@ export type ListDeps = {
   startSpinner: (message: string) => Spinner;
   readAllSessions: () => Promise<Record<string, SessionInfo>>;
   listWeztermPanes: () => Promise<WeztermPane[] | null>;
+  listTmuxPanes: () => Promise<TmuxPane[] | null>;
 };

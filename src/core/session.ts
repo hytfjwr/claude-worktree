@@ -1,7 +1,7 @@
 import { unlink } from "node:fs/promises";
 import { join } from "node:path";
 
-import type { SessionInfo, SessionState, WeztermPane } from "../types/index.ts";
+import type { AllPanes, SessionInfo, SessionState } from "../types/index.ts";
 import { atomicWriteJson, getCacheDir, readJsonFile, withLock } from "./cache.ts";
 
 type SessionCache = Record<string, SessionInfo>;
@@ -69,11 +69,7 @@ export async function deleteSession(worktreePath: string): Promise<void> {
   });
 }
 
-export function determineSessionStatus(
-  session: SessionInfo,
-  panes: WeztermPane[] | null,
-  now: Date = new Date(),
-): SessionState {
+export function determineSessionStatus(session: SessionInfo, allPanes: AllPanes, now: Date = new Date()): SessionState {
   const startedAt = new Date(session.startedAt);
   const elapsedMs = now.getTime() - startedAt.getTime();
 
@@ -82,19 +78,33 @@ export function determineSessionStatus(
     return { status: "done", elapsedMs, mode: session.mode, paneId: session.paneId };
   }
 
-  // pane mode: check if pane still exists (skip when panes is null = WezTerm unavailable)
-  if (session.mode === "pane" && session.paneId != null && panes != null) {
-    const paneExists = panes.some((p) => p.paneId === session.paneId);
-    return {
-      status: paneExists ? "running" : "done",
-      elapsedMs,
-      mode: session.mode,
-      paneId: session.paneId,
-    };
+  // pane mode: check if pane still exists using the correct backend
+  if (session.mode === "pane" && session.paneId != null) {
+    const backendType = session.backendType ?? "wezterm"; // backward compat
+
+    if (backendType === "wezterm" && allPanes.wezterm != null) {
+      const paneExists = allPanes.wezterm.some((p) => p.paneId === session.paneId);
+      return {
+        status: paneExists ? "running" : "done",
+        elapsedMs,
+        mode: session.mode,
+        paneId: session.paneId,
+      };
+    }
+
+    if (backendType === "tmux" && allPanes.tmux != null) {
+      const paneExists = allPanes.tmux.some((p) => p.paneId === session.paneId);
+      return {
+        status: paneExists ? "running" : "done",
+        elapsedMs,
+        mode: session.mode,
+        paneId: session.paneId,
+      };
+    }
   }
 
   // terminal mode without completedAt → Running
-  // pane mode without pane list (WezTerm unavailable) → Running
+  // pane mode without matching pane list (backend unavailable) → Running
   return { status: "running", elapsedMs, mode: session.mode, paneId: session.paneId };
 }
 

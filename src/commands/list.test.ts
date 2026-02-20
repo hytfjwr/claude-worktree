@@ -54,6 +54,7 @@ function makeListDeps(overrides: Partial<ListDeps> = {}): ListDeps {
     startSpinner: noopSpinner,
     readAllSessions: async () => ({}),
     listWeztermPanes: async () => null,
+    listTmuxPanes: async () => null,
     ...overrides,
   };
 }

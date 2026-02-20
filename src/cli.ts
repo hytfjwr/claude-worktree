@@ -11,7 +11,7 @@ import { setQuietMode } from "./ui/spinner.ts";
 import { getVersion } from "./version.ts";
 
 export function showHelp(): void {
-  logInfo(`claude-worktree - CLI for parallel development with WezTerm + git worktree + Claude Code
+  logInfo(`claude-worktree - CLI for parallel development with git worktree + Claude Code
 
 Usage:
   claude-worktree <branch-name> <prompt>
@@ -31,7 +31,7 @@ Arguments:
   <prompt>       Prompt to pass to Claude Code
 
 Options:
-  -p, -pane       Open in a new WezTerm pane (requires WezTerm; default: run in current terminal)
+  -p, -pane       Open in a new pane (requires WezTerm or tmux; default: run in current terminal)
   -plan <file>    Read prompt from a plan file (cannot be used with inline prompt)
   -b, -base <branch>  Specify base branch (default: current branch)
   -d, -danger     Skip workspace warning (uses --dangerously-skip-permissions)
@@ -46,7 +46,7 @@ Options:
   -version, --version  Show version number
 
 Resume options:
-  -p, -pane      Open in a new WezTerm pane
+  -p, -pane      Open in a new pane (requires WezTerm or tmux)
   -d, -danger    Skip workspace warning (uses --dangerously-skip-permissions)
   -q, -quiet     Suppress informational output (errors only)
   -v, -verbose   Show verbose output
@@ -93,7 +93,7 @@ export function showCreateHelp(): void {
   logInfo(`claude-worktree <branch-name> - Create a new worktree and launch Claude Code
 
 Creates a git worktree for a new branch, then starts a Claude Code session.
-Optionally opens in a new WezTerm pane for parallel development.
+Optionally opens in a new pane (WezTerm or tmux) for parallel development.
 
 Usage:
   claude-worktree <branch-name> <prompt>
@@ -104,7 +104,7 @@ Arguments:
   <prompt>       Prompt to pass to Claude Code
 
 Options:
-  -p, -pane            Open in a new WezTerm pane (requires WezTerm; default: run in current terminal)
+  -p, -pane            Open in a new pane (requires WezTerm or tmux; default: run in current terminal)
   -plan <file>         Read prompt from a plan file (cannot be used with inline prompt)
   -b, -base <branch>   Specify base branch (default: current branch)
   -d, -danger          Skip workspace warning (uses --dangerously-skip-permissions)
@@ -197,7 +197,7 @@ Arguments:
   <prompt>       Additional prompt message for the resumed session (optional)
 
 Options:
-  -p, -pane      Open in a new WezTerm pane (requires WezTerm; default: run in current terminal)
+  -p, -pane      Open in a new pane (requires WezTerm or tmux; default: run in current terminal)
   -d, -danger    Skip workspace warning (uses --dangerously-skip-permissions)
   -q, -quiet     Suppress informational output (errors only)
   -v, -verbose   Show verbose output

@@ -11,9 +11,11 @@ import {
   listWorktrees,
 } from "../core/git.ts";
 import { determineSessionStatus, formatElapsed, readAllSessions } from "../core/session.ts";
+import { listTmuxPanes } from "../external/tmux.ts";
 import { listWeztermPanes } from "../external/wezterm.ts";
 import type {
   AheadBehind,
+  AllPanes,
   ListArgs,
   ListDeps,
   ListResult,
@@ -37,6 +39,7 @@ const defaultDeps: ListDeps = {
   startSpinner,
   readAllSessions,
   listWeztermPanes,
+  listTmuxPanes,
 };
 
 type StatusBadge = {
@@ -203,14 +206,14 @@ export async function executeList(args: ListArgs, deps: ListDeps = defaultDeps):
     if (worktrees.length > 0) {
       const statuses = await deps.getWorktreeStatuses(worktrees, mainBranch, trackedBranches, remoteBranches);
 
-      // Fetch panes and sessions by default (skip with -no-status)
-      let panes = null;
+      // Fetch panes from all backends and sessions by default (skip with -no-status)
+      let allPanes: AllPanes = { wezterm: null, tmux: null };
       if (!args.noStatus) {
-        try {
-          panes = await deps.listWeztermPanes();
-        } catch {
-          // Continue without pane info - session status will show as unknown
-        }
+        const [weztermPanes, tmuxPanesResult] = await Promise.all([
+          deps.listWeztermPanes().catch(() => null),
+          deps.listTmuxPanes().catch(() => null),
+        ]);
+        allPanes = { wezterm: weztermPanes, tmux: tmuxPanesResult };
       }
       const sessions = args.noStatus ? {} : await deps.readAllSessions();
 
@@ -228,7 +231,7 @@ export async function executeList(args: ListArgs, deps: ListDeps = defaultDeps):
           if (!args.noStatus) {
             const sessionInfo = sessions[status.worktree.path];
             if (sessionInfo) {
-              session = determineSessionStatus(sessionInfo, panes);
+              session = determineSessionStatus(sessionInfo, allPanes);
             }
           }
 

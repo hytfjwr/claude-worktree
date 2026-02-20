@@ -21,13 +21,7 @@ import { completeSession, deleteSession, saveSession } from "../core/session.ts"
 import { assignSlot, deleteSlot, readSlot } from "../core/slot.ts";
 import { spawnInteractive } from "../core/spawn.ts";
 import { buildClaudeCommand } from "../external/claude.ts";
-import {
-  checkWeztermAvailable,
-  createPane,
-  ensureWeztermAvailable,
-  isRunningInsideWezterm,
-  sendCommand,
-} from "../external/wezterm.ts";
+import { ensurePaneBackendAvailable } from "../external/terminal-backend.ts";
 import type {
   ClaudeOptions,
   CreateArgs,
@@ -36,6 +30,7 @@ import type {
   ProjectConfig,
   RollbackOptions,
   RunInPaneArgs,
+  TerminalBackend,
   WorktreeInfo,
 } from "../types/index.ts";
 import { icons } from "../ui/icons.ts";
@@ -50,8 +45,6 @@ import { performRollback } from "./rollback.ts";
 // =============================================================================
 
 const defaultDeps: CreateDeps = {
-  checkWeztermAvailable,
-  isRunningInsideWezterm,
   getGitContext,
   getWorktreePath,
   loadProjectConfig,
@@ -72,8 +65,7 @@ const defaultDeps: CreateDeps = {
   completeSession,
   deleteSession,
   buildClaudeCommand,
-  createPane,
-  sendCommand,
+  ensurePaneBackend: ensurePaneBackendAvailable,
   confirm,
   startSpinner,
   performRollback,
@@ -333,7 +325,7 @@ function buildRollbackOptions(
 }
 
 /**
- * Launch Claude Code in a new WezTerm pane.
+ * Launch Claude Code in a new pane (WezTerm or tmux).
  */
 async function launchClaudeInPane(
   options: {
@@ -341,13 +333,14 @@ async function launchClaudeInPane(
     repoRoot: string;
     config: ProjectConfig | null;
     claudeOptions: ClaudeOptions;
+    backend: TerminalBackend;
     slot?: number;
     verbose: boolean;
     quiet: boolean;
   },
   deps: CreateDeps,
 ): Promise<void> {
-  const { worktreePath, repoRoot, config, claudeOptions, slot, verbose, quiet } = options;
+  const { worktreePath, repoRoot, config, claudeOptions, backend, slot, verbose, quiet } = options;
 
   const claudeCommand = deps.buildClaudeCommand(claudeOptions);
 
@@ -376,15 +369,16 @@ async function launchClaudeInPane(
   await writeFile(payloadPath, JSON.stringify(runInPaneArgs), { encoding: "utf-8", flag: "wx", mode: 0o600 });
 
   try {
-    const paneIdStr = await deps.createPane({ keepFocus: true });
-    const paneId = Number.parseInt(paneIdStr, 10);
-    logInfo(`${icons.window()} Created pane: ${paneId}`);
+    const paneIdStr = await backend.createPane({ keepFocus: true });
+    logInfo(`${icons.window()} Created pane: ${paneIdStr}`);
 
-    await deps.sendCommand(paneIdStr, `${getSelfCommand()} _run-in-pane "${payloadPath}"`);
+    await backend.sendCommand(paneIdStr, `${getSelfCommand()} _run-in-pane "${payloadPath}"`);
 
-    // Save session metadata
+    // Save session metadata with backend type
+    const paneId = backend.name === "wezterm" ? Number.parseInt(paneIdStr, 10) : paneIdStr;
     await deps.saveSession(worktreePath, {
       paneId,
+      backendType: backend.name,
       mode: "pane",
       startedAt: new Date().toISOString(),
     });
@@ -456,13 +450,10 @@ export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps
   const { branchName, planFile, merge, draft, pr, baseBranch, pane } = args;
   let { prompt } = args;
 
-  // Check WezTerm availability when -pane is specified
+  // Check pane backend availability when -pane is specified
+  let backend: TerminalBackend | undefined;
   if (pane) {
-    await ensureWeztermAvailable(
-      deps.checkWeztermAvailable,
-      `claude-worktree ${branchName} '...'`,
-      deps.isRunningInsideWezterm,
-    );
+    backend = await deps.ensurePaneBackend(`claude-worktree ${branchName} '...'`);
   }
 
   // Read prompt from plan file
@@ -571,7 +562,7 @@ export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps
       );
     }
 
-    logInfo(`  ${step++}. Launch mode:       ${pane ? "WezTerm pane" : "Current terminal"}`);
+    logInfo(`  ${step++}. Launch mode:       ${backend ? `${backend.name} pane` : "Current terminal"}`);
 
     const claudeOptions = buildClaudeOptions(
       { ...args, prompt },
@@ -678,13 +669,14 @@ export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps
   }
 
   // Launch Claude in pane or terminal
-  if (pane) {
+  if (pane && backend) {
     await launchClaudeInPane(
       {
         worktreePath,
         repoRoot: git.repoRoot,
         config,
         claudeOptions,
+        backend,
         slot,
         verbose: !!args.verbose,
         quiet: !!args.quiet,

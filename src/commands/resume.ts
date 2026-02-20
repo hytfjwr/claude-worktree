@@ -5,14 +5,8 @@ import { getGitContext, listWorktrees } from "../core/git.ts";
 import { completeSession, saveSession } from "../core/session.ts";
 import { spawnInteractive } from "../core/spawn.ts";
 import { buildResumeCommand } from "../external/claude.ts";
-import {
-  checkWeztermAvailable,
-  createPane,
-  ensureWeztermAvailable,
-  isRunningInsideWezterm,
-  sendCommand,
-} from "../external/wezterm.ts";
-import type { ResumeArgs, ResumeDeps, WorktreeInfo } from "../types/index.ts";
+import { ensurePaneBackendAvailable } from "../external/terminal-backend.ts";
+import type { ResumeArgs, ResumeDeps, TerminalBackend, WorktreeInfo } from "../types/index.ts";
 import { icons } from "../ui/icons.ts";
 import { logDebug, logInfo } from "../ui/logger.ts";
 import { selectWorktree } from "../ui/prompt.ts";
@@ -22,15 +16,12 @@ import { selectWorktree } from "../ui/prompt.ts";
 // =============================================================================
 
 const defaultDeps: ResumeDeps = {
-  checkWeztermAvailable,
-  isRunningInsideWezterm,
   getGitContext,
   listWorktrees,
   saveSession,
   completeSession,
   buildResumeCommand,
-  createPane,
-  sendCommand,
+  ensurePaneBackend: ensurePaneBackendAvailable,
   selectWorktree,
 };
 
@@ -39,17 +30,23 @@ const defaultDeps: ResumeDeps = {
 // =============================================================================
 
 /**
- * Launch Claude Code --continue in a new WezTerm pane.
+ * Launch Claude Code --continue in a new pane (WezTerm or tmux).
  */
-async function launchResumeInPane(worktree: WorktreeInfo, claudeCommand: string, deps: ResumeDeps): Promise<void> {
-  const paneIdStr = await deps.createPane({ keepFocus: true });
-  const paneId = Number.parseInt(paneIdStr, 10);
-  logInfo(`${icons.window()} Created pane: ${paneId}`);
+async function launchResumeInPane(
+  worktree: WorktreeInfo,
+  claudeCommand: string,
+  backend: TerminalBackend,
+  deps: ResumeDeps,
+): Promise<void> {
+  const paneIdStr = await backend.createPane({ keepFocus: true });
+  logInfo(`${icons.window()} Created pane: ${paneIdStr}`);
 
-  await deps.sendCommand(paneIdStr, `cd "${worktree.path}" && ${claudeCommand}`);
+  await backend.sendCommand(paneIdStr, `cd "${worktree.path}" && ${claudeCommand}`);
 
+  const paneId = backend.name === "wezterm" ? Number.parseInt(paneIdStr, 10) : paneIdStr;
   await deps.saveSession(worktree.path, {
     paneId,
+    backendType: backend.name,
     mode: "pane",
     startedAt: new Date().toISOString(),
   });
@@ -132,12 +129,9 @@ async function resolveTargetWorktree(
 export async function runResume(args: ResumeArgs, deps: ResumeDeps = defaultDeps): Promise<void> {
   const { branchName, prompt, pane, verbose } = args;
 
+  let backend: TerminalBackend | undefined;
   if (pane) {
-    await ensureWeztermAvailable(
-      deps.checkWeztermAvailable,
-      "claude-worktree resume <branch-name>",
-      deps.isRunningInsideWezterm,
-    );
+    backend = await deps.ensurePaneBackend("claude-worktree resume <branch-name>");
   }
 
   // Get worktree list
@@ -183,8 +177,8 @@ export async function runResume(args: ResumeArgs, deps: ResumeDeps = defaultDeps
   }
 
   // Launch
-  if (pane) {
-    await launchResumeInPane(target, claudeCommand, deps);
+  if (pane && backend) {
+    await launchResumeInPane(target, claudeCommand, backend, deps);
   } else {
     await launchResumeInTerminal(target, claudeCommand, deps);
   }

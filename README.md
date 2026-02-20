@@ -3,14 +3,14 @@
 [![npm version](https://img.shields.io/npm/v/@hytfjwr/claude-worktree.svg)](https://www.npmjs.com/package/@hytfjwr/claude-worktree)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A CLI tool that creates a git worktree and launches [Claude Code](https://docs.anthropic.com/en/docs/claude-code) with a prompt. With the `-pane` option, it opens in a new [WezTerm](https://wezfurlong.org/wezterm/) pane, enabling parallel development across multiple worktrees.
+A CLI tool that creates a git worktree and launches [Claude Code](https://docs.anthropic.com/en/docs/claude-code) with a prompt. With the `-pane` option, it opens in a new [WezTerm](https://wezfurlong.org/wezterm/) or [tmux](https://github.com/tmux/tmux) pane, enabling parallel development across multiple worktrees.
 
 ## Requirements
 
 - [Node.js](https://nodejs.org/) (v22+)
 - [Git](https://git-scm.com/)
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
-- [WezTerm](https://wezfurlong.org/wezterm/) (optional, required only for `-pane`)
+- [WezTerm](https://wezfurlong.org/wezterm/) or [tmux](https://github.com/tmux/tmux) (optional, required only for `-pane`)
 - [GitHub CLI](https://cli.github.com/) (optional, enables PR info display in `clean`)
 
 ## Installation
@@ -31,7 +31,7 @@ npx @hytfjwr/claude-worktree feature/auth 'Implement authentication feature'
 # Create a worktree and start Claude Code
 claude-worktree feature/auth 'Implement authentication feature'
 
-# Open in a new WezTerm pane for parallel development
+# Open in a new pane for parallel development (WezTerm or tmux)
 claude-worktree feature/auth 'Implement authentication feature' -pane
 
 # Resume a session in an existing worktree
@@ -76,7 +76,7 @@ claude-worktree --version
 
 ### Options
 
-- `-p, -pane` - Open in a new WezTerm pane (default: run in current terminal)
+- `-p, -pane` - Open in a new pane (requires WezTerm or tmux; default: run in current terminal)
 - `-plan <file>` - Read prompt from a file (cannot be used with inline prompt)
 - `-b, -base <branch>` - Specify base branch (default: current branch)
 - `-d, -danger` - Skip workspace warning (uses --dangerously-skip-permissions)
@@ -107,7 +107,7 @@ When stdin is not a TTY (e.g., piped input), the selector falls back to a number
 
 ### Resume Options
 
-- `-p, -pane` - Open in a new WezTerm pane (default: run in current terminal)
+- `-p, -pane` - Open in a new pane (requires WezTerm or tmux; default: run in current terminal)
 - `-d, -danger` - Skip workspace warning (uses --dangerously-skip-permissions)
 - `-v, -verbose` - Show verbose output
 
@@ -124,7 +124,7 @@ When stdin is not a TTY (e.g., piped input), the selector falls back to a number
 # Create a worktree and start Claude Code in current terminal
 claude-worktree feature/auth 'Implement authentication feature'
 
-# Open in a new WezTerm pane
+# Open in a new pane (WezTerm or tmux)
 claude-worktree feature/auth 'Implement authentication feature' -pane
 
 # Short form
@@ -236,7 +236,7 @@ When using `claude-worktree list -json`, the output follows this schema:
 | `session.status` | `string` | `"running"` or `"done"` |
 | `session.elapsedMs` | `number` | Milliseconds since session started |
 | `session.mode` | `string` | `"pane"` or `"terminal"` |
-| `session.paneId` | `number \| undefined` | WezTerm pane ID (pane mode only) |
+| `session.paneId` | `number \| string \| undefined` | Pane ID — WezTerm (number) or tmux (string, e.g. `%0`). Pane mode only. |
 
 ## Hook Configuration
 

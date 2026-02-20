@@ -32,7 +32,7 @@ export type { BooleanOptionDef, ExtractResult, OptionDef, OptionSchema, StringOp
 export type { ResumeDeps } from "./resume.ts";
 export type { RollbackOptions } from "./rollback.ts";
 export type { SelectItem } from "./select.ts";
-export type { SessionInfo, SessionMode, SessionState } from "./session.ts";
+export type { AllPanes, SessionInfo, SessionMode, SessionState } from "./session.ts";
 export type { SpawnInteractiveOptions } from "./spawn.ts";
 export type { ColorTheme, Spinner } from "./spinner.ts";
-export type { PaneOptions, WeztermPane } from "./wezterm.ts";
+export type { BackendType, PaneOptions, TerminalBackend, TmuxPane, WeztermPane } from "./wezterm.ts";

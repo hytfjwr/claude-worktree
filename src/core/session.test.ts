@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { saveEnv } from "../__test-utils__.ts";
-import type { SessionInfo, WeztermPane } from "../types/index.ts";
+import type { AllPanes, SessionInfo, WeztermPane } from "../types/index.ts";
 
 // Speed up lock acquisition failure tests by using minimal retries
 vi.mock("./cache.ts", async (importOriginal) => {
@@ -34,6 +34,8 @@ import {
 
 describe("determineSessionStatus", () => {
   const now = new Date("2025-01-15T12:00:00Z");
+  const noPanes: AllPanes = { wezterm: null, tmux: null };
+  const emptyPanes: AllPanes = { wezterm: [], tmux: null };
 
   test("completedAt set → done", () => {
     const session: SessionInfo = {
@@ -41,7 +43,7 @@ describe("determineSessionStatus", () => {
       startedAt: "2025-01-15T11:45:00Z",
       completedAt: "2025-01-15T11:50:00Z",
     };
-    const result = determineSessionStatus(session, [], now);
+    const result = determineSessionStatus(session, emptyPanes, now);
     expect(result.status).toBe("done");
     expect(result.elapsedMs).toBe(15 * 60_000);
     expect(result.mode).toBe("terminal");
@@ -54,7 +56,7 @@ describe("determineSessionStatus", () => {
       startedAt: "2025-01-15T11:45:00Z",
     };
     const panes: WeztermPane[] = [{ paneId: 42, title: "claude", cwd: "/tmp" }];
-    const result = determineSessionStatus(session, panes, now);
+    const result = determineSessionStatus(session, { wezterm: panes, tmux: null }, now);
     expect(result.status).toBe("running");
     expect(result.paneId).toBe(42);
   });
@@ -66,7 +68,7 @@ describe("determineSessionStatus", () => {
       startedAt: "2025-01-15T11:45:00Z",
     };
     const panes: WeztermPane[] = [{ paneId: 99, title: "other", cwd: "/tmp" }];
-    const result = determineSessionStatus(session, panes, now);
+    const result = determineSessionStatus(session, { wezterm: panes, tmux: null }, now);
     expect(result.status).toBe("done");
   });
 
@@ -76,7 +78,7 @@ describe("determineSessionStatus", () => {
       paneId: 42,
       startedAt: "2025-01-15T11:45:00Z",
     };
-    const result = determineSessionStatus(session, [], now);
+    const result = determineSessionStatus(session, emptyPanes, now);
     expect(result.status).toBe("done");
   });
 
@@ -85,7 +87,7 @@ describe("determineSessionStatus", () => {
       mode: "terminal",
       startedAt: "2025-01-15T11:45:00Z",
     };
-    const result = determineSessionStatus(session, [], now);
+    const result = determineSessionStatus(session, emptyPanes, now);
     expect(result.status).toBe("running");
     expect(result.mode).toBe("terminal");
   });
@@ -98,7 +100,7 @@ describe("determineSessionStatus", () => {
       completedAt: "2025-01-15T11:50:00Z",
     };
     const panes: WeztermPane[] = [{ paneId: 42, title: "claude", cwd: "/tmp" }];
-    const result = determineSessionStatus(session, panes, now);
+    const result = determineSessionStatus(session, { wezterm: panes, tmux: null }, now);
     expect(result.status).toBe("done");
   });
 
@@ -108,7 +110,7 @@ describe("determineSessionStatus", () => {
       paneId: 42,
       startedAt: "2025-01-15T11:45:00Z",
     };
-    const result = determineSessionStatus(session, null, now);
+    const result = determineSessionStatus(session, noPanes, now);
     expect(result.status).toBe("running");
     expect(result.paneId).toBe(42);
   });
@@ -118,8 +120,44 @@ describe("determineSessionStatus", () => {
       mode: "terminal",
       startedAt: "2025-01-15T10:30:00Z",
     };
-    const result = determineSessionStatus(session, [], now);
+    const result = determineSessionStatus(session, emptyPanes, now);
     expect(result.elapsedMs).toBe(90 * 60_000);
+  });
+
+  test("tmux pane mode with existing pane → running", () => {
+    const session: SessionInfo = {
+      mode: "pane",
+      paneId: "%42",
+      backendType: "tmux",
+      startedAt: "2025-01-15T11:45:00Z",
+    };
+    const allPanes: AllPanes = { wezterm: null, tmux: [{ paneId: "%42", title: "claude", cwd: "/tmp" }] };
+    const result = determineSessionStatus(session, allPanes, now);
+    expect(result.status).toBe("running");
+    expect(result.paneId).toBe("%42");
+  });
+
+  test("tmux pane mode with missing pane → done", () => {
+    const session: SessionInfo = {
+      mode: "pane",
+      paneId: "%42",
+      backendType: "tmux",
+      startedAt: "2025-01-15T11:45:00Z",
+    };
+    const allPanes: AllPanes = { wezterm: null, tmux: [{ paneId: "%99", title: "other", cwd: "/tmp" }] };
+    const result = determineSessionStatus(session, allPanes, now);
+    expect(result.status).toBe("done");
+  });
+
+  test("session without backendType defaults to wezterm", () => {
+    const session: SessionInfo = {
+      mode: "pane",
+      paneId: 42,
+      startedAt: "2025-01-15T11:45:00Z",
+    };
+    const allPanes: AllPanes = { wezterm: [{ paneId: 42, title: "claude", cwd: "/tmp" }], tmux: null };
+    const result = determineSessionStatus(session, allPanes, now);
+    expect(result.status).toBe("running");
   });
 });
 

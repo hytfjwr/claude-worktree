@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { makeWorktree } from "../__test-utils__.ts";
+import { DependencyError } from "../core/errors.ts";
 import { spawnInteractive } from "../core/spawn.ts";
 import type { ResumeDeps, WorktreeInfo } from "../types/index.ts";
 import { runResume } from "./resume.ts";
@@ -29,8 +30,11 @@ afterAll(async () => {
 
 function makeDeps(overrides: Partial<ResumeDeps> = {}): ResumeDeps {
   return {
-    checkWeztermAvailable: async () => true,
-    isRunningInsideWezterm: () => true,
+    ensurePaneBackend: vi.fn(async () => ({
+      name: "wezterm" as const,
+      createPane: vi.fn(async () => "42"),
+      sendCommand: vi.fn(async () => {}),
+    })),
     getGitContext: async () => ({
       repoRoot: "/repo",
       repoName: "repo",
@@ -43,8 +47,6 @@ function makeDeps(overrides: Partial<ResumeDeps> = {}): ResumeDeps {
     saveSession: vi.fn(async () => {}),
     completeSession: vi.fn(async () => {}),
     buildResumeCommand: vi.fn(() => "claude --continue"),
-    createPane: vi.fn(async () => "42"),
-    sendCommand: vi.fn(async () => {}),
     selectWorktree: vi.fn(async () => null),
     ...overrides,
   };
@@ -281,36 +283,33 @@ describe("runResume", () => {
       const deps = makeDeps();
       await runResume({ branchName: "feature/test", pane: true }, deps);
 
-      expect(deps.createPane).toHaveBeenCalledWith({ keepFocus: true });
-      expect(deps.sendCommand).toHaveBeenCalledWith("42", `cd "${tempDir}" && claude --continue`);
+      const backend = await (deps.ensurePaneBackend as ReturnType<typeof vi.fn>).mock.results[0].value;
+      expect(backend.createPane).toHaveBeenCalledWith({ keepFocus: true });
+      expect(backend.sendCommand).toHaveBeenCalledWith("42", `cd "${tempDir}" && claude --continue`);
       expect(deps.saveSession).toHaveBeenCalledWith(tempDir, {
         paneId: 42,
+        backendType: "wezterm",
         mode: "pane",
         startedAt: expect.any(String),
       });
     });
 
-    test("throws when WezTerm is not available", async () => {
+    test("throws when no pane backend available", async () => {
       const deps = makeDeps({
-        checkWeztermAvailable: async () => false,
+        ensurePaneBackend: vi.fn(async () => {
+          throw new DependencyError("requires WezTerm or tmux");
+        }),
       });
 
       await expect(runResume({ branchName: "feature/test", pane: true }, deps)).rejects.toThrow(
-        "WezTerm CLI is not installed",
+        "requires WezTerm or tmux",
       );
     });
 
     test("does not check WezTerm when pane is not specified", async () => {
-      const deps = makeDeps({
-        checkWeztermAvailable: vi.fn(async () => false),
-      });
-
-      // Use pane: true but with unavailable WezTerm to verify it's checked
-      // When pane is not specified, checkWeztermAvailable should not be called
-      // We test the "not pane" path by checking calls on a non-pane flow
-      // that exits early (e.g. cancelled selection)
-      await runResume({}, deps); // no branch, selectWorktree returns null → cancelled
-      expect(deps.checkWeztermAvailable).not.toHaveBeenCalled();
+      const deps = makeDeps();
+      await runResume({}, deps);
+      expect(deps.ensurePaneBackend).not.toHaveBeenCalled();
     });
   });
 });

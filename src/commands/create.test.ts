@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import { afterAll, afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { makeWorktree } from "../__test-utils__.ts";
+import { DependencyError } from "../core/errors.ts";
 import { spawnInteractive } from "../core/spawn.ts";
 import type { CreateArgs, CreateDeps, ProjectConfig } from "../types/index.ts";
 import { checkWorktreeLimit, getSelfCommand, previewHookTemplate, readPlanFile, runCreate } from "./create.ts";
@@ -158,8 +159,6 @@ describe("checkWorktreeLimit", () => {
 
 function makeDeps(overrides: Partial<CreateDeps> = {}): CreateDeps {
   return {
-    checkWeztermAvailable: vi.fn(async () => true),
-    isRunningInsideWezterm: vi.fn(() => true),
     getGitContext: vi.fn(async () => ({
       repoRoot: "/repo",
       repoName: "repo",
@@ -191,8 +190,11 @@ function makeDeps(overrides: Partial<CreateDeps> = {}): CreateDeps {
     completeSession: vi.fn(async () => {}),
     deleteSession: vi.fn(async () => {}),
     buildClaudeCommand: vi.fn(() => "claude --prompt 'test'"),
-    createPane: vi.fn(async () => "42"),
-    sendCommand: vi.fn(async () => {}),
+    ensurePaneBackend: vi.fn(async () => ({
+      name: "wezterm" as const,
+      createPane: vi.fn(async () => "42"),
+      sendCommand: vi.fn(async () => {}),
+    })),
     confirm: vi.fn(async () => true),
     startSpinner: vi.fn(() => ({ stop: vi.fn(), fail: vi.fn(), updateTail: vi.fn(), isExpanded: vi.fn(() => false) })),
     performRollback: vi.fn(async () => {}),
@@ -229,16 +231,19 @@ describe("runCreate", () => {
       const deps = makeDeps();
       await runCreate(defaultPaneArgs, deps);
 
+      const backend = await (deps.ensurePaneBackend as ReturnType<typeof vi.fn>).mock.results[0].value;
+
       expect(deps.getGitContext).toHaveBeenCalled();
       expect(deps.getWorktreePath).toHaveBeenCalledWith("/repo", "repo", "feat/x");
       expect(deps.loadProjectConfig).toHaveBeenCalledWith("/repo");
       expect(deps.listWorktrees).toHaveBeenCalled();
       expect(deps.createWorktree).toHaveBeenCalledWith("feat/x", "/repo/.worktrees/feat-x", "main");
       expect(deps.buildClaudeCommand).toHaveBeenCalled();
-      expect(deps.createPane).toHaveBeenCalledWith({ keepFocus: true });
-      expect(deps.sendCommand).toHaveBeenCalledWith("42", expect.stringContaining("_run-in-pane"));
+      expect(backend.createPane).toHaveBeenCalledWith({ keepFocus: true });
+      expect(backend.sendCommand).toHaveBeenCalledWith("42", expect.stringContaining("_run-in-pane"));
       expect(deps.saveSession).toHaveBeenCalledWith("/repo/.worktrees/feat-x", {
         paneId: 42,
+        backendType: "wezterm",
         mode: "pane",
         startedAt: expect.any(String),
       });
@@ -296,32 +301,31 @@ describe("runCreate", () => {
       const deps = makeDeps();
       await runCreate(defaultTerminalArgs, deps);
 
-      expect(deps.createPane).not.toHaveBeenCalled();
-      expect(deps.sendCommand).not.toHaveBeenCalled();
+      expect(deps.ensurePaneBackend).not.toHaveBeenCalled();
     });
   });
 
   // ---------------------------------------------------------------------------
-  // WezTerm availability
+  // Pane backend availability
   // ---------------------------------------------------------------------------
 
-  describe("wezterm availability", () => {
-    test("throws when wezterm is unavailable in pane mode", async () => {
+  describe("pane backend availability", () => {
+    test("throws when pane backend is unavailable in pane mode", async () => {
       const deps = makeDeps({
-        checkWeztermAvailable: vi.fn(async () => false),
+        ensurePaneBackend: vi.fn(async () => {
+          throw new DependencyError("Pane mode requires WezTerm or tmux");
+        }),
       });
 
-      await expect(runCreate(defaultPaneArgs, deps)).rejects.toThrow("WezTerm CLI is not installed");
+      await expect(runCreate(defaultPaneArgs, deps)).rejects.toThrow("requires WezTerm or tmux");
     });
 
-    test("does not check wezterm in terminal mode", async () => {
-      const deps = makeDeps({
-        checkWeztermAvailable: vi.fn(async () => false),
-      });
+    test("does not check pane backend in terminal mode", async () => {
+      const deps = makeDeps();
 
       await runCreate(defaultTerminalArgs, deps);
 
-      expect(deps.checkWeztermAvailable).not.toHaveBeenCalled();
+      expect(deps.ensurePaneBackend).not.toHaveBeenCalled();
     });
   });
 
@@ -711,9 +715,11 @@ describe("runCreate", () => {
       });
       await runCreate(defaultPaneArgs, deps);
 
+      const backend = await (deps.ensurePaneBackend as ReturnType<typeof vi.fn>).mock.results[0].value;
+
       // In pane mode, postCreate is packed into the payload — not executed by runCreate
       expect(deps.executeHookWithSpinner).not.toHaveBeenCalled();
-      expect(deps.createPane).toHaveBeenCalled();
+      expect(backend.createPane).toHaveBeenCalled();
     });
   });
 
@@ -726,8 +732,10 @@ describe("runCreate", () => {
       const deps = makeDeps();
       await runCreate({ ...defaultPaneArgs, dryRun: true }, deps);
 
+      const backend = await (deps.ensurePaneBackend as ReturnType<typeof vi.fn>).mock.results[0].value;
+
       expect(deps.createWorktree).not.toHaveBeenCalled();
-      expect(deps.createPane).not.toHaveBeenCalled();
+      expect(backend.createPane).not.toHaveBeenCalled();
       expect(deps.saveSession).not.toHaveBeenCalled();
     });
 
@@ -739,7 +747,7 @@ describe("runCreate", () => {
       expect(logs).toContainEqual(expect.stringContaining("Dry Run Preview:"));
       expect(logs).toContainEqual(expect.stringContaining("1. Create worktree:"));
       expect(logs).toContainEqual(expect.stringContaining("2. Launch mode:"));
-      expect(logs).toContainEqual(expect.stringContaining("WezTerm pane"));
+      expect(logs).toContainEqual(expect.stringContaining("wezterm pane"));
       expect(logs).toContainEqual(expect.stringContaining("3. Claude command:"));
     });
 
@@ -1011,22 +1019,28 @@ describe("runCreate", () => {
 
   describe("pane mode error handling", () => {
     test("rolls back when pane creation fails", async () => {
-      const deps = makeDeps({
+      const failingBackend = {
+        name: "wezterm" as const,
         createPane: vi.fn(async () => {
           throw new Error("pane creation failed");
         }),
-      });
+        sendCommand: vi.fn(async () => {}),
+      };
+      const deps = makeDeps({ ensurePaneBackend: vi.fn(async () => failingBackend) });
 
       await expect(runCreate(defaultPaneArgs, deps)).rejects.toThrow("pane creation failed");
       expect(deps.performRollback).toHaveBeenCalled();
     });
 
     test("rolls back when sendCommand fails", async () => {
-      const deps = makeDeps({
+      const failingBackend = {
+        name: "wezterm" as const,
+        createPane: vi.fn(async () => "42"),
         sendCommand: vi.fn(async () => {
           throw new Error("send failed");
         }),
-      });
+      };
+      const deps = makeDeps({ ensurePaneBackend: vi.fn(async () => failingBackend) });
 
       await expect(runCreate(defaultPaneArgs, deps)).rejects.toThrow("send failed");
       expect(deps.performRollback).toHaveBeenCalled();

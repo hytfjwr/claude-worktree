@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A CLI tool for parallel development using WezTerm + git worktree + Claude Code. It creates a git worktree and launches Claude Code. With the `-pane` option, it opens in a new WezTerm pane for parallel development.
+A CLI tool for parallel development using git worktree + Claude Code. It creates a git worktree and launches Claude Code. With the `-pane` option, it opens in a new WezTerm or tmux pane for parallel development.
 
 ## Commands
 
@@ -81,7 +81,7 @@ claude-worktree clean -dry-run
 
 ### Options
 
-- `-p, -pane` - Open in a new WezTerm pane (default: run in current terminal)
+- `-p, -pane` - Open in a new pane (requires WezTerm or tmux; default: run in current terminal)
 - `-plan <file>` - Read prompt from a file (cannot be used with inline prompt)
 - `-b, -base <branch>` - Specify base branch (default: current branch)
 - `-d, -danger` - Skip workspace warning (uses --dangerously-skip-permissions)
@@ -95,7 +95,7 @@ claude-worktree clean -dry-run
 
 ### Resume Options
 
-- `-p, -pane` - Open in a new WezTerm pane (default: run in current terminal)
+- `-p, -pane` - Open in a new pane (requires WezTerm or tmux; default: run in current terminal)
 - `-d, -danger` - Skip workspace warning (uses --dangerously-skip-permissions)
 - `-v, -verbose` - Show verbose output
 
@@ -156,6 +156,10 @@ src/
   external/            # External tool integrations
     claude.ts          # Claude Code command generation
     claude.test.ts
+    terminal-backend.ts # Backend abstraction (auto-detect WezTerm/tmux)
+    terminal-backend.test.ts
+    tmux.ts            # tmux pane operations (split, send-keys)
+    tmux.test.ts
     wezterm.ts         # WezTerm pane operations (split, send text)
     wezterm.test.ts
   ui/                  # Terminal UI utilities
@@ -186,7 +190,7 @@ src/
 3. Load project config from `.claude-worktree.json` (if exists)
 4. Create worktree directly via `git worktree add`
 5. Run `postCreate` hook (if configured) — rollback worktree on failure
-6. If `-pane`: Split a new pane to the right in WezTerm → cd into worktree → launch Claude Code → save session metadata
+6. If `-pane`: Auto-detect backend (WezTerm or tmux) → split a new pane → cd into worktree → launch Claude Code → save session metadata
 7. Otherwise: cd into worktree → launch Claude Code in current terminal → mark session as completed on exit
 
 **Hook Configuration (`.claude-worktree.json`):**
@@ -207,9 +211,9 @@ src/
 - `{slot}` — auto-assigned slot (1-9) based on port availability (8881-8889), persisted to `~/.cache/claude-worktree/slots.json`
 
 **Session Tracking (`~/.cache/claude-worktree/sessions.json`):**
-- Worktree 作成時にセッションメタデータ (pane ID, mode, startedAt) を保存
+- Worktree 作成時にセッションメタデータ (pane ID, mode, backendType, startedAt) を保存
 - `list` で各 worktree の Claude セッション状態 (Running/Done) をデフォルト表示 (`-no-status` で無効化)
-- pane モード: WezTerm pane の存在で Running/Done を判定
+- pane モード: WezTerm/tmux pane の存在で Running/Done を判定（backendType に応じて対応する pane リストを参照）
 - terminal モード: プロセス終了時に `completedAt` を設定して Done 判定
 - `clean` 実行時にセッションデータも自動削除
 - `hookTimeout` — global default timeout in seconds (default: 600)
@@ -219,7 +223,7 @@ src/
 **Environment Variables:**
 - `CLAUDE_WORKTREE_CACHE_DIR` — override the slot cache directory (default: `~/.cache/claude-worktree`)
 
-**External Tool Dependencies:** node, git, wezterm CLI, claude CLI, gh CLI (optional)
+**External Tool Dependencies:** node, git, wezterm CLI or tmux (for -pane), claude CLI, gh CLI (optional)
 
 ## Testing
 

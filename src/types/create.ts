@@ -4,12 +4,10 @@ import type { GitContext, ListWorktreesResult } from "./git.ts";
 import type { RollbackOptions } from "./rollback.ts";
 import type { SessionInfo } from "./session.ts";
 import type { Spinner } from "./spinner.ts";
-import type { PaneOptions } from "./wezterm.ts";
+import type { TerminalBackend } from "./wezterm.ts";
 
 export type CreateDeps = {
   // Git operations
-  checkWeztermAvailable: () => Promise<boolean>;
-  isRunningInsideWezterm: () => boolean;
   getGitContext: () => Promise<GitContext>;
   getWorktreePath: (repoRoot: string, repoName: string, branchName: string) => string;
   loadProjectConfig: (repoRoot: string) => Promise<ProjectConfig | null>;
@@ -34,10 +32,11 @@ export type CreateDeps = {
   completeSession: (worktreePath: string) => Promise<void>;
   deleteSession: (worktreePath: string) => Promise<void>;
 
-  // Claude/WezTerm
+  // Claude
   buildClaudeCommand: (options: ClaudeOptions) => string;
-  createPane: (options?: PaneOptions) => Promise<string>;
-  sendCommand: (paneId: string, command: string) => Promise<void>;
+
+  // Terminal backend
+  ensurePaneBackend: (usageHint: string) => Promise<TerminalBackend>;
 
   // UI
   confirm: (message: string) => Promise<boolean>;

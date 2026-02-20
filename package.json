@@ -44,6 +44,7 @@
     "worktree",
     "git-worktree",
     "wezterm",
+    "tmux",
     "cli",
     "parallel-development",
     "ai-development"
