@@ -6,6 +6,7 @@ import { completeSession, saveSession } from "../core/session.ts";
 import { spawnInteractive } from "../core/spawn.ts";
 import { buildResumeCommand } from "../external/claude.ts";
 import { ensurePaneBackendAvailable } from "../external/terminal-backend.ts";
+import { getSessionForPane, isRunningInsideTmux } from "../external/tmux.ts";
 import type { ResumeArgs, ResumeDeps, TerminalBackend, WorktreeInfo } from "../types/index.ts";
 import { icons } from "../ui/icons.ts";
 import { logDebug, logInfo } from "../ui/logger.ts";
@@ -52,6 +53,12 @@ async function launchResumeInPane(
   });
 
   logInfo(`${icons.done()} Claude resumed in new pane`);
+
+  // Show tmux attach hint when launched from outside tmux
+  if (backend.name === "tmux" && !isRunningInsideTmux()) {
+    const sessionName = await getSessionForPane(paneIdStr);
+    logInfo(`\n  To view the session, run: tmux attach -t ${sessionName}`);
+  }
 }
 
 /**

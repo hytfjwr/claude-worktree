@@ -56,13 +56,18 @@ export async function ensurePaneBackendAvailable(usageHint: string): Promise<Ter
     return createBackend(detected);
   }
 
-  // Neither WezTerm nor tmux detected — check what's installed to give a helpful error
+  // Neither WezTerm nor tmux detected — check what's installed
   const [weztermInstalled, tmuxInstalled] = await Promise.all([
     wezterm.checkWeztermAvailable(),
     tmux.checkTmuxAvailable(),
   ]);
 
-  if (!weztermInstalled && !tmuxInstalled) {
+  if (tmuxInstalled) {
+    // tmux can create detached sessions even outside tmux
+    return createTmuxBackend();
+  }
+
+  if (!weztermInstalled) {
     const installHint =
       process.platform === "darwin"
         ? "  brew install --cask wezterm    # WezTerm\n  brew install tmux              # tmux"
@@ -78,12 +83,14 @@ export async function ensurePaneBackendAvailable(usageHint: string): Promise<Ter
     );
   }
 
+  // Only WezTerm installed but not inside WezTerm
   const currentTerminal = process.env.TERM_PROGRAM || "unknown terminal";
-  const available = [weztermInstalled && "WezTerm", tmuxInstalled && "tmux"].filter(Boolean).join(" or ");
 
   throw new DependencyError(
     `The -pane option requires running inside WezTerm or tmux, but the current terminal is ${currentTerminal}.\n\n` +
-      `${available} is installed. Start a session in one of them first.\n\n` +
+      "WezTerm is installed. Start a session in WezTerm first.\n\n" +
+      "Or install tmux to use -pane from any terminal:\n" +
+      `  ${process.platform === "darwin" ? "brew install tmux" : process.platform === "linux" ? "sudo apt install tmux    # Debian/Ubuntu\n  sudo dnf install tmux    # Fedora/RHEL" : "https://github.com/tmux/tmux/wiki/Installing"}\n\n` +
       "Or run without -pane to use the current terminal:\n" +
       `  ${usageHint}`,
   );

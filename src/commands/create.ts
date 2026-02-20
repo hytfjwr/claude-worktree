@@ -22,6 +22,7 @@ import { assignSlot, deleteSlot, readSlot } from "../core/slot.ts";
 import { spawnInteractive } from "../core/spawn.ts";
 import { buildClaudeCommand } from "../external/claude.ts";
 import { ensurePaneBackendAvailable } from "../external/terminal-backend.ts";
+import { getSessionForPane, isRunningInsideTmux } from "../external/tmux.ts";
 import type {
   ClaudeOptions,
   CreateArgs,
@@ -384,6 +385,12 @@ async function launchClaudeInPane(
     });
 
     logInfo(`${icons.done()} Worktree created and Claude started in new pane`);
+
+    // Show tmux attach hint when launched from outside tmux
+    if (backend.name === "tmux" && !isRunningInsideTmux()) {
+      const sessionName = await getSessionForPane(paneIdStr);
+      logInfo(`\n  To view the session, run: tmux attach -t ${sessionName}`);
+    }
   } catch (error) {
     // Clean up temp file on failure (the pane side handles its own cleanup on success)
     await unlink(payloadPath).catch(() => {});

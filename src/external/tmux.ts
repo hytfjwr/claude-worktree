@@ -109,13 +109,28 @@ export async function activatePane(paneId: string): Promise<void> {
 }
 
 export async function createPane(options: PaneOptions = {}): Promise<string> {
-  const originalPaneId = options.keepFocus ? getCurrentPaneId() : undefined;
+  if (isRunningInsideTmux()) {
+    // Inside tmux: split the current window
+    const originalPaneId = options.keepFocus ? getCurrentPaneId() : undefined;
 
-  const paneId = await splitPaneRight();
+    const paneId = await splitPaneRight();
 
-  if (options.keepFocus && originalPaneId) {
-    await activatePane(originalPaneId);
+    if (options.keepFocus && originalPaneId) {
+      await activatePane(originalPaneId);
+    }
+
+    return paneId;
   }
 
-  return paneId;
+  // Outside tmux: create a new detached session
+  return await createDetachedSession();
+}
+
+async function createDetachedSession(): Promise<string> {
+  return (await exec("tmux", ["new-session", "-d", "-P", "-F", "#{pane_id}"]).text()).trim();
+}
+
+// Get the session name that contains the given pane
+export async function getSessionForPane(paneId: string): Promise<string> {
+  return (await exec("tmux", ["display-message", "-t", paneId, "-p", "#{session_name}"]).text()).trim();
 }

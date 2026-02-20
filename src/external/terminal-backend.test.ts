@@ -153,7 +153,28 @@ describe("ensurePaneBackendAvailable", () => {
     await expect(ensurePaneBackendAvailable("claude-worktree test '...'")).rejects.toThrow("requires WezTerm or tmux");
   });
 
-  test("throws with terminal info when installed but not inside", async () => {
+  test("returns tmux backend when tmux is installed but not inside tmux", async () => {
+    mockWezterm.isRunningInsideWezterm.mockReturnValue(false);
+    mockTmux.isRunningInsideTmux.mockReturnValue(false);
+    mockWezterm.checkWeztermAvailable.mockResolvedValue(false);
+    mockTmux.checkTmuxAvailable.mockResolvedValue(true);
+
+    const backend = await ensurePaneBackendAvailable("claude-worktree test '...'");
+    expect(backend.name).toBe("tmux");
+  });
+
+  test("returns tmux backend when both installed but not inside either", async () => {
+    process.env.TERM_PROGRAM = "ghostty";
+    mockWezterm.isRunningInsideWezterm.mockReturnValue(false);
+    mockTmux.isRunningInsideTmux.mockReturnValue(false);
+    mockWezterm.checkWeztermAvailable.mockResolvedValue(true);
+    mockTmux.checkTmuxAvailable.mockResolvedValue(true);
+
+    const backend = await ensurePaneBackendAvailable("claude-worktree test '...'");
+    expect(backend.name).toBe("tmux");
+  });
+
+  test("throws with terminal info when only WezTerm installed but not inside", async () => {
     process.env.TERM_PROGRAM = "iTerm2";
     mockWezterm.isRunningInsideWezterm.mockReturnValue(false);
     mockTmux.isRunningInsideTmux.mockReturnValue(false);
@@ -162,16 +183,6 @@ describe("ensurePaneBackendAvailable", () => {
 
     await expect(ensurePaneBackendAvailable("claude-worktree test '...'")).rejects.toThrow("iTerm2");
     await expect(ensurePaneBackendAvailable("claude-worktree test '...'")).rejects.toThrow("WezTerm is installed");
-  });
-
-  test("throws with both backends when both installed but not inside", async () => {
-    process.env.TERM_PROGRAM = "ghostty";
-    mockWezterm.isRunningInsideWezterm.mockReturnValue(false);
-    mockTmux.isRunningInsideTmux.mockReturnValue(false);
-    mockWezterm.checkWeztermAvailable.mockResolvedValue(true);
-    mockTmux.checkTmuxAvailable.mockResolvedValue(true);
-
-    await expect(ensurePaneBackendAvailable("claude-worktree test '...'")).rejects.toThrow("WezTerm or tmux");
   });
 
   test("includes usage hint in error message", async () => {

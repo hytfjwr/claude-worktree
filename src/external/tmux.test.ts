@@ -326,18 +326,23 @@ describe("ensureTmuxAvailable", () => {
 
 describe("createPane", () => {
   let restoreEnv: () => void;
+  let restoreTmuxEnv: () => void;
 
   beforeEach(() => {
     vi.resetModules();
     mockExecImpl.current = null;
     restoreEnv = saveEnv("TMUX_PANE");
+    restoreTmuxEnv = saveEnv("TMUX");
   });
   afterEach(() => {
     mockExecImpl.current = null;
     restoreEnv();
+    restoreTmuxEnv();
   });
 
-  test("creates pane via splitPaneRight and returns new paneId", async () => {
+  test("inside tmux: creates pane via splitPaneRight and returns new paneId", async () => {
+    process.env.TMUX = "/tmp/tmux-1000/default,12345,0";
+
     mockExecImpl.current = createExecStub((_cmd, args) => {
       if (args.includes("split-window")) {
         return { stdout: "%99\n" };
@@ -351,7 +356,8 @@ describe("createPane", () => {
     expect(result).toBe("%99");
   });
 
-  test("creates pane with keepFocus - activates original pane", async () => {
+  test("inside tmux: creates pane with keepFocus - activates original pane", async () => {
+    process.env.TMUX = "/tmp/tmux-1000/default,12345,0";
     process.env.TMUX_PANE = "%0";
 
     let activatedPaneId = "";
@@ -371,5 +377,75 @@ describe("createPane", () => {
 
     expect(result).toBe("%42");
     expect(activatedPaneId).toBe("%0");
+  });
+
+  test("outside tmux: creates detached session", async () => {
+    delete process.env.TMUX;
+
+    let capturedArgs: string[] = [];
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("new-session")) {
+        capturedArgs = args;
+        return { stdout: "%5\n" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { createPane } = await import("./tmux.ts");
+    const result = await createPane({});
+
+    expect(result).toBe("%5");
+    expect(capturedArgs).toContain("new-session");
+    expect(capturedArgs).toContain("-d");
+    expect(capturedArgs).toContain("-P");
+  });
+
+  test("outside tmux: ignores keepFocus option", async () => {
+    delete process.env.TMUX;
+
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("new-session")) {
+        return { stdout: "%5\n" };
+      }
+      if (args.includes("select-pane")) {
+        throw new Error("select-pane should not be called outside tmux");
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { createPane } = await import("./tmux.ts");
+    const result = await createPane({ keepFocus: true });
+
+    expect(result).toBe("%5");
+  });
+});
+
+describe("getSessionForPane", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    mockExecImpl.current = null;
+  });
+  afterEach(() => {
+    mockExecImpl.current = null;
+  });
+
+  test("returns session name for given pane ID", async () => {
+    let capturedArgs: string[] = [];
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("display-message")) {
+        capturedArgs = args;
+        return { stdout: "0\n" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { getSessionForPane } = await import("./tmux.ts");
+    const result = await getSessionForPane("%5");
+
+    expect(result).toBe("0");
+    expect(capturedArgs).toContain("display-message");
+    expect(capturedArgs).toContain("-t");
+    expect(capturedArgs).toContain("%5");
+    expect(capturedArgs).toContain("#{session_name}");
   });
 });
