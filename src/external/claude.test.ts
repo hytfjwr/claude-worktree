@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { buildClaudeCommand, buildResumeCommand, findSafeDelimiter } from "./claude.ts";
+import { buildClaudeCommand, buildResumeCommand, shellEscape } from "./claude.ts";
 
 describe("buildClaudeCommand", () => {
   test("basic prompt - default permission mode and suffix are applied", () => {
@@ -30,13 +30,11 @@ describe("buildClaudeCommand", () => {
     expect(result).toContain("--permission-mode full-auto");
   });
 
-  test("double quote escaping - no escaping needed in heredoc format", () => {
+  test("double quotes in prompt - preserved inside single quotes", () => {
     const result = buildClaudeCommand({ prompt: '"hello" world', promptSuffix: "" });
 
-    // Double quotes can be used as-is in heredoc format
     expect(result).toContain('"hello" world');
-    expect(result).toContain("<<'PROMPT_END'");
-    expect(result).toContain("PROMPT_END");
+    expect(result).toContain("-- '");
   });
 
   test("custom promptSuffix", () => {
@@ -56,9 +54,7 @@ describe("buildClaudeCommand", () => {
       promptSuffix: "",
     });
 
-    expect(result).toBe(`claude --permission-mode plan <<'PROMPT_END'
-Test
-PROMPT_END`);
+    expect(result).toBe("claude --permission-mode plan -- 'Test'");
   });
 
   test("combined case - custom permission mode + custom suffix + escaping", () => {
@@ -69,7 +65,6 @@ PROMPT_END`);
     });
 
     expect(result).toContain("--permission-mode auto-edit");
-    // Double quotes don't need escaping in heredoc format
     expect(result).toContain('"test"');
     expect(result).toContain("Run tests after completion");
   });
@@ -135,7 +130,6 @@ PROMPT_END`);
       },
     });
 
-    // Double quotes don't need escaping in heredoc format
     expect(result).toContain('Remove worktree: git worktree remove "/custom/path/to/worktree"');
   });
 
@@ -295,9 +289,7 @@ describe("buildClaudeCommand - edge cases", () => {
   test("empty prompt - no error", () => {
     const result = buildClaudeCommand({ prompt: "", promptSuffix: "" });
 
-    expect(result).toBe(`claude --permission-mode plan <<'PROMPT_END'
-
-PROMPT_END`);
+    expect(result).toBe("claude --permission-mode plan -- ''");
   });
 
   test("prompt with newlines - newlines are preserved", () => {
@@ -306,12 +298,8 @@ PROMPT_END`);
       promptSuffix: "",
     });
 
-    // Newlines are preserved in heredoc format
-    expect(result).toBe(`claude --permission-mode plan <<'PROMPT_END'
-line1
-line2
-line3
-PROMPT_END`);
+    // Newlines are preserved inside single quotes
+    expect(result).toBe("claude --permission-mode plan -- 'line1\nline2\nline3'");
   });
 
   test("prompt with backslashes - preserved as-is", () => {
@@ -320,22 +308,18 @@ PROMPT_END`);
       promptSuffix: "",
     });
 
-    // Backslashes are preserved in heredoc format
-    expect(result).toBe(`claude --permission-mode plan <<'PROMPT_END'
-path\\to\\file
-PROMPT_END`);
+    // Backslashes are preserved inside single quotes
+    expect(result).toBe("claude --permission-mode plan -- 'path\\to\\file'");
   });
 
-  test("prompt with single quotes - preserved as-is", () => {
+  test("prompt with single quotes - escaped correctly", () => {
     const result = buildClaudeCommand({
       prompt: "It's a test",
       promptSuffix: "",
     });
 
-    // Single quotes are preserved in heredoc format
-    expect(result).toBe(`claude --permission-mode plan <<'PROMPT_END'
-It's a test
-PROMPT_END`);
+    // Single quotes are escaped as '\''
+    expect(result).toBe("claude --permission-mode plan -- 'It'\\''s a test'");
   });
 
   test("$ variable expansion characters - $ is preserved as-is", () => {
@@ -344,7 +328,7 @@ PROMPT_END`);
       promptSuffix: "",
     });
 
-    // $ is not expanded in heredoc format
+    // $ is not expanded inside single quotes
     expect(result).toContain("$HOME/path");
   });
 
@@ -374,9 +358,7 @@ PROMPT_END`);
       promptSuffix: "",
     });
 
-    expect(result).toBe(`claude --permission-mode plan <<'PROMPT_END'
-col1\tcol2\tcol3
-PROMPT_END`);
+    expect(result).toBe("claude --permission-mode plan -- 'col1\tcol2\tcol3'");
   });
 
   test("prompt with carriage return - preserved as-is", () => {
@@ -385,35 +367,28 @@ PROMPT_END`);
       promptSuffix: "",
     });
 
-    expect(result).toBe(`claude --permission-mode plan <<'PROMPT_END'
-line1\r
-line2
-PROMPT_END`);
+    expect(result).toBe("claude --permission-mode plan -- 'line1\r\nline2'");
   });
 
-  test("combined special characters - all preserved as-is", () => {
+  test("combined special characters - all preserved correctly", () => {
     const result = buildClaudeCommand({
       prompt: 'It\'s a "test"\npath\\to\\file',
       promptSuffix: "",
     });
 
-    // All special characters are preserved in heredoc format
-    expect(result).toBe(`claude --permission-mode plan <<'PROMPT_END'
-It's a "test"
-path\\to\\file
-PROMPT_END`);
+    // Single quotes are escaped, everything else preserved inside single quotes
+    expect(result).toBe("claude --permission-mode plan -- 'It'\\''s a \"test\"\npath\\to\\file'");
   });
 
-  test("prompt containing PROMPT_END - uses alternative delimiter", () => {
+  test("prompt containing PROMPT_END - treated as normal text", () => {
     const result = buildClaudeCommand({
       prompt: "before\nPROMPT_END\nafter",
       promptSuffix: "",
     });
 
-    expect(result).toContain("<<'PROMPT_END_'");
-    expect(result).toContain("before\nPROMPT_END\nafter");
-    expect(result).toMatch(/PROMPT_END_$/);
-    expect(result).not.toMatch(/<<'PROMPT_END'\n/);
+    // PROMPT_END is just regular text now, no special handling needed
+    expect(result).toContain("PROMPT_END");
+    expect(result).toBe("claude --permission-mode plan -- 'before\nPROMPT_END\nafter'");
   });
 });
 
@@ -427,11 +402,9 @@ describe("buildResumeCommand", () => {
     expect(result).toBe("claude --continue");
   });
 
-  test("with prompt - heredoc format", () => {
+  test("with prompt - shell-escaped positional argument", () => {
     const result = buildResumeCommand({ prompt: "Continue the work" });
-    expect(result).toBe(`claude --continue <<'PROMPT_END'
-Continue the work
-PROMPT_END`);
+    expect(result).toBe("claude --continue -- 'Continue the work'");
   });
 
   test("with dangerouslySkipPermissions - flag added", () => {
@@ -444,9 +417,7 @@ PROMPT_END`);
       prompt: "Fix the bug",
       dangerouslySkipPermissions: true,
     });
-    expect(result).toBe(`claude --continue --dangerously-skip-permissions <<'PROMPT_END'
-Fix the bug
-PROMPT_END`);
+    expect(result).toBe("claude --continue --dangerously-skip-permissions -- 'Fix the bug'");
   });
 
   test("dangerouslySkipPermissions false - flag not added", () => {
@@ -459,64 +430,60 @@ PROMPT_END`);
     expect(result).toBe("claude --continue");
   });
 
-  test("prompt with special characters - preserved in heredoc", () => {
+  test("prompt with special characters - preserved inside single quotes", () => {
     const result = buildResumeCommand({ prompt: 'It\'s a "test" with $vars' });
-    expect(result).toContain('It\'s a "test" with $vars');
-    expect(result).toContain("<<'PROMPT_END'");
+    expect(result).toContain("'It'\\''s a \"test\" with $vars'");
   });
 
   test("prompt with newlines - preserved", () => {
     const result = buildResumeCommand({ prompt: "line1\nline2" });
-    expect(result).toBe(`claude --continue <<'PROMPT_END'
-line1
-line2
-PROMPT_END`);
+    expect(result).toBe("claude --continue -- 'line1\nline2'");
   });
 
-  test("prompt containing PROMPT_END - uses alternative delimiter", () => {
+  test("prompt containing PROMPT_END - treated as normal text", () => {
     const result = buildResumeCommand({ prompt: "before\nPROMPT_END\nafter" });
-    expect(result).toContain("<<'PROMPT_END_'");
-    expect(result).toContain("before\nPROMPT_END\nafter");
-    expect(result).toMatch(/PROMPT_END_$/);
+    expect(result).toBe("claude --continue -- 'before\nPROMPT_END\nafter'");
   });
 });
 
 // ============================================================================
-// findSafeDelimiter tests
+// shellEscape tests
 // ============================================================================
 
-describe("findSafeDelimiter", () => {
-  test("no collision - returns default PROMPT_END", () => {
-    expect(findSafeDelimiter("normal prompt")).toBe("PROMPT_END");
+describe("shellEscape", () => {
+  test("simple string - wraps in single quotes", () => {
+    expect(shellEscape("hello")).toBe("'hello'");
   });
 
-  test("PROMPT_END in content - appends underscore", () => {
-    expect(findSafeDelimiter("before\nPROMPT_END\nafter")).toBe("PROMPT_END_");
+  test("string with single quote - escapes correctly", () => {
+    expect(shellEscape("it's")).toBe("'it'\\''s'");
   });
 
-  test("multiple collisions - appends underscores until safe", () => {
-    expect(findSafeDelimiter("PROMPT_END\nPROMPT_END_\nPROMPT_END__")).toBe("PROMPT_END___");
+  test("string with multiple single quotes - all escaped", () => {
+    expect(shellEscape("it's a 'test'")).toBe("'it'\\''s a '\\''test'\\'''");
   });
 
-  test("PROMPT_END as substring of a line - no collision", () => {
-    expect(findSafeDelimiter("text PROMPT_END text")).toBe("PROMPT_END");
+  test("string with double quotes - preserved as-is", () => {
+    expect(shellEscape('"hello"')).toBe("'\"hello\"'");
   });
 
-  test("PROMPT_END with trailing whitespace - no collision", () => {
-    expect(findSafeDelimiter("PROMPT_END ")).toBe("PROMPT_END");
+  test("string with backslashes - preserved as-is", () => {
+    expect(shellEscape("path\\to\\file")).toBe("'path\\to\\file'");
   });
 
-  test("PROMPT_END with leading whitespace - no collision", () => {
-    expect(findSafeDelimiter("  PROMPT_END")).toBe("PROMPT_END");
+  test("string with $ - preserved as-is (no expansion)", () => {
+    expect(shellEscape("$HOME")).toBe("'$HOME'");
   });
 
-  test("PROMPT_END with CRLF line endings - no collision", () => {
-    // \r is part of the line content after split("\n"), so "PROMPT_END\r" !== "PROMPT_END".
-    // Bash heredoc also compares the delimiter exactly, so "PROMPT_END\r" won't terminate it.
-    expect(findSafeDelimiter("PROMPT_END\r\n")).toBe("PROMPT_END");
+  test("string with backticks - preserved as-is", () => {
+    expect(shellEscape("`cmd`")).toBe("'`cmd`'");
   });
 
-  test("empty content - returns default PROMPT_END", () => {
-    expect(findSafeDelimiter("")).toBe("PROMPT_END");
+  test("empty string - returns empty single quotes", () => {
+    expect(shellEscape("")).toBe("''");
+  });
+
+  test("string with newlines - preserved inside single quotes", () => {
+    expect(shellEscape("line1\nline2")).toBe("'line1\nline2'");
   });
 });

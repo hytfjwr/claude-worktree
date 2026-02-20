@@ -88,16 +88,11 @@ function buildPrInstructions(prInstructions: PrInstructions): string {
 }
 
 /**
- * Find a heredoc delimiter that does not appear as a line in the content.
- * Starts with "PROMPT_END" and appends underscores until a safe delimiter is found.
+ * Escape a string for safe use inside shell single quotes.
+ * Wraps in single quotes, escaping any embedded single quotes with `'\''`.
  */
-export function findSafeDelimiter(content: string): string {
-  const lines = content.split("\n");
-  let delimiter = "PROMPT_END";
-  while (lines.includes(delimiter)) {
-    delimiter += "_";
-  }
-  return delimiter;
+export function shellEscape(s: string): string {
+  return `'${s.replace(/'/g, "'\\''")}'`;
 }
 
 export function buildResumeCommand(options: ResumeCommandOptions): string {
@@ -109,10 +104,7 @@ export function buildResumeCommand(options: ResumeCommandOptions): string {
     return `claude --continue${dangerFlag}`;
   }
 
-  const delimiter = findSafeDelimiter(prompt);
-  return `claude --continue${dangerFlag} <<'${delimiter}'
-${prompt}
-${delimiter}`;
+  return `claude --continue${dangerFlag} -- ${shellEscape(prompt)}`;
 }
 
 export function buildClaudeCommand(options: ClaudeOptions): string {
@@ -142,11 +134,5 @@ export function buildClaudeCommand(options: ClaudeOptions): string {
 
   const dangerFlag = dangerouslySkipPermissions ? "--dangerously-skip-permissions " : "";
 
-  const delimiter = findSafeDelimiter(fullPrompt);
-
-  // Pass the prompt via heredoc format.
-  // Quoting the delimiter prevents variable expansion.
-  return `claude ${dangerFlag}--permission-mode ${permissionMode} <<'${delimiter}'
-${fullPrompt}
-${delimiter}`;
+  return `claude ${dangerFlag}--permission-mode ${permissionMode} -- ${shellEscape(fullPrompt)}`;
 }
