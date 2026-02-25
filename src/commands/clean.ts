@@ -7,6 +7,7 @@ import {
   getGitContext,
   getRemoteBranches,
   getRemoteTrackingBranches,
+  getUnpushedCommitCount,
   getWorktreeStatuses,
   listWorktrees,
   removeWorktree,
@@ -45,6 +46,7 @@ const defaultDeps: CleanDeps = {
   deleteSession,
   gcSessions,
   gcSlots,
+  getUnpushedCommitCount,
   confirm,
   selectMultiple,
   startSpinner,
@@ -122,7 +124,44 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
     }
   }
 
+  /** Compute unpushed commit counts for the given statuses and return a lookup map. */
+  async function computeUnpushedMap(targets: WorktreeStatus[]): Promise<Map<string, number | null>> {
+    const map = new Map<string, number | null>();
+    await promiseAllLimit(
+      targets.map((status) => async () => {
+        if (status.worktree.branch) {
+          const count = await deps.getUnpushedCommitCount(status.worktree.path, status.worktree.branch);
+          map.set(status.worktree.path, count);
+        }
+      }),
+    );
+    return map;
+  }
+
+  /** Log warnings for dirty state and unpushed commits. */
+  function logStatusWarnings(status: WorktreeStatus, unpushedMap: Map<string, number | null>): void {
+    if (status.worktree.isDirty) {
+      logInfo(`    ${icons.warning()} Has uncommitted changes`);
+    }
+    const unpushed = unpushedMap.get(status.worktree.path);
+    if (unpushed !== undefined && unpushed !== null && unpushed > 0) {
+      logInfo(`    ${icons.warning()} ${unpushed} unpushed commit(s)`);
+    } else if (unpushed === null && !status.branchMerged && !status.branchDeletedOnRemote) {
+      logInfo(`    ${icons.warning()} Branch has not been pushed to remote`);
+    }
+  }
+
+  /** Check if a status has risky state (dirty or unpushed commits). */
+  function isRisky(status: WorktreeStatus, unpushedMap: Map<string, number | null>): boolean {
+    if (status.worktree.isDirty) return true;
+    const unpushed = unpushedMap.get(status.worktree.path);
+    if (unpushed !== undefined && unpushed !== null && unpushed > 0) return true;
+    if (unpushed === null && !status.branchMerged && !status.branchDeletedOnRemote) return true;
+    return false;
+  }
+
   let toDelete: WorktreeStatus[];
+  let unpushedMap: Map<string, number | null>;
 
   if (args.branches.length > 0) {
     // Specific branch mode: find worktrees matching the given branch names
@@ -148,6 +187,8 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
       return result;
     }
 
+    unpushedMap = await computeUnpushedMap(matched);
+
     logInfo(`\n${icons.trash()}  Deletion targets:`);
     for (const status of matched) {
       const branch = status.worktree.branch || "(detached)";
@@ -157,15 +198,27 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
       if (pr) {
         logInfo(`    ${dim(`PR: #${pr.number} ${pr.title} (${pr.state}) ${pr.url}`)}`);
       }
+      logStatusWarnings(status, unpushedMap);
     }
 
     toDelete = matched;
   } else if (args.all) {
-    // Manual selection mode: enrich reason with PR info for display
+    // Manual selection mode: enrich reason with PR and unpushed info for display
+    unpushedMap = await computeUnpushedMap(cleanableStatuses);
     const enrichedStatuses = cleanableStatuses.map((s) => {
+      const parts: string[] = [];
       const pr = s.worktree.branch ? prMap.get(s.worktree.branch) : undefined;
-      if (!pr) return s;
-      return { ...s, reason: `${s.reason} | PR: #${pr.number} ${pr.title} (${pr.state})` };
+      if (pr) {
+        parts.push(`PR: #${pr.number} ${pr.title} (${pr.state})`);
+      }
+      const unpushed = unpushedMap.get(s.worktree.path);
+      if (unpushed !== undefined && unpushed !== null && unpushed > 0) {
+        parts.push(`${unpushed} unpushed commit(s)`);
+      } else if (unpushed === null && !s.branchMerged && !s.branchDeletedOnRemote) {
+        parts.push("Not pushed to remote");
+      }
+      if (parts.length === 0) return s;
+      return { ...s, reason: `${s.reason} | ${parts.join(" | ")}` };
     });
     toDelete = await deps.selectMultiple(enrichedStatuses);
   } else {
@@ -178,6 +231,8 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
       return result;
     }
 
+    unpushedMap = await computeUnpushedMap(autoCleanable);
+
     logInfo(`\n${icons.trash()}  Deletion candidates:`);
     for (const status of autoCleanable) {
       const branch = status.worktree.branch || "(detached)";
@@ -188,6 +243,7 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
       if (pr) {
         logInfo(`    ${dim(`PR: #${pr.number} ${pr.title} (${pr.state}) ${pr.url}`)}`);
       }
+      logStatusWarnings(status, unpushedMap);
     }
 
     toDelete = autoCleanable;
@@ -197,6 +253,9 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
     logInfo("\nNo targets to delete.");
     return result;
   }
+
+  // Check if any deletion targets have risky state
+  const hasRiskyTargets = toDelete.some((s) => isRisky(s, unpushedMap));
 
   // Dry run mode
   if (args.dryRun) {
@@ -208,6 +267,7 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
       if (pr) {
         logInfo(`    ${dim(`PR: #${pr.number} ${pr.title} (${pr.state}) ${pr.url}`)}`);
       }
+      logStatusWarnings(status, unpushedMap);
     }
     return result;
   }
@@ -215,7 +275,10 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
   // Confirmation
   if (!args.force) {
     logInfo("");
-    const confirmed = await deps.confirm(`Delete ${toDelete.length} worktree(s)?`);
+    const confirmMessage = hasRiskyTargets
+      ? `${icons.warning()} Some worktrees have uncommitted changes or unpushed commits. Delete ${toDelete.length} worktree(s)?`
+      : `Delete ${toDelete.length} worktree(s)?`;
+    const confirmed = await deps.confirm(confirmMessage);
     if (!confirmed) {
       logInfo("Cancelled.");
       return result;

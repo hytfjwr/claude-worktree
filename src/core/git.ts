@@ -246,6 +246,21 @@ export async function isRemoteBranchDeleted(branch: string, trackedBranches: Set
   return result.text().trim().length === 0;
 }
 
+/**
+ * Count commits that exist locally but haven't been pushed to origin/<branch>.
+ * Returns null if origin/<branch> doesn't exist (branch never pushed or remote ref pruned).
+ */
+export async function getUnpushedCommitCount(worktreePath: string, branch: string): Promise<number | null> {
+  const result = await exec("git", ["-C", worktreePath, "rev-list", "--count", `origin/${branch}..HEAD`])
+    .nothrow()
+    .quiet();
+  if (result.exitCode !== 0) {
+    return null;
+  }
+  const count = Number.parseInt(result.text().trim(), 10);
+  return Number.isNaN(count) ? null : count;
+}
+
 export async function removeWorktree(worktreePath: string, force = false): Promise<void> {
   if (force) {
     await exec("git", ["worktree", "remove", "--force", worktreePath]);

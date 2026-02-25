@@ -1117,6 +1117,70 @@ describe("removeWorktree", () => {
   });
 });
 
+describe("getUnpushedCommitCount", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    mockExecImpl.current = null;
+  });
+  afterEach(() => {
+    mockExecImpl.current = null;
+  });
+
+  test("returns count when origin/<branch> exists", async () => {
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("rev-list") && args.includes("--count")) {
+        return { stdout: "3\n" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { getUnpushedCommitCount } = await import("./git.ts");
+    const count = await getUnpushedCommitCount("/path/to/wt", "feature/test");
+    expect(count).toBe(3);
+  });
+
+  test("returns 0 when all commits are pushed", async () => {
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("rev-list") && args.includes("--count")) {
+        return { stdout: "0\n" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { getUnpushedCommitCount } = await import("./git.ts");
+    const count = await getUnpushedCommitCount("/path/to/wt", "feature/test");
+    expect(count).toBe(0);
+  });
+
+  test("returns null when origin/<branch> does not exist", async () => {
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("rev-list") && args.includes("--count")) {
+        return { stdout: "", exitCode: 128, stderr: "fatal: bad revision" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { getUnpushedCommitCount } = await import("./git.ts");
+    const count = await getUnpushedCommitCount("/path/to/wt", "feature/test");
+    expect(count).toBeNull();
+  });
+
+  test("passes correct arguments with worktree path and branch", async () => {
+    let capturedArgs: string[] = [];
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("rev-list")) {
+        capturedArgs = args;
+        return { stdout: "2\n" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { getUnpushedCommitCount } = await import("./git.ts");
+    await getUnpushedCommitCount("/tmp/my-worktree", "feature/auth");
+    expect(capturedArgs).toEqual(["-C", "/tmp/my-worktree", "rev-list", "--count", "origin/feature/auth..HEAD"]);
+  });
+});
+
 describe("getLastCommit", () => {
   beforeEach(() => {
     vi.resetModules();

@@ -44,6 +44,7 @@ export type CleanDeps = {
   deleteSession: (worktreePath: string) => Promise<void>;
   gcSessions: (validPaths: Set<string>) => Promise<number>;
   gcSlots: (validPaths: Set<string>) => Promise<number>;
+  getUnpushedCommitCount: (worktreePath: string, branch: string) => Promise<number | null>;
   confirm: (message: string) => Promise<boolean>;
   selectMultiple: (statuses: WorktreeStatus[]) => Promise<WorktreeStatus[]>;
   startSpinner: (message: string) => Spinner;

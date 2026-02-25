@@ -36,6 +36,7 @@ function makeDeps(overrides: Partial<CleanDeps> = {}): CleanDeps {
     deleteSession: async () => {},
     gcSessions: async () => 0,
     gcSlots: async () => 0,
+    getUnpushedCommitCount: async () => 0,
     confirm: async () => true,
     selectMultiple: async () => [],
     startSpinner: () => makeSpinner(),
@@ -1198,6 +1199,267 @@ describe("executeClean", () => {
       expect(receivedStatuses[0].reason).toContain("PR: #789");
       expect(receivedStatuses[0].reason).toContain("New feature");
       expect(receivedStatuses[0].reason).toContain("OPEN");
+    });
+  });
+
+  describe("dirty and unpushed warnings", () => {
+    describe("branch-specific mode", () => {
+      test("shows uncommitted changes warning for dirty worktree", async () => {
+        const wt = makeWorktree({ path: "/tmp/repo-dirty", branch: "feature/dirty", isDirty: true });
+        const status = makeStatus(
+          { path: "/tmp/repo-dirty", branch: "feature/dirty", isDirty: true },
+          { canAutoClean: false, reason: "Has uncommitted changes" },
+        );
+        const logSpy = vi.spyOn(console, "log");
+        const deps = makeDeps({
+          listWorktrees: async () => ({ worktrees: [wt], mainBranch: "main" }),
+          getWorktreeStatuses: async () => [status],
+        });
+
+        await executeClean({ ...defaultArgs, force: true, branches: ["feature/dirty"] }, deps);
+
+        const logMessages = logSpy.mock.calls.map((c) => c[0]);
+        expect(logMessages.some((msg) => typeof msg === "string" && msg.includes("uncommitted changes"))).toBe(true);
+      });
+
+      test("shows unpushed commits warning", async () => {
+        const wt = makeWorktree({ path: "/tmp/repo-unpushed", branch: "feature/unpushed" });
+        const status = makeStatus(
+          { path: "/tmp/repo-unpushed", branch: "feature/unpushed" },
+          { canAutoClean: false, reason: "Active" },
+        );
+        const logSpy = vi.spyOn(console, "log");
+        const deps = makeDeps({
+          listWorktrees: async () => ({ worktrees: [wt], mainBranch: "main" }),
+          getWorktreeStatuses: async () => [status],
+          getUnpushedCommitCount: async () => 3,
+        });
+
+        await executeClean({ ...defaultArgs, force: true, branches: ["feature/unpushed"] }, deps);
+
+        const logMessages = logSpy.mock.calls.map((c) => c[0]);
+        expect(logMessages.some((msg) => typeof msg === "string" && msg.includes("3 unpushed commit(s)"))).toBe(true);
+      });
+
+      test("shows not-pushed warning when branch was never pushed", async () => {
+        const wt = makeWorktree({ path: "/tmp/repo-never-pushed", branch: "feature/never-pushed" });
+        const status = makeStatus(
+          { path: "/tmp/repo-never-pushed", branch: "feature/never-pushed" },
+          { canAutoClean: false, branchMerged: false, branchDeletedOnRemote: false, reason: "Active" },
+        );
+        const logSpy = vi.spyOn(console, "log");
+        const deps = makeDeps({
+          listWorktrees: async () => ({ worktrees: [wt], mainBranch: "main" }),
+          getWorktreeStatuses: async () => [status],
+          getUnpushedCommitCount: async () => null,
+        });
+
+        await executeClean({ ...defaultArgs, force: true, branches: ["feature/never-pushed"] }, deps);
+
+        const logMessages = logSpy.mock.calls.map((c) => c[0]);
+        expect(logMessages.some((msg) => typeof msg === "string" && msg.includes("not been pushed to remote"))).toBe(
+          true,
+        );
+      });
+
+      test("does not show not-pushed warning for merged branches", async () => {
+        const wt = makeWorktree({ path: "/tmp/repo-merged", branch: "feature/merged" });
+        const status = makeStatus(
+          { path: "/tmp/repo-merged", branch: "feature/merged" },
+          { canAutoClean: true, branchMerged: true, reason: "Merged" },
+        );
+        const logSpy = vi.spyOn(console, "log");
+        const deps = makeDeps({
+          listWorktrees: async () => ({ worktrees: [wt], mainBranch: "main" }),
+          getWorktreeStatuses: async () => [status],
+          getUnpushedCommitCount: async () => null,
+        });
+
+        await executeClean({ ...defaultArgs, force: true, branches: ["feature/merged"] }, deps);
+
+        const logMessages = logSpy.mock.calls.map((c) => c[0]);
+        expect(logMessages.some((msg) => typeof msg === "string" && msg.includes("not been pushed to remote"))).toBe(
+          false,
+        );
+      });
+
+      test("does not show not-pushed warning for remote-deleted branches", async () => {
+        const wt = makeWorktree({ path: "/tmp/repo-rd", branch: "feature/rd" });
+        const status = makeStatus(
+          { path: "/tmp/repo-rd", branch: "feature/rd" },
+          { canAutoClean: true, branchDeletedOnRemote: true, reason: "Remote deleted" },
+        );
+        const logSpy = vi.spyOn(console, "log");
+        const deps = makeDeps({
+          listWorktrees: async () => ({ worktrees: [wt], mainBranch: "main" }),
+          getWorktreeStatuses: async () => [status],
+          getUnpushedCommitCount: async () => null,
+        });
+
+        await executeClean({ ...defaultArgs, force: true, branches: ["feature/rd"] }, deps);
+
+        const logMessages = logSpy.mock.calls.map((c) => c[0]);
+        expect(logMessages.some((msg) => typeof msg === "string" && msg.includes("not been pushed to remote"))).toBe(
+          false,
+        );
+      });
+    });
+
+    describe("auto-detect mode", () => {
+      test("shows unpushed commits warning for auto-cleanable worktree", async () => {
+        const wt = makeWorktree({ path: "/tmp/repo-auto", branch: "feature/auto" });
+        const status = makeStatus(
+          { path: "/tmp/repo-auto", branch: "feature/auto" },
+          { canAutoClean: true, branchDeletedOnRemote: true, reason: "Remote deleted" },
+        );
+        const logSpy = vi.spyOn(console, "log");
+        const deps = makeDeps({
+          listWorktrees: async () => ({ worktrees: [wt], mainBranch: "main" }),
+          getWorktreeStatuses: async () => [status],
+          getUnpushedCommitCount: async () => 5,
+        });
+
+        await executeClean({ ...defaultArgs, force: true }, deps);
+
+        const logMessages = logSpy.mock.calls.map((c) => c[0]);
+        expect(logMessages.some((msg) => typeof msg === "string" && msg.includes("5 unpushed commit(s)"))).toBe(true);
+      });
+    });
+
+    describe("-all mode", () => {
+      test("enriches reason with unpushed commit info", async () => {
+        const wt = makeWorktree({ path: "/tmp/repo-all", branch: "feature/all" });
+        const status = makeStatus(
+          { path: "/tmp/repo-all", branch: "feature/all" },
+          { canAutoClean: false, reason: "Active" },
+        );
+        let receivedStatuses: WorktreeStatus[] = [];
+        const deps = makeDeps({
+          listWorktrees: async () => ({ worktrees: [wt], mainBranch: "main" }),
+          getWorktreeStatuses: async () => [status],
+          getUnpushedCommitCount: async () => 2,
+          selectMultiple: async (statuses) => {
+            receivedStatuses = statuses;
+            return [];
+          },
+        });
+
+        await executeClean({ ...defaultArgs, all: true }, deps);
+
+        expect(receivedStatuses.length).toBe(1);
+        expect(receivedStatuses[0].reason).toContain("2 unpushed commit(s)");
+      });
+
+      test("enriches reason with not-pushed info for never-pushed branches", async () => {
+        const wt = makeWorktree({ path: "/tmp/repo-np", branch: "feature/np" });
+        const status = makeStatus(
+          { path: "/tmp/repo-np", branch: "feature/np" },
+          { canAutoClean: false, branchMerged: false, branchDeletedOnRemote: false, reason: "Active" },
+        );
+        let receivedStatuses: WorktreeStatus[] = [];
+        const deps = makeDeps({
+          listWorktrees: async () => ({ worktrees: [wt], mainBranch: "main" }),
+          getWorktreeStatuses: async () => [status],
+          getUnpushedCommitCount: async () => null,
+          selectMultiple: async (statuses) => {
+            receivedStatuses = statuses;
+            return [];
+          },
+        });
+
+        await executeClean({ ...defaultArgs, all: true }, deps);
+
+        expect(receivedStatuses.length).toBe(1);
+        expect(receivedStatuses[0].reason).toContain("Not pushed to remote");
+      });
+    });
+
+    describe("dry-run mode", () => {
+      test("shows warnings in dry-run output", async () => {
+        const wt = makeWorktree({ path: "/tmp/repo-dry-warn", branch: "feature/dry-warn", isDirty: true });
+        const status = makeStatus(
+          { path: "/tmp/repo-dry-warn", branch: "feature/dry-warn", isDirty: true },
+          { canAutoClean: true, branchMerged: true, reason: "Merged" },
+        );
+        const logSpy = vi.spyOn(console, "log");
+        const deps = makeDeps({
+          listWorktrees: async () => ({ worktrees: [wt], mainBranch: "main" }),
+          getWorktreeStatuses: async () => [status],
+          getUnpushedCommitCount: async () => 1,
+        });
+
+        await executeClean({ ...defaultArgs, dryRun: true }, deps);
+
+        const logMessages = logSpy.mock.calls.map((c) => c[0]);
+        expect(logMessages.some((msg) => typeof msg === "string" && msg.includes("uncommitted changes"))).toBe(true);
+        expect(logMessages.some((msg) => typeof msg === "string" && msg.includes("1 unpushed commit(s)"))).toBe(true);
+      });
+    });
+
+    describe("enhanced confirmation", () => {
+      test("shows enhanced confirmation when targets have dirty state", async () => {
+        const wt = makeWorktree({ path: "/tmp/repo-risky", branch: "feature/risky", isDirty: true });
+        const status = makeStatus(
+          { path: "/tmp/repo-risky", branch: "feature/risky", isDirty: true },
+          { canAutoClean: false, reason: "Has uncommitted changes" },
+        );
+        let confirmMessage = "";
+        const deps = makeDeps({
+          listWorktrees: async () => ({ worktrees: [wt], mainBranch: "main" }),
+          getWorktreeStatuses: async () => [status],
+          confirm: async (msg) => {
+            confirmMessage = msg;
+            return true;
+          },
+        });
+
+        await executeClean({ ...defaultArgs, branches: ["feature/risky"] }, deps);
+
+        expect(confirmMessage).toContain("uncommitted changes or unpushed commits");
+      });
+
+      test("shows enhanced confirmation when targets have unpushed commits", async () => {
+        const wt = makeWorktree({ path: "/tmp/repo-risky2", branch: "feature/risky2" });
+        const status = makeStatus(
+          { path: "/tmp/repo-risky2", branch: "feature/risky2" },
+          { canAutoClean: false, reason: "Active" },
+        );
+        let confirmMessage = "";
+        const deps = makeDeps({
+          listWorktrees: async () => ({ worktrees: [wt], mainBranch: "main" }),
+          getWorktreeStatuses: async () => [status],
+          getUnpushedCommitCount: async () => 5,
+          confirm: async (msg) => {
+            confirmMessage = msg;
+            return true;
+          },
+        });
+
+        await executeClean({ ...defaultArgs, branches: ["feature/risky2"] }, deps);
+
+        expect(confirmMessage).toContain("uncommitted changes or unpushed commits");
+      });
+
+      test("shows normal confirmation when no risky targets", async () => {
+        const wt = makeWorktree({ path: "/tmp/repo-safe", branch: "feature/safe" });
+        const status = makeStatus(
+          { path: "/tmp/repo-safe", branch: "feature/safe" },
+          { canAutoClean: true, branchMerged: true, reason: "Merged" },
+        );
+        let confirmMessage = "";
+        const deps = makeDeps({
+          listWorktrees: async () => ({ worktrees: [wt], mainBranch: "main" }),
+          getWorktreeStatuses: async () => [status],
+          confirm: async (msg) => {
+            confirmMessage = msg;
+            return true;
+          },
+        });
+
+        await executeClean({ ...defaultArgs }, deps);
+
+        expect(confirmMessage).toBe("Delete 1 worktree(s)?");
+      });
     });
   });
 
