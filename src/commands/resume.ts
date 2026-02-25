@@ -2,15 +2,16 @@ import { access } from "node:fs/promises";
 
 import { GitError } from "../core/errors.ts";
 import { getGitContext, listWorktrees } from "../core/git.ts";
-import { completeSession, saveSession } from "../core/session.ts";
+import { completeSession, determineSessionStatus, readSession, saveSession } from "../core/session.ts";
 import { spawnInteractive } from "../core/spawn.ts";
 import { buildResumeCommand } from "../external/claude.ts";
 import { ensurePaneBackendAvailable } from "../external/terminal-backend.ts";
-import { getSessionForPane, isRunningInsideTmux } from "../external/tmux.ts";
+import { getSessionForPane, isRunningInsideTmux, listTmuxPanes } from "../external/tmux.ts";
+import { listWeztermPanes } from "../external/wezterm.ts";
 import type { ResumeArgs, ResumeDeps, TerminalBackend, WorktreeInfo } from "../types/index.ts";
 import { icons } from "../ui/icons.ts";
-import { logDebug, logInfo } from "../ui/logger.ts";
-import { selectWorktree } from "../ui/prompt.ts";
+import { logDebug, logInfo, logWarn } from "../ui/logger.ts";
+import { confirm, selectWorktree } from "../ui/prompt.ts";
 
 // =============================================================================
 // Default dependencies (DI)
@@ -21,6 +22,11 @@ const defaultDeps: ResumeDeps = {
   listWorktrees,
   saveSession,
   completeSession,
+  readSession,
+  determineSessionStatus,
+  listWeztermPanes,
+  listTmuxPanes,
+  confirm,
   buildResumeCommand,
   ensurePaneBackend: ensurePaneBackendAvailable,
   selectWorktree,
@@ -164,6 +170,42 @@ export async function runResume(args: ResumeArgs, deps: ResumeDeps = defaultDeps
     await access(target.path);
   } catch {
     throw new GitError(`Worktree directory does not exist: ${target.path}`);
+  }
+
+  // Check for existing active session
+  const existingSession = await deps.readSession(target.path);
+  if (existingSession) {
+    // Only query the backend(s) needed for this session's mode
+    let weztermPanes: Awaited<ReturnType<typeof deps.listWeztermPanes>> = null;
+    let tmuxPanes: Awaited<ReturnType<typeof deps.listTmuxPanes>> = null;
+
+    if (existingSession.mode === "pane") {
+      const bt = existingSession.backendType;
+      if (bt === "wezterm") {
+        weztermPanes = await deps.listWeztermPanes().catch(() => null);
+      } else if (bt === "tmux") {
+        tmuxPanes = await deps.listTmuxPanes().catch(() => null);
+      } else {
+        // Backward compat: backendType missing, query both
+        [weztermPanes, tmuxPanes] = await Promise.all([
+          deps.listWeztermPanes().catch(() => null),
+          deps.listTmuxPanes().catch(() => null),
+        ]);
+      }
+    }
+
+    const allPanes = { wezterm: weztermPanes, tmux: tmuxPanes };
+    const state = deps.determineSessionStatus(existingSession, allPanes);
+
+    if (state.status === "running") {
+      logWarn("An active Claude session is already running on this worktree.");
+      logWarn("Resuming will overwrite the existing session metadata and may cause conflicts.");
+      const confirmed = await deps.confirm("Continue anyway?");
+      if (!confirmed) {
+        logInfo("Cancelled.");
+        return;
+      }
+    }
   }
 
   // Display info

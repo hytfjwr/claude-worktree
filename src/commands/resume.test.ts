@@ -5,8 +5,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from "vit
 
 import { makeWorktree } from "../__test-utils__.ts";
 import { DependencyError } from "../core/errors.ts";
+import { determineSessionStatus } from "../core/session.ts";
 import { spawnInteractive } from "../core/spawn.ts";
-import type { ResumeDeps, WorktreeInfo } from "../types/index.ts";
+import type { ResumeDeps, SessionInfo, WorktreeInfo } from "../types/index.ts";
 import { runResume } from "./resume.ts";
 
 // Mock spawnInteractive to avoid spawning real processes in terminal mode
@@ -47,6 +48,11 @@ function makeDeps(overrides: Partial<ResumeDeps> = {}): ResumeDeps {
     }),
     saveSession: vi.fn(async () => {}),
     completeSession: vi.fn(async () => {}),
+    readSession: vi.fn(async () => undefined),
+    determineSessionStatus,
+    listWeztermPanes: vi.fn(async () => null),
+    listTmuxPanes: vi.fn(async () => null),
+    confirm: vi.fn(async () => true),
     buildResumeCommand: vi.fn(() => "claude --continue"),
     selectWorktree: vi.fn(async () => null),
     ...overrides,
@@ -276,6 +282,129 @@ describe("runResume", () => {
       });
 
       await expect(runResume({}, deps)).rejects.toThrow("No worktrees found to resume");
+    });
+  });
+
+  describe("active session detection", () => {
+    const runningSession: SessionInfo = {
+      mode: "pane",
+      paneId: 99,
+      backendType: "wezterm",
+      startedAt: new Date().toISOString(),
+    };
+
+    const doneSession: SessionInfo = {
+      mode: "terminal",
+      startedAt: new Date().toISOString(),
+      completedAt: new Date().toISOString(),
+    };
+
+    test("warns and cancels when active session exists and user declines", async () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const deps = makeDeps({
+        readSession: vi.fn(async () => runningSession),
+        listWeztermPanes: vi.fn(async () => [{ paneId: 99, title: "claude", cwd: "/tmp" }]),
+        confirm: vi.fn(async () => false),
+      });
+
+      await runResume({ branchName: "feature/test", pane: true }, deps);
+
+      expect(warnSpy).toHaveBeenCalled();
+      expect(deps.confirm).toHaveBeenCalledWith("Continue anyway?");
+      expect(deps.saveSession).not.toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+
+    test("proceeds when active session exists and user confirms", async () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const deps = makeDeps({
+        readSession: vi.fn(async () => runningSession),
+        listWeztermPanes: vi.fn(async () => [{ paneId: 99, title: "claude", cwd: "/tmp" }]),
+        confirm: vi.fn(async () => true),
+      });
+
+      await runResume({ branchName: "feature/test", pane: true }, deps);
+
+      expect(warnSpy).toHaveBeenCalled();
+      expect(deps.confirm).toHaveBeenCalled();
+      expect(deps.saveSession).toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+
+    test("does not warn when existing session is done", async () => {
+      const deps = makeDeps({
+        readSession: vi.fn(async () => doneSession),
+      });
+
+      await runResume({ branchName: "feature/test", pane: true }, deps);
+
+      expect(deps.confirm).not.toHaveBeenCalled();
+      expect(deps.saveSession).toHaveBeenCalled();
+    });
+
+    test("does not warn when no existing session", async () => {
+      const deps = makeDeps({
+        readSession: vi.fn(async () => undefined),
+      });
+
+      await runResume({ branchName: "feature/test", pane: true }, deps);
+
+      expect(deps.confirm).not.toHaveBeenCalled();
+      expect(deps.saveSession).toHaveBeenCalled();
+    });
+
+    test("warns for running terminal session (no completedAt)", async () => {
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      const terminalSession: SessionInfo = {
+        mode: "terminal",
+        startedAt: new Date().toISOString(),
+      };
+      const deps = makeDeps({
+        readSession: vi.fn(async () => terminalSession),
+        confirm: vi.fn(async () => false),
+      });
+
+      await runResume({ branchName: "feature/test" }, deps);
+
+      expect(deps.confirm).toHaveBeenCalled();
+      expect(deps.saveSession).not.toHaveBeenCalled();
+    });
+
+    test("skips pane listing for terminal-mode sessions", async () => {
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      const terminalSession: SessionInfo = {
+        mode: "terminal",
+        startedAt: new Date().toISOString(),
+      };
+      const deps = makeDeps({
+        readSession: vi.fn(async () => terminalSession),
+        confirm: vi.fn(async () => true),
+      });
+
+      await runResume({ branchName: "feature/test" }, deps);
+
+      expect(deps.listWeztermPanes).not.toHaveBeenCalled();
+      expect(deps.listTmuxPanes).not.toHaveBeenCalled();
+    });
+
+    test("only queries matching backend for pane-mode sessions", async () => {
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      const tmuxSession: SessionInfo = {
+        mode: "pane",
+        paneId: "%5",
+        backendType: "tmux",
+        startedAt: new Date().toISOString(),
+      };
+      const deps = makeDeps({
+        readSession: vi.fn(async () => tmuxSession),
+        listTmuxPanes: vi.fn(async () => [{ paneId: "%5", title: "claude", cwd: "/tmp" }]),
+        confirm: vi.fn(async () => true),
+      });
+
+      await runResume({ branchName: "feature/test", pane: true }, deps);
+
+      expect(deps.listTmuxPanes).toHaveBeenCalled();
+      expect(deps.listWeztermPanes).not.toHaveBeenCalled();
     });
   });
 
