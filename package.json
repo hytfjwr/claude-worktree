@@ -1,6 +1,6 @@
 {
   "name": "@hytfjwr/claude-worktree",
-  "version": "0.8.5",
+  "version": "0.8.6",
   "description": "CLI for parallel development with git worktree + Claude Code",
   "type": "module",
   "main": "dist/src/index.js",
