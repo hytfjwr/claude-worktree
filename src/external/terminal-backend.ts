@@ -26,6 +26,7 @@ export function createWeztermBackend(): TerminalBackend {
     name: "wezterm",
     createPane: (options?: PaneOptions) => wezterm.createPane(options),
     sendCommand: (paneId: string, command: string) => wezterm.sendCommand(paneId, command),
+    closePane: (paneId: string) => wezterm.closePane(paneId),
   };
 }
 
@@ -34,6 +35,7 @@ export function createTmuxBackend(): TerminalBackend {
     name: "tmux",
     createPane: (options?: PaneOptions) => tmux.createPane(options),
     sendCommand: (paneId: string, command: string) => tmux.sendCommand(paneId, command),
+    closePane: (paneId: string) => tmux.closePane(paneId),
   };
 }
 

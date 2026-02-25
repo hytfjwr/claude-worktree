@@ -108,6 +108,10 @@ export async function activatePane(paneId: string): Promise<void> {
   await exec("tmux", ["select-pane", "-t", paneId]).quiet();
 }
 
+export async function closePane(paneId: string): Promise<void> {
+  await exec("tmux", ["kill-pane", "-t", paneId]).quiet();
+}
+
 export async function createPane(options: PaneOptions = {}): Promise<string> {
   if (isRunningInsideTmux()) {
     // Inside tmux: split the current window

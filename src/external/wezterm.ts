@@ -120,6 +120,10 @@ export async function activatePane(paneId: string): Promise<void> {
   await exec("wezterm", ["cli", "activate-pane", "--pane-id", paneId]).quiet();
 }
 
+export async function closePane(paneId: string): Promise<void> {
+  await exec("wezterm", ["cli", "kill-pane", "--pane-id", paneId]).quiet();
+}
+
 export async function createPane(options: PaneOptions = {}): Promise<string> {
   const originalPaneId = options.keepFocus ? getCurrentPaneId() : undefined;
 

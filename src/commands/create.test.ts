@@ -194,6 +194,7 @@ function makeDeps(overrides: Partial<CreateDeps> = {}): CreateDeps {
       name: "wezterm" as const,
       createPane: vi.fn(async () => "42"),
       sendCommand: vi.fn(async () => {}),
+      closePane: vi.fn(async () => {}),
     })),
     confirm: vi.fn(async () => true),
     startSpinner: vi.fn(() => ({ stop: vi.fn(), fail: vi.fn(), updateTail: vi.fn(), isExpanded: vi.fn(() => false) })),
@@ -1025,24 +1026,48 @@ describe("runCreate", () => {
           throw new Error("pane creation failed");
         }),
         sendCommand: vi.fn(async () => {}),
+        closePane: vi.fn(async () => {}),
       };
       const deps = makeDeps({ ensurePaneBackend: vi.fn(async () => failingBackend) });
 
       await expect(runCreate(defaultPaneArgs, deps)).rejects.toThrow("pane creation failed");
       expect(deps.performRollback).toHaveBeenCalled();
+      // closePane should NOT be called because createPane failed (no pane was created)
+      expect(failingBackend.closePane).not.toHaveBeenCalled();
     });
 
-    test("rolls back when sendCommand fails", async () => {
+    test("rolls back and closes pane when sendCommand fails", async () => {
       const failingBackend = {
         name: "wezterm" as const,
         createPane: vi.fn(async () => "42"),
         sendCommand: vi.fn(async () => {
           throw new Error("send failed");
         }),
+        closePane: vi.fn(async () => {}),
       };
       const deps = makeDeps({ ensurePaneBackend: vi.fn(async () => failingBackend) });
 
       await expect(runCreate(defaultPaneArgs, deps)).rejects.toThrow("send failed");
+      expect(deps.performRollback).toHaveBeenCalled();
+      // closePane should be called to clean up the orphaned pane
+      expect(failingBackend.closePane).toHaveBeenCalledWith("42");
+    });
+
+    test("continues rollback even if closePane fails", async () => {
+      const failingBackend = {
+        name: "wezterm" as const,
+        createPane: vi.fn(async () => "42"),
+        sendCommand: vi.fn(async () => {
+          throw new Error("send failed");
+        }),
+        closePane: vi.fn(async () => {
+          throw new Error("close failed");
+        }),
+      };
+      const deps = makeDeps({ ensurePaneBackend: vi.fn(async () => failingBackend) });
+
+      await expect(runCreate(defaultPaneArgs, deps)).rejects.toThrow("send failed");
+      expect(failingBackend.closePane).toHaveBeenCalledWith("42");
       expect(deps.performRollback).toHaveBeenCalled();
     });
   });

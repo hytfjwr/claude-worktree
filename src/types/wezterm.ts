@@ -20,4 +20,5 @@ export type TerminalBackend = {
   name: BackendType;
   createPane: (options?: PaneOptions) => Promise<string>;
   sendCommand: (paneId: string, command: string) => Promise<void>;
+  closePane: (paneId: string) => Promise<void>;
 };

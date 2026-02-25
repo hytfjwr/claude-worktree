@@ -369,8 +369,9 @@ async function launchClaudeInPane(
   const payloadPath = join(tmpdir(), `claude-worktree-${randomUUID()}.json`);
   await writeFile(payloadPath, JSON.stringify(runInPaneArgs), { encoding: "utf-8", flag: "wx", mode: 0o600 });
 
+  let paneIdStr: string | undefined;
   try {
-    const paneIdStr = await backend.createPane({ keepFocus: true });
+    paneIdStr = await backend.createPane({ keepFocus: true });
     logInfo(`${icons.window()} Created pane: ${paneIdStr}`);
 
     await backend.sendCommand(paneIdStr, `${getSelfCommand()} _run-in-pane "${payloadPath}"`);
@@ -392,6 +393,10 @@ async function launchClaudeInPane(
       logInfo(`\n  To view the session, run: tmux attach -t ${sessionName}`);
     }
   } catch (error) {
+    // Close orphaned pane if it was created before the failure
+    if (paneIdStr) {
+      await backend.closePane(paneIdStr).catch(() => {});
+    }
     // Clean up temp file on failure (the pane side handles its own cleanup on success)
     await unlink(payloadPath).catch(() => {});
     await deps.performRollback(buildRollbackOptions(worktreePath, repoRoot, config, slot, verbose, false, deps));

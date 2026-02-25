@@ -34,6 +34,7 @@ function makeDeps(overrides: Partial<ResumeDeps> = {}): ResumeDeps {
       name: "wezterm" as const,
       createPane: vi.fn(async () => "42"),
       sendCommand: vi.fn(async () => {}),
+      closePane: vi.fn(async () => {}),
     })),
     getGitContext: async () => ({
       repoRoot: "/repo",

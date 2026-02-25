@@ -324,6 +324,34 @@ describe("ensureTmuxAvailable", () => {
   });
 });
 
+describe("closePane", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    mockExecImpl.current = null;
+  });
+  afterEach(() => {
+    mockExecImpl.current = null;
+  });
+
+  test("calls tmux kill-pane with correct pane ID", async () => {
+    let capturedArgs: string[] = [];
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("kill-pane")) {
+        capturedArgs = args;
+        return { stdout: "" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { closePane } = await import("./tmux.ts");
+    await closePane("%42");
+
+    expect(capturedArgs).toContain("kill-pane");
+    expect(capturedArgs).toContain("-t");
+    expect(capturedArgs).toContain("%42");
+  });
+});
+
 describe("createPane", () => {
   let restoreEnv: () => void;
   let restoreTmuxEnv: () => void;

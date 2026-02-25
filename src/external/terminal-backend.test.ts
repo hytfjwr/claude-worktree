@@ -9,12 +9,14 @@ const { mockWezterm, mockTmux } = vi.hoisted(() => ({
     checkWeztermAvailable: vi.fn(async () => false),
     createPane: vi.fn(async () => "123"),
     sendCommand: vi.fn(async () => {}),
+    closePane: vi.fn(async () => {}),
   },
   mockTmux: {
     isRunningInsideTmux: vi.fn(() => false),
     checkTmuxAvailable: vi.fn(async () => false),
     createPane: vi.fn(async () => "%42"),
     sendCommand: vi.fn(async () => {}),
+    closePane: vi.fn(async () => {}),
   },
 }));
 
@@ -81,6 +83,12 @@ describe("createWeztermBackend", () => {
     await backend.sendCommand("123", "echo hello");
     expect(mockWezterm.sendCommand).toHaveBeenCalledWith("123", "echo hello");
   });
+
+  test("delegates closePane to wezterm module", async () => {
+    const backend = createWeztermBackend();
+    await backend.closePane("123");
+    expect(mockWezterm.closePane).toHaveBeenCalledWith("123");
+  });
 });
 
 describe("createTmuxBackend", () => {
@@ -100,6 +108,12 @@ describe("createTmuxBackend", () => {
     const backend = createTmuxBackend();
     await backend.sendCommand("%42", "ls -la");
     expect(mockTmux.sendCommand).toHaveBeenCalledWith("%42", "ls -la");
+  });
+
+  test("delegates closePane to tmux module", async () => {
+    const backend = createTmuxBackend();
+    await backend.closePane("%42");
+    expect(mockTmux.closePane).toHaveBeenCalledWith("%42");
   });
 });
 
