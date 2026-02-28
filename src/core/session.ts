@@ -103,8 +103,12 @@ export function determineSessionStatus(session: SessionInfo, allPanes: AllPanes,
     }
   }
 
+  // pane mode without matching pane list (backend unavailable) → Unknown
+  if (session.mode === "pane" && session.paneId != null) {
+    return { status: "unknown", elapsedMs, mode: session.mode, paneId: session.paneId };
+  }
+
   // terminal mode without completedAt → Running
-  // pane mode without matching pane list (backend unavailable) → Running
   return { status: "running", elapsedMs, mode: session.mode, paneId: session.paneId };
 }
 

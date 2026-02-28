@@ -23,7 +23,7 @@ import type {
   WorktreeListEntry,
   WorktreeStatus,
 } from "../types/index.ts";
-import { bold, colorize, dim, green, rawCode } from "../ui/color.ts";
+import { bold, colorize, dim, green, rawCode, yellow } from "../ui/color.ts";
 import { icons } from "../ui/icons.ts";
 import { logInfo } from "../ui/logger.ts";
 import { startSpinner } from "../ui/spinner.ts";
@@ -123,6 +123,9 @@ export function formatAheadBehind(ab: AheadBehind | null): string {
 export function formatSessionState(session: SessionState): string {
   const elapsed = formatElapsed(session.elapsedMs);
   const panePart = session.paneId != null ? `  pane #${session.paneId}` : "";
+  if (session.status === "unknown") {
+    return `${yellow("?")} ${yellow("Unknown")} ${dim(`(${elapsed})`)}${panePart}`;
+  }
   if (session.status === "running") {
     return `${green(icons.active())} ${green("Running")} ${dim(`(${elapsed})`)}${panePart}`;
   }

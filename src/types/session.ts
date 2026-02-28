@@ -11,7 +11,7 @@ export type SessionInfo = {
 };
 
 export type SessionState = {
-  status: "running" | "done";
+  status: "running" | "done" | "unknown";
   elapsedMs: number;
   mode: SessionMode;
   paneId?: number | string;

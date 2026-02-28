@@ -104,15 +104,28 @@ describe("determineSessionStatus", () => {
     expect(result.status).toBe("done");
   });
 
-  test("pane mode with null panes (WezTerm unavailable) → running", () => {
+  test("pane mode with null panes (WezTerm unavailable) → unknown", () => {
     const session: SessionInfo = {
       mode: "pane",
       paneId: 42,
       startedAt: "2025-01-15T11:45:00Z",
     };
     const result = determineSessionStatus(session, noPanes, now);
-    expect(result.status).toBe("running");
+    expect(result.status).toBe("unknown");
     expect(result.paneId).toBe(42);
+  });
+
+  test("tmux pane mode with null tmux panes (tmux unavailable) → unknown", () => {
+    const session: SessionInfo = {
+      mode: "pane",
+      paneId: "%42",
+      backendType: "tmux",
+      startedAt: "2025-01-15T11:45:00Z",
+    };
+    const allPanes: AllPanes = { wezterm: [{ paneId: 99, title: "other", cwd: "/tmp" }], tmux: null };
+    const result = determineSessionStatus(session, allPanes, now);
+    expect(result.status).toBe("unknown");
+    expect(result.paneId).toBe("%42");
   });
 
   test("elapsed time is calculated correctly", () => {

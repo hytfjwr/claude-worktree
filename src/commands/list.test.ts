@@ -699,8 +699,9 @@ describe("executeList", () => {
     const result = await executeList(defaultArgs, deps);
 
     expect(result.entries).toHaveLength(1);
-    // Session status should still be determined (with null panes)
+    // Session status should be "unknown" when backend is unavailable
     expect(result.entries[0].session).toBeDefined();
+    expect(result.entries[0].session?.status).toBe("unknown");
   });
 
   test("listWeztermPanes is not called when noStatus flag is true", async () => {
@@ -777,5 +778,20 @@ describe("formatSessionState", () => {
     expect(result).toContain("Done");
     expect(result).toContain("1h");
     expect(result).not.toContain("pane");
+  });
+
+  test("unknown session with pane (backend unavailable)", () => {
+    const session: SessionState = {
+      status: "unknown",
+      elapsedMs: 120 * 60_000,
+      mode: "pane",
+      paneId: 3,
+    };
+    const result = formatSessionState(session);
+    expect(result).toContain("Unknown");
+    expect(result).toContain("2h");
+    expect(result).toContain("pane #3");
+    expect(result).not.toContain("Running");
+    expect(result).not.toContain("Done");
   });
 });
