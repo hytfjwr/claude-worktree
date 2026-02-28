@@ -377,7 +377,18 @@ export async function getWorktreeStatuses(
         };
       }
 
-      if (worktree.isDirty) {
+      // Use batched remoteBranches (sync) when available, otherwise fall back to per-branch network call
+      const branchDeletedOnRemote = worktree.branch
+        ? remoteBranches
+          ? isRemoteBranchDeletedFrom(worktree.branch, effectiveTracked, remoteBranches)
+          : await isRemoteBranchDeleted(worktree.branch, effectiveTracked)
+        : false;
+
+      const branchMerged = worktree.branch ? await isBranchMerged(worktree.branch, mainBranch) : false;
+
+      // Dirty worktrees that are not merged and not remote-deleted cannot be auto-cleaned.
+      // But dirty worktrees whose branch is merged or remote-deleted are still auto-cleanable.
+      if (worktree.isDirty && !branchMerged && !branchDeletedOnRemote) {
         return {
           worktree,
           branchMerged: false,
@@ -387,23 +398,16 @@ export async function getWorktreeStatuses(
         };
       }
 
-      // Use batched remoteBranches (sync) when available, otherwise fall back to per-branch network call
-      const branchDeletedOnRemote = worktree.branch
-        ? remoteBranches
-          ? isRemoteBranchDeletedFrom(worktree.branch, effectiveTracked, remoteBranches)
-          : await isRemoteBranchDeleted(worktree.branch, effectiveTracked)
-        : false;
-
-      const branchMerged = worktree.branch ? await isBranchMerged(worktree.branch, mainBranch) : false;
       const canAutoClean = branchMerged || branchDeletedOnRemote;
+      const dirtySuffix = worktree.isDirty ? " (dirty)" : "";
 
       let reason = "";
       if (branchMerged && branchDeletedOnRemote) {
-        reason = "Merged & remote deleted";
+        reason = `Merged & remote deleted${dirtySuffix}`;
       } else if (branchMerged) {
-        reason = "Merged";
+        reason = `Merged${dirtySuffix}`;
       } else if (branchDeletedOnRemote) {
-        reason = "Remote deleted";
+        reason = `Remote deleted${dirtySuffix}`;
       } else {
         reason = "Active";
       }

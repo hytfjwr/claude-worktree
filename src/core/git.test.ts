@@ -1422,12 +1422,60 @@ describe("getWorktreeStatuses", () => {
     expect(statuses[0].reason).toBe("Locked");
   });
 
-  test("dirty worktree has canAutoClean: false", async () => {
+  test("dirty worktree with active branch has canAutoClean: false", async () => {
     setExecMockForStatuses({ branchMerged: false, remoteBranchDeleted: false });
 
     const { getWorktreeStatuses } = await import("./git.ts");
     const worktree = createWorktree({ isDirty: true });
-    const statuses = await getWorktreeStatuses([worktree], "main");
+    const statuses = await getWorktreeStatuses([worktree], "main", defaultTracked);
+
+    expect(statuses[0].canAutoClean).toBe(false);
+    expect(statuses[0].reason).toBe("Has uncommitted changes");
+  });
+
+  test("dirty worktree with remote deleted branch has canAutoClean: true", async () => {
+    setExecMockForStatuses({ branchMerged: false, remoteBranchDeleted: true });
+
+    const { getWorktreeStatuses } = await import("./git.ts");
+    const worktree = createWorktree({ isDirty: true });
+    const statuses = await getWorktreeStatuses([worktree], "main", defaultTracked);
+
+    expect(statuses[0].canAutoClean).toBe(true);
+    expect(statuses[0].branchDeletedOnRemote).toBe(true);
+    expect(statuses[0].reason).toBe("Remote deleted (dirty)");
+  });
+
+  test("dirty worktree with merged branch has canAutoClean: true", async () => {
+    setExecMockForStatuses({ branchMerged: true, remoteBranchDeleted: false });
+
+    const { getWorktreeStatuses } = await import("./git.ts");
+    const worktree = createWorktree({ isDirty: true });
+    const statuses = await getWorktreeStatuses([worktree], "main", defaultTracked);
+
+    expect(statuses[0].canAutoClean).toBe(true);
+    expect(statuses[0].branchMerged).toBe(true);
+    expect(statuses[0].reason).toBe("Merged (dirty)");
+  });
+
+  test("dirty worktree with merged & remote deleted has canAutoClean: true", async () => {
+    setExecMockForStatuses({ branchMerged: true, remoteBranchDeleted: true });
+
+    const { getWorktreeStatuses } = await import("./git.ts");
+    const worktree = createWorktree({ isDirty: true });
+    const statuses = await getWorktreeStatuses([worktree], "main", defaultTracked);
+
+    expect(statuses[0].canAutoClean).toBe(true);
+    expect(statuses[0].reason).toBe("Merged & remote deleted (dirty)");
+  });
+
+  test("dirty worktree never pushed to remote has canAutoClean: false", async () => {
+    setExecMockForStatuses({ branchMerged: false, remoteBranchDeleted: true });
+
+    const { getWorktreeStatuses } = await import("./git.ts");
+    const worktree = createWorktree({ isDirty: true, branch: "feature/new-local" });
+    // trackedBranches does NOT include "feature/new-local"
+    const tracked = new Set(["main", "develop"]);
+    const statuses = await getWorktreeStatuses([worktree], "main", tracked);
 
     expect(statuses[0].canAutoClean).toBe(false);
     expect(statuses[0].reason).toBe("Has uncommitted changes");
