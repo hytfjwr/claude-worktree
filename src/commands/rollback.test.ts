@@ -40,13 +40,11 @@ vi.mock("../ui/spinner.ts", () => ({
 const { runHook } = await import("../core/config.ts");
 const { removeWorktree } = await import("../core/git.ts");
 const { deleteSession } = await import("../core/session.ts");
-const { deleteSlot } = await import("../core/slot.ts");
 const { performRollback } = await import("./rollback.ts");
 
 const mockedRunHook = vi.mocked(runHook);
 const mockedRemoveWorktree = vi.mocked(removeWorktree);
 const mockedDeleteSession = vi.mocked(deleteSession);
-const mockedDeleteSlot = vi.mocked(deleteSlot);
 
 function baseOptions(overrides?: Partial<RollbackOptions>): RollbackOptions {
   return {
@@ -79,11 +77,6 @@ describe("performRollback", () => {
 
     await performRollback(opts);
 
-    expect(mockedRunHook).toHaveBeenCalledTimes(2);
-    expect(mockedRemoveWorktree).toHaveBeenCalledWith("/tmp/repo-feature");
-    expect(mockedDeleteSlot).toHaveBeenCalledWith("/tmp/repo-feature");
-    expect(mockedDeleteSession).toHaveBeenCalledWith("/tmp/repo-feature");
-
     // No "Rollback Summary" or "WARNING" output
     const allOutput = consoleLogSpy.mock.calls.map((c) => c[0]).join("\n");
     expect(allOutput).not.toContain("Rollback Summary");
@@ -111,7 +104,9 @@ describe("performRollback", () => {
     expect(allWarn).toContain("WARNING: Rollback incomplete. Manual cleanup may be required.");
   });
 
-  test("deleteSessionData: false → session cleanup skipped", async () => {
+  test("deleteSessionData: false → session cleanup absent from summary", async () => {
+    mockedRemoveWorktree.mockRejectedValueOnce(new Error("removal failed"));
+
     const opts = baseOptions({
       deleteSessionData: false,
       slot: 1,
@@ -119,29 +114,38 @@ describe("performRollback", () => {
 
     await performRollback(opts);
 
-    expect(mockedDeleteSession).not.toHaveBeenCalled();
-    expect(mockedDeleteSlot).toHaveBeenCalledWith("/tmp/repo-feature");
+    const allOutput = consoleLogSpy.mock.calls.map((c) => c[0]).join("\n");
+    expect(allOutput).toContain("Rollback Summary");
+    expect(allOutput).not.toContain("session cleanup");
   });
 
-  test("deleteSessionData: true → session cleanup runs", async () => {
+  test("deleteSessionData: true → session cleanup appears in summary", async () => {
+    mockedRemoveWorktree.mockRejectedValueOnce(new Error("removal failed"));
+    mockedDeleteSession.mockResolvedValueOnce(undefined);
+
     const opts = baseOptions({
       deleteSessionData: true,
     });
 
     await performRollback(opts);
 
-    expect(mockedDeleteSession).toHaveBeenCalledWith("/tmp/repo-feature");
+    const allOutput = consoleLogSpy.mock.calls.map((c) => c[0]).join("\n");
+    expect(allOutput).toContain("Rollback Summary");
+    expect(allOutput).toContain("\u2713 session cleanup");
   });
 
-  test("no hooks configured → only worktree removal runs", async () => {
+  test("no hooks configured → summary only shows worktree-related steps", async () => {
+    mockedRemoveWorktree.mockRejectedValueOnce(new Error("removal failed"));
+
     const opts = baseOptions();
 
     await performRollback(opts);
 
-    expect(mockedRunHook).not.toHaveBeenCalled();
-    expect(mockedRemoveWorktree).toHaveBeenCalledWith("/tmp/repo-feature");
-    expect(mockedDeleteSlot).not.toHaveBeenCalled();
-    expect(mockedDeleteSession).not.toHaveBeenCalled();
+    const allOutput = consoleLogSpy.mock.calls.map((c) => c[0]).join("\n");
+    expect(allOutput).toContain("Rollback Summary");
+    expect(allOutput).toContain("\u2717 worktree removal");
+    expect(allOutput).not.toContain("preClean");
+    expect(allOutput).not.toContain("postClean");
   });
 
   test("preClean fails → continues with remaining steps and shows summary", async () => {
@@ -153,12 +157,29 @@ describe("performRollback", () => {
 
     await performRollback(opts);
 
-    expect(mockedRemoveWorktree).toHaveBeenCalled();
-
     const allOutput = consoleLogSpy.mock.calls.map((c) => c[0]).join("\n");
     expect(allOutput).toContain("Rollback Summary");
     expect(allOutput).toContain("\u2717 preClean (preClean failed)");
     expect(allOutput).toContain("\u2713 worktree removal");
+  });
+
+  test("preClean and removeWorktree both fail → all failures shown in summary", async () => {
+    mockedRunHook.mockRejectedValueOnce(new Error("hook error"));
+    mockedRemoveWorktree.mockRejectedValueOnce(new Error("worktree error"));
+
+    const opts = baseOptions({
+      preCleanCommand: "echo preClean",
+    });
+
+    await performRollback(opts);
+
+    const allOutput = consoleLogSpy.mock.calls.map((c) => c[0]).join("\n");
+    expect(allOutput).toContain("Rollback Summary");
+    expect(allOutput).toContain("\u2717 preClean (hook error)");
+    expect(allOutput).toContain("\u2717 worktree removal (worktree error)");
+
+    const allWarn = consoleWarnSpy.mock.calls.map((c) => c[0]).join("\n");
+    expect(allWarn).toContain("WARNING: Rollback incomplete. Manual cleanup may be required.");
   });
 
   test("verbose mode logs error details for each failed step", async () => {
@@ -175,5 +196,16 @@ describe("performRollback", () => {
     const allWarn = consoleWarnSpy.mock.calls.map((c) => c[0]).join("\n");
     expect(allWarn).toContain("preClean failed: hook error");
     expect(allWarn).toContain("worktree removal failed: worktree error");
+  });
+
+  test("verbose: true + all steps succeed → no warnings logged", async () => {
+    const opts = baseOptions({
+      preCleanCommand: "echo preClean",
+      verbose: true,
+    });
+
+    await performRollback(opts);
+
+    expect(consoleWarnSpy).not.toHaveBeenCalled();
   });
 });

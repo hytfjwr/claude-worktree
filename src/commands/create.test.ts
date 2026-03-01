@@ -6,8 +6,15 @@ import { afterAll, afterEach, beforeEach, describe, expect, test, vi } from "vit
 import { makeWorktree } from "../__test-utils__.ts";
 import { DependencyError } from "../core/errors.ts";
 import { spawnInteractive } from "../core/spawn.ts";
-import type { CreateArgs, CreateDeps, ProjectConfig } from "../types/index.ts";
-import { checkWorktreeLimit, getSelfCommand, previewHookTemplate, readPlanFile, runCreate } from "./create.ts";
+import type { CreateArgs, CreateDeps, GitContext, ProjectConfig } from "../types/index.ts";
+import {
+  buildClaudeOptions,
+  checkWorktreeLimit,
+  getSelfCommand,
+  previewHookTemplate,
+  readPlanFile,
+  runCreate,
+} from "./create.ts";
 
 // Mock spawnInteractive to avoid spawning real processes in terminal mode
 vi.mock("../core/spawn.ts", () => ({
@@ -150,6 +157,99 @@ describe("checkWorktreeLimit", () => {
     const config: ProjectConfig = { maxWorktrees: 2.5 };
     const result = checkWorktreeLimit(config, 0, false);
     expect(result).toContain("Invalid maxWorktrees value: 2.5");
+  });
+});
+
+// =============================================================================
+// buildClaudeOptions pure function tests
+// =============================================================================
+
+describe("buildClaudeOptions", () => {
+  const git: GitContext = { repoRoot: "/repo", repoName: "repo", currentBranch: "main" };
+
+  test("sets merge instructions using git.currentBranch", () => {
+    const result = buildClaudeOptions(
+      { prompt: "do it", merge: true },
+      git,
+      "/repo/.worktrees/feat-x",
+      "develop",
+      "feat/x",
+      null,
+    );
+
+    expect(result.mergeInstructions).toEqual({
+      baseBranch: "main",
+      worktreePath: "/repo/.worktrees/feat-x",
+    });
+    expect(result).not.toHaveProperty("draftInstructions");
+    expect(result).not.toHaveProperty("prInstructions");
+  });
+
+  test("sets draft instructions using effectiveBaseBranch", () => {
+    const result = buildClaudeOptions(
+      { prompt: "do it", draft: true },
+      git,
+      "/repo/.worktrees/feat-x",
+      "develop",
+      "feat/x",
+      null,
+    );
+
+    expect(result.draftInstructions).toEqual({
+      baseBranch: "develop",
+      branchName: "feat/x",
+    });
+  });
+
+  test("sets pr instructions using effectiveBaseBranch", () => {
+    const result = buildClaudeOptions(
+      { prompt: "do it", pr: true },
+      git,
+      "/repo/.worktrees/feat-x",
+      "develop",
+      "feat/x",
+      null,
+    );
+
+    expect(result.prInstructions).toEqual({
+      baseBranch: "develop",
+      branchName: "feat/x",
+    });
+  });
+
+  test("sets dangerouslySkipPermissions from danger flag", () => {
+    const result = buildClaudeOptions(
+      { prompt: "do it", danger: true },
+      git,
+      "/repo/.worktrees/feat-x",
+      "main",
+      "feat/x",
+      null,
+    );
+
+    expect(result.dangerouslySkipPermissions).toBe(true);
+  });
+
+  test("sets permissionMode from config", () => {
+    const result = buildClaudeOptions({ prompt: "do it" }, git, "/repo/.worktrees/feat-x", "main", "feat/x", {
+      permissionMode: "full-auto",
+    });
+
+    expect(result.permissionMode).toBe("full-auto");
+  });
+
+  test("omits permissionMode when config has none", () => {
+    const result = buildClaudeOptions({ prompt: "do it" }, git, "/repo/.worktrees/feat-x", "main", "feat/x", {});
+
+    expect(result).not.toHaveProperty("permissionMode");
+  });
+
+  test("omits optional instructions when flags are not set", () => {
+    const result = buildClaudeOptions({ prompt: "do it" }, git, "/repo/.worktrees/feat-x", "main", "feat/x", null);
+
+    expect(result).not.toHaveProperty("mergeInstructions");
+    expect(result).not.toHaveProperty("draftInstructions");
+    expect(result).not.toHaveProperty("prInstructions");
   });
 });
 
@@ -919,16 +1019,17 @@ describe("runCreate", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // Merge and draft options
+  // Claude options (representative test — details covered by buildClaudeOptions)
   // ---------------------------------------------------------------------------
 
-  describe("merge and draft options", () => {
-    test("passes merge instructions to buildClaudeCommand", async () => {
+  describe("claude options", () => {
+    test("calls buildClaudeCommand with options derived from args", async () => {
       const deps = makeDeps();
       await runCreate({ ...defaultPaneArgs, merge: true }, deps);
 
       expect(deps.buildClaudeCommand).toHaveBeenCalledWith(
         expect.objectContaining({
+          prompt: "do something",
           mergeInstructions: {
             baseBranch: "main",
             worktreePath: "/repo/.worktrees/feat-x",
@@ -936,81 +1037,23 @@ describe("runCreate", () => {
         }),
       );
     });
+  });
 
-    test("passes draft instructions to buildClaudeCommand", async () => {
-      const deps = makeDeps();
-      await runCreate({ ...defaultPaneArgs, draft: true }, deps);
+  // ---------------------------------------------------------------------------
+  // createWorktree failure
+  // ---------------------------------------------------------------------------
 
-      expect(deps.buildClaudeCommand).toHaveBeenCalledWith(
-        expect.objectContaining({
-          draftInstructions: {
-            baseBranch: "main",
-            branchName: "feat/x",
-          },
-        }),
-      );
-    });
-
-    test("passes pr instructions to buildClaudeCommand", async () => {
-      const deps = makeDeps();
-      await runCreate({ ...defaultPaneArgs, pr: true }, deps);
-
-      expect(deps.buildClaudeCommand).toHaveBeenCalledWith(
-        expect.objectContaining({
-          prInstructions: {
-            baseBranch: "main",
-            branchName: "feat/x",
-          },
-        }),
-      );
-    });
-
-    test("passes pr instructions with explicit base branch", async () => {
-      const deps = makeDeps();
-      await runCreate({ ...defaultPaneArgs, pr: true, baseBranch: "develop" }, deps);
-
-      expect(deps.buildClaudeCommand).toHaveBeenCalledWith(
-        expect.objectContaining({
-          prInstructions: {
-            baseBranch: "develop",
-            branchName: "feat/x",
-          },
-        }),
-      );
-    });
-
-    test("passes danger flag to buildClaudeCommand", async () => {
-      const deps = makeDeps();
-      await runCreate({ ...defaultPaneArgs, danger: true }, deps);
-
-      expect(deps.buildClaudeCommand).toHaveBeenCalledWith(
-        expect.objectContaining({
-          dangerouslySkipPermissions: true,
-        }),
-      );
-    });
-
-    test("passes permissionMode from config to buildClaudeCommand", async () => {
+  describe("createWorktree failure", () => {
+    test("propagates error without rollback when createWorktree throws", async () => {
       const deps = makeDeps({
-        loadProjectConfig: vi.fn(async () => ({ permissionMode: "full-auto" as const })),
-      });
-      await runCreate(defaultPaneArgs, deps);
-
-      expect(deps.buildClaudeCommand).toHaveBeenCalledWith(
-        expect.objectContaining({
-          permissionMode: "full-auto",
+        createWorktree: vi.fn(async () => {
+          throw new Error("worktree creation failed");
         }),
-      );
-    });
-
-    test("does not set permissionMode when config has no permissionMode", async () => {
-      const deps = makeDeps({
-        loadProjectConfig: vi.fn(async () => ({})),
       });
-      await runCreate(defaultPaneArgs, deps);
 
-      const callArgs = vi.mocked(deps.buildClaudeCommand).mock.calls[0][0];
-      expect(callArgs).not.toHaveProperty("permissionMode");
+      await expect(runCreate(defaultTerminalArgs, deps)).rejects.toThrow("worktree creation failed");
+      expect(deps.performRollback).not.toHaveBeenCalled();
+      expect(deps.saveSession).not.toHaveBeenCalled();
     });
   });
 
