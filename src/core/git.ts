@@ -65,6 +65,23 @@ export async function createWorktree(branchName: string, worktreePath: string, b
   }
 }
 
+/**
+ * Pure function to extract the main branch name from `git branch -a` output.
+ */
+export function extractMainBranchName(branchList: string): string {
+  const branchLines = branchList
+    .trim()
+    .split("\n")
+    .map((b) => b.trim().replace(/^\* /, ""));
+  if (branchLines.some((b) => b === "remotes/origin/main" || b === "main")) {
+    return "main";
+  }
+  if (branchLines.some((b) => b === "remotes/origin/master" || b === "master")) {
+    return "master";
+  }
+  return "main"; // Ultimate fallback
+}
+
 export async function getMainBranch(): Promise<string> {
   // Try to detect the main branch name
   const result = await exec("git", ["symbolic-ref", "refs/remotes/origin/HEAD"]).nothrow().quiet();
@@ -79,18 +96,7 @@ export async function getMainBranch(): Promise<string> {
   if (branchResult.exitCode !== 0) {
     return "main"; // Default fallback
   }
-  const branchLines = branchResult
-    .text()
-    .trim()
-    .split("\n")
-    .map((b) => b.trim().replace(/^\* /, ""));
-  if (branchLines.some((b) => b === "remotes/origin/main" || b === "main")) {
-    return "main";
-  }
-  if (branchLines.some((b) => b === "remotes/origin/master" || b === "master")) {
-    return "master";
-  }
-  return "main"; // Ultimate fallback
+  return extractMainBranchName(branchResult.text());
 }
 
 /**
@@ -283,31 +289,35 @@ export async function deleteLocalBranch(branchName: string, force = false): Prom
   }
 }
 
-export async function getLastCommit(worktreePath: string): Promise<CommitInfo | null> {
-  const result = await exec("git", ["-C", worktreePath, "log", "-1", "--format=%H%x00%s%x00%aI"]).nothrow().quiet();
-  if (result.exitCode !== 0) {
+/**
+ * Pure function to parse `git log -1 --format=%H%x00%s%x00%aI` output.
+ */
+export function parseCommitLog(output: string): CommitInfo | null {
+  const trimmed = output.trim();
+  if (!trimmed) {
     return null;
   }
-  const output = result.text().trim();
-  if (!output) {
-    return null;
-  }
-  const [hash, message, dateStr] = output.split("\0");
+  const [hash, message, dateStr] = trimmed.split("\0");
   if (!hash || !message || !dateStr) {
     return null;
   }
   return { hash, message, date: new Date(dateStr) };
 }
 
-export async function getAheadBehind(branch: string, baseBranch: string): Promise<AheadBehind | null> {
-  const result = await exec("git", ["rev-list", "--left-right", "--count", `${branch}...${baseBranch}`])
-    .nothrow()
-    .quiet();
+export async function getLastCommit(worktreePath: string): Promise<CommitInfo | null> {
+  const result = await exec("git", ["-C", worktreePath, "log", "-1", "--format=%H%x00%s%x00%aI"]).nothrow().quiet();
   if (result.exitCode !== 0) {
     return null;
   }
-  const output = result.text().trim();
-  const parts = output.split(/\s+/);
+  return parseCommitLog(result.text());
+}
+
+/**
+ * Pure function to parse `git rev-list --left-right --count` output.
+ */
+export function parseAheadBehind(output: string): AheadBehind | null {
+  const trimmed = output.trim();
+  const parts = trimmed.split(/\s+/);
   if (parts.length !== 2) {
     return null;
   }
@@ -317,6 +327,16 @@ export async function getAheadBehind(branch: string, baseBranch: string): Promis
     return null;
   }
   return { ahead, behind };
+}
+
+export async function getAheadBehind(branch: string, baseBranch: string): Promise<AheadBehind | null> {
+  const result = await exec("git", ["rev-list", "--left-right", "--count", `${branch}...${baseBranch}`])
+    .nothrow()
+    .quiet();
+  if (result.exitCode !== 0) {
+    return null;
+  }
+  return parseAheadBehind(result.text());
 }
 
 export async function fetchAndPrune(): Promise<void> {
