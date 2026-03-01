@@ -178,7 +178,8 @@ describe("splitPaneRight", () => {
     expect(result).toBe("%42");
   });
 
-  test("passes correct flags", async () => {
+  // CLI contract: verify the flags that tmux split-window requires for horizontal split with pane ID output
+  test("passes -h (horizontal) and -P (print pane ID) flags", async () => {
     let capturedArgs: string[] = [];
     mockExecImpl.current = createExecStub((_cmd, args) => {
       if (args.includes("split-window")) {
@@ -206,7 +207,8 @@ describe("sendKeys", () => {
     mockExecImpl.current = null;
   });
 
-  test("sends keys to specified pane", async () => {
+  // CLI contract: verify tmux send-keys uses -t (target pane) and -l (literal) flags
+  test("passes -t and -l flags with pane ID and text", async () => {
     let capturedArgs: string[] = [];
     mockExecImpl.current = createExecStub((_cmd, args) => {
       if (args.includes("send-keys")) {
@@ -257,6 +259,9 @@ describe("sendCommand", () => {
   });
 });
 
+// activatePane is a side-effect-only function (no return value).
+// We can only verify the CLI arguments passed to tmux; the actual pane focus
+// change is a tmux side effect that cannot be observed in unit tests.
 describe("activatePane", () => {
   beforeEach(() => {
     vi.resetModules();
@@ -266,7 +271,8 @@ describe("activatePane", () => {
     mockExecImpl.current = null;
   });
 
-  test("calls tmux select-pane with correct pane ID", async () => {
+  // CLI contract: verify tmux select-pane receives -t flag with target pane ID
+  test("passes select-pane with -t flag and pane ID", async () => {
     let capturedArgs: string[] = [];
     mockExecImpl.current = createExecStub((_cmd, args) => {
       if (args.includes("select-pane")) {
@@ -333,7 +339,8 @@ describe("closePane", () => {
     mockExecImpl.current = null;
   });
 
-  test("calls tmux kill-pane with correct pane ID", async () => {
+  // CLI contract: verify tmux kill-pane receives -t flag with target pane ID
+  test("passes kill-pane with -t flag and pane ID", async () => {
     let capturedArgs: string[] = [];
     mockExecImpl.current = createExecStub((_cmd, args) => {
       if (args.includes("kill-pane")) {
