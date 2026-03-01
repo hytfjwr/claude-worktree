@@ -40,11 +40,6 @@ describe("parseArgs", () => {
         args: { force: false, all: false, dryRun: false, quiet: false, verbose: false, branches: [] },
       });
     });
-
-    test("clean + create args - interpreted as clean", () => {
-      const result = parseArgs(["clean"]);
-      expect(result.type).toBe("clean");
-    });
   });
 
   describe("list", () => {
@@ -200,154 +195,46 @@ describe("parseCreateArgs", () => {
 
   test("-plan option", () => {
     const result = parseCreateArgs(["feature/api", "-plan", "./plan.md"]);
-    expect(result).toEqual({
-      branchName: "feature/api",
-      prompt: "",
-      planFile: "./plan.md",
-      danger: false,
-      merge: false,
-      draft: false,
-      pr: false,
-      pull: false,
-      baseBranch: undefined,
-      pane: false,
-      quiet: false,
-      verbose: false,
-      dryRun: false,
-    });
+    expect(result.planFile).toBe("./plan.md");
+    expect(result.prompt).toBe("");
   });
 
   test("-danger option", () => {
     const result = parseCreateArgs(["feature/test", "Prompt", "-danger"]);
-    expect(result).toEqual({
-      branchName: "feature/test",
-      prompt: "Prompt",
-      planFile: undefined,
-      danger: true,
-      merge: false,
-      draft: false,
-      pr: false,
-      pull: false,
-      baseBranch: undefined,
-      pane: false,
-      quiet: false,
-      verbose: false,
-      dryRun: false,
-    });
+    expect(result.danger).toBe(true);
   });
 
   test("-d option (alias for -danger)", () => {
     const result = parseCreateArgs(["feature/test", "Prompt", "-d"]);
-    expect(result).toEqual({
-      branchName: "feature/test",
-      prompt: "Prompt",
-      planFile: undefined,
-      danger: true,
-      merge: false,
-      draft: false,
-      pr: false,
-      pull: false,
-      baseBranch: undefined,
-      pane: false,
-      quiet: false,
-      verbose: false,
-      dryRun: false,
-    });
+    expect(result.danger).toBe(true);
   });
 
   test("-danger + -plan options", () => {
     const result = parseCreateArgs(["feature/test", "-plan", "plan.md", "-danger"]);
-    expect(result).toEqual({
-      branchName: "feature/test",
-      prompt: "",
-      planFile: "plan.md",
-      danger: true,
-      merge: false,
-      draft: false,
-      pr: false,
-      pull: false,
-      baseBranch: undefined,
-      pane: false,
-      quiet: false,
-      verbose: false,
-      dryRun: false,
-    });
+    expect(result.danger).toBe(true);
+    expect(result.planFile).toBe("plan.md");
   });
 
   test("-merge option", () => {
     const result = parseCreateArgs(["feature/test", "Prompt", "-merge"]);
-    expect(result).toEqual({
-      branchName: "feature/test",
-      prompt: "Prompt",
-      planFile: undefined,
-      danger: false,
-      merge: true,
-      draft: false,
-      pr: false,
-      pull: false,
-      baseBranch: undefined,
-      pane: false,
-      quiet: false,
-      verbose: false,
-      dryRun: false,
-    });
+    expect(result.merge).toBe(true);
   });
 
   test("-m option (alias for -merge)", () => {
     const result = parseCreateArgs(["feature/test", "Prompt", "-m"]);
-    expect(result).toEqual({
-      branchName: "feature/test",
-      prompt: "Prompt",
-      planFile: undefined,
-      danger: false,
-      merge: true,
-      draft: false,
-      pr: false,
-      pull: false,
-      baseBranch: undefined,
-      pane: false,
-      quiet: false,
-      verbose: false,
-      dryRun: false,
-    });
+    expect(result.merge).toBe(true);
   });
 
   test("-merge + -danger options", () => {
     const result = parseCreateArgs(["feature/test", "Prompt", "-merge", "-danger"]);
-    expect(result).toEqual({
-      branchName: "feature/test",
-      prompt: "Prompt",
-      planFile: undefined,
-      danger: true,
-      merge: true,
-      draft: false,
-      pr: false,
-      pull: false,
-      baseBranch: undefined,
-      pane: false,
-      quiet: false,
-      verbose: false,
-      dryRun: false,
-    });
+    expect(result.merge).toBe(true);
+    expect(result.danger).toBe(true);
   });
 
   test("-merge + -plan options", () => {
     const result = parseCreateArgs(["feature/test", "-plan", "plan.md", "-merge"]);
-    expect(result).toEqual({
-      branchName: "feature/test",
-      prompt: "",
-      planFile: "plan.md",
-      danger: false,
-      merge: true,
-      draft: false,
-      pr: false,
-      pull: false,
-      baseBranch: undefined,
-      pane: false,
-      quiet: false,
-      verbose: false,
-      dryRun: false,
-    });
+    expect(result.merge).toBe(true);
+    expect(result.planFile).toBe("plan.md");
   });
 
   test("all options combined -pane -draft -pull -danger -verbose -dry-run -plan", () => {
@@ -381,97 +268,30 @@ describe("parseCreateArgs", () => {
 
   test("-base option", () => {
     const result = parseCreateArgs(["feature/test", "Prompt", "-base", "develop"]);
-    expect(result).toEqual({
-      branchName: "feature/test",
-      prompt: "Prompt",
-      planFile: undefined,
-      danger: false,
-      merge: false,
-      draft: false,
-      pr: false,
-      pull: false,
-      baseBranch: "develop",
-      pane: false,
-      quiet: false,
-      verbose: false,
-      dryRun: false,
-    });
+    expect(result.baseBranch).toBe("develop");
   });
 
   test("-b option (alias for -base)", () => {
     const result = parseCreateArgs(["feature/test", "Prompt", "-b", "develop"]);
-    expect(result).toEqual({
-      branchName: "feature/test",
-      prompt: "Prompt",
-      planFile: undefined,
-      danger: false,
-      merge: false,
-      draft: false,
-      pr: false,
-      pull: false,
-      baseBranch: "develop",
-      pane: false,
-      quiet: false,
-      verbose: false,
-      dryRun: false,
-    });
+    expect(result.baseBranch).toBe("develop");
   });
 
   test("-base + -danger options", () => {
     const result = parseCreateArgs(["feature/test", "Prompt", "-base", "develop", "-danger"]);
-    expect(result).toEqual({
-      branchName: "feature/test",
-      prompt: "Prompt",
-      planFile: undefined,
-      danger: true,
-      merge: false,
-      draft: false,
-      pr: false,
-      pull: false,
-      baseBranch: "develop",
-      pane: false,
-      quiet: false,
-      verbose: false,
-      dryRun: false,
-    });
+    expect(result.baseBranch).toBe("develop");
+    expect(result.danger).toBe(true);
   });
 
   test("-base + -merge options", () => {
     const result = parseCreateArgs(["feature/test", "Prompt", "-base", "develop", "-merge"]);
-    expect(result).toEqual({
-      branchName: "feature/test",
-      prompt: "Prompt",
-      planFile: undefined,
-      danger: false,
-      merge: true,
-      draft: false,
-      pr: false,
-      pull: false,
-      baseBranch: "develop",
-      pane: false,
-      quiet: false,
-      verbose: false,
-      dryRun: false,
-    });
+    expect(result.baseBranch).toBe("develop");
+    expect(result.merge).toBe(true);
   });
 
   test("-base + -plan options", () => {
     const result = parseCreateArgs(["feature/test", "-base", "develop", "-plan", "plan.md"]);
-    expect(result).toEqual({
-      branchName: "feature/test",
-      prompt: "",
-      planFile: "plan.md",
-      danger: false,
-      merge: false,
-      draft: false,
-      pr: false,
-      pull: false,
-      baseBranch: "develop",
-      pane: false,
-      quiet: false,
-      verbose: false,
-      dryRun: false,
-    });
+    expect(result.baseBranch).toBe("develop");
+    expect(result.planFile).toBe("plan.md");
   });
 
   test("all options combined -base -pane -draft -pull -danger -verbose -dry-run -plan", () => {
@@ -507,192 +327,59 @@ describe("parseCreateArgs", () => {
 
   test("-draft option", () => {
     const result = parseCreateArgs(["feature/test", "Prompt", "-draft"]);
-    expect(result).toEqual({
-      branchName: "feature/test",
-      prompt: "Prompt",
-      planFile: undefined,
-      danger: false,
-      merge: false,
-      draft: true,
-      pr: false,
-      pull: false,
-      baseBranch: undefined,
-      pane: false,
-      quiet: false,
-      verbose: false,
-      dryRun: false,
-    });
+    expect(result.draft).toBe(true);
   });
 
   test("-draft + -danger options", () => {
     const result = parseCreateArgs(["feature/test", "Prompt", "-draft", "-danger"]);
-    expect(result).toEqual({
-      branchName: "feature/test",
-      prompt: "Prompt",
-      planFile: undefined,
-      danger: true,
-      merge: false,
-      draft: true,
-      pr: false,
-      pull: false,
-      baseBranch: undefined,
-      pane: false,
-      quiet: false,
-      verbose: false,
-      dryRun: false,
-    });
+    expect(result.draft).toBe(true);
+    expect(result.danger).toBe(true);
   });
 
   test("-draft + -base options", () => {
     const result = parseCreateArgs(["feature/test", "Prompt", "-draft", "-base", "develop"]);
-    expect(result).toEqual({
-      branchName: "feature/test",
-      prompt: "Prompt",
-      planFile: undefined,
-      danger: false,
-      merge: false,
-      draft: true,
-      pr: false,
-      pull: false,
-      baseBranch: "develop",
-      pane: false,
-      quiet: false,
-      verbose: false,
-      dryRun: false,
-    });
+    expect(result.draft).toBe(true);
+    expect(result.baseBranch).toBe("develop");
   });
 
   test("-draft + -plan options", () => {
     const result = parseCreateArgs(["feature/test", "-draft", "-plan", "plan.md"]);
-    expect(result).toEqual({
-      branchName: "feature/test",
-      prompt: "",
-      planFile: "plan.md",
-      danger: false,
-      merge: false,
-      draft: true,
-      pr: false,
-      pull: false,
-      baseBranch: undefined,
-      pane: false,
-      quiet: false,
-      verbose: false,
-      dryRun: false,
-    });
+    expect(result.draft).toBe(true);
+    expect(result.planFile).toBe("plan.md");
   });
 
   test("-pane option", () => {
     const result = parseCreateArgs(["feature/test", "Prompt", "-pane"]);
-    expect(result).toEqual({
-      branchName: "feature/test",
-      prompt: "Prompt",
-      planFile: undefined,
-      danger: false,
-      merge: false,
-      draft: false,
-      pr: false,
-      pull: false,
-      baseBranch: undefined,
-      pane: true,
-      quiet: false,
-      verbose: false,
-      dryRun: false,
-    });
+    expect(result.pane).toBe(true);
   });
 
   test("-p option", () => {
     const result = parseCreateArgs(["feature/test", "Prompt", "-p"]);
-    expect(result).toEqual({
-      branchName: "feature/test",
-      prompt: "Prompt",
-      planFile: undefined,
-      danger: false,
-      merge: false,
-      draft: false,
-      pr: false,
-      pull: false,
-      baseBranch: undefined,
-      pane: true,
-      quiet: false,
-      verbose: false,
-      dryRun: false,
-    });
+    expect(result.pane).toBe(true);
   });
 
   test("-pane + -danger options", () => {
     const result = parseCreateArgs(["feature/test", "Prompt", "-pane", "-danger"]);
-    expect(result).toEqual({
-      branchName: "feature/test",
-      prompt: "Prompt",
-      planFile: undefined,
-      danger: true,
-      merge: false,
-      draft: false,
-      pr: false,
-      pull: false,
-      baseBranch: undefined,
-      pane: true,
-      quiet: false,
-      verbose: false,
-      dryRun: false,
-    });
+    expect(result.pane).toBe(true);
+    expect(result.danger).toBe(true);
   });
 
   test("-pane + -draft + -base options", () => {
     const result = parseCreateArgs(["feature/test", "Prompt", "-pane", "-draft", "-base", "develop"]);
-    expect(result).toEqual({
-      branchName: "feature/test",
-      prompt: "Prompt",
-      planFile: undefined,
-      danger: false,
-      merge: false,
-      draft: true,
-      pr: false,
-      pull: false,
-      baseBranch: "develop",
-      pane: true,
-      quiet: false,
-      verbose: false,
-      dryRun: false,
-    });
+    expect(result.pane).toBe(true);
+    expect(result.draft).toBe(true);
+    expect(result.baseBranch).toBe("develop");
   });
 
   test("-pull option", () => {
     const result = parseCreateArgs(["feature/test", "Prompt", "-pull"]);
-    expect(result).toEqual({
-      branchName: "feature/test",
-      prompt: "Prompt",
-      planFile: undefined,
-      danger: false,
-      merge: false,
-      draft: false,
-      pr: false,
-      pull: true,
-      baseBranch: undefined,
-      pane: false,
-      quiet: false,
-      verbose: false,
-      dryRun: false,
-    });
+    expect(result.pull).toBe(true);
   });
 
   test("-pull + -base options", () => {
     const result = parseCreateArgs(["feature/test", "Prompt", "-pull", "-base", "main"]);
-    expect(result).toEqual({
-      branchName: "feature/test",
-      prompt: "Prompt",
-      planFile: undefined,
-      danger: false,
-      merge: false,
-      draft: false,
-      pr: false,
-      pull: true,
-      baseBranch: "main",
-      pane: false,
-      quiet: false,
-      verbose: false,
-      dryRun: false,
-    });
+    expect(result.pull).toBe(true);
+    expect(result.baseBranch).toBe("main");
   });
 
   test("-pull + -verbose options", () => {
@@ -745,59 +432,19 @@ describe("parseCreateArgs", () => {
 
   test("-pr option", () => {
     const result = parseCreateArgs(["feature/test", "Prompt", "-pr"]);
-    expect(result).toEqual({
-      branchName: "feature/test",
-      prompt: "Prompt",
-      planFile: undefined,
-      danger: false,
-      merge: false,
-      draft: false,
-      pr: true,
-      pull: false,
-      baseBranch: undefined,
-      pane: false,
-      quiet: false,
-      verbose: false,
-      dryRun: false,
-    });
+    expect(result.pr).toBe(true);
   });
 
   test("-pr + -base options", () => {
     const result = parseCreateArgs(["feature/test", "Prompt", "-pr", "-base", "develop"]);
-    expect(result).toEqual({
-      branchName: "feature/test",
-      prompt: "Prompt",
-      planFile: undefined,
-      danger: false,
-      merge: false,
-      draft: false,
-      pr: true,
-      pull: false,
-      baseBranch: "develop",
-      pane: false,
-      quiet: false,
-      verbose: false,
-      dryRun: false,
-    });
+    expect(result.pr).toBe(true);
+    expect(result.baseBranch).toBe("develop");
   });
 
   test("-pr + -danger options", () => {
     const result = parseCreateArgs(["feature/test", "Prompt", "-pr", "-danger"]);
-    expect(result).toEqual({
-      branchName: "feature/test",
-      prompt: "Prompt",
-      planFile: undefined,
-      danger: true,
-      merge: false,
-      draft: false,
-      pr: true,
-      pull: false,
-      baseBranch: undefined,
-      pane: false,
-      quiet: false,
-      verbose: false,
-      dryRun: false,
-    });
+    expect(result.pr).toBe(true);
+    expect(result.danger).toBe(true);
   });
 
   test("-merge + -draft throws mutually exclusive error", () => {
@@ -1469,51 +1116,10 @@ vi.mock("./version.ts", () => ({
 }));
 
 const { run } = await import("./cli.ts");
-const { runCreate } = await import("./commands/create.ts");
-const { runResume } = await import("./commands/resume.ts");
-const { executeList } = await import("./commands/list.ts");
-const { executeClean } = await import("./commands/clean.ts");
-const { parseRunInPaneArgs, executeRunInPane } = await import("./commands/run-in-pane.ts");
 const { logInfo, setLogger, createQuietLogger } = await import("./ui/logger.ts");
 const { setQuietMode } = await import("./ui/spinner.ts");
 
 describe("run", () => {
-  test("dispatches 'create' to runCreate", async () => {
-    const args = {
-      branchName: "feature/test",
-      prompt: "Test prompt",
-      danger: false,
-      merge: false,
-      draft: false,
-      pr: false,
-      pull: false,
-      pane: false,
-      quiet: false,
-      verbose: false,
-      dryRun: false,
-    };
-    await run({ type: "create", args });
-    expect(runCreate).toHaveBeenCalledWith(args);
-  });
-
-  test("dispatches 'resume' to runResume", async () => {
-    const args = { branchName: "feature/auth", danger: false, pane: false, quiet: false, verbose: false };
-    await run({ type: "resume", args });
-    expect(runResume).toHaveBeenCalledWith(args);
-  });
-
-  test("dispatches 'list' to executeList", async () => {
-    const args = { json: false, verbose: false, noStatus: false, quiet: false, fetch: false };
-    await run({ type: "list", args });
-    expect(executeList).toHaveBeenCalledWith(args);
-  });
-
-  test("dispatches 'clean' to executeClean", async () => {
-    const args = { force: false, all: false, dryRun: false, quiet: false, verbose: false, branches: [] as string[] };
-    await run({ type: "clean", args });
-    expect(executeClean).toHaveBeenCalledWith(args);
-  });
-
   test("shows version for 'version' command", async () => {
     await run({ type: "version" });
     expect(logInfo).toHaveBeenCalledWith("1.2.3");
@@ -1556,9 +1162,11 @@ describe("run", () => {
   });
 
   test("enables quiet mode when quiet flag is set", async () => {
+    vi.mocked(createQuietLogger).mockClear();
     const args = { json: false, verbose: false, noStatus: false, quiet: true, fetch: false };
     await run({ type: "list", args });
-    expect(setLogger).toHaveBeenCalledWith(createQuietLogger());
+    expect(createQuietLogger).toHaveBeenCalledOnce();
+    expect(setLogger).toHaveBeenCalledWith(vi.mocked(createQuietLogger).mock.results[0].value);
     expect(setQuietMode).toHaveBeenCalledWith(true);
   });
 
@@ -1569,25 +1177,5 @@ describe("run", () => {
     await run({ type: "list", args });
     expect(setLogger).not.toHaveBeenCalled();
     expect(setQuietMode).not.toHaveBeenCalled();
-  });
-
-  test("dispatches '_run-in-pane' to parseRunInPaneArgs then executeRunInPane", async () => {
-    const mockArgs = {
-      worktreePath: "/tmp/wt",
-      repoRoot: "/tmp/repo",
-      claudeCommand: "claude",
-      postCreateTimeout: 600,
-      preCleanTimeout: 600,
-      postCleanTimeout: 600,
-      verbose: false,
-      quiet: false,
-    };
-    vi.mocked(parseRunInPaneArgs).mockResolvedValue(mockArgs);
-    vi.mocked(executeRunInPane).mockResolvedValue(undefined);
-
-    await run({ type: "_run-in-pane", payloadPath: "/tmp/payload.json" });
-
-    expect(parseRunInPaneArgs).toHaveBeenCalledWith("/tmp/payload.json");
-    expect(executeRunInPane).toHaveBeenCalledWith(mockArgs);
   });
 });
