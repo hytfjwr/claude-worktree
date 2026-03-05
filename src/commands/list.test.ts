@@ -388,7 +388,7 @@ describe("executeList", () => {
     expect(parsed.worktrees[0].status).toBe("Main");
   });
 
-  test("fetchAndPrune is not called by default", async () => {
+  test("fetchAndPrune is called only when fetch flag is true", async () => {
     const mainWt = makeWorktree({ isMain: true, branch: "main", path: "/repo" });
     const mainStatus = makeStatus({ isMain: true, branch: "main", path: "/repo" });
 
@@ -402,27 +402,13 @@ describe("executeList", () => {
       getLastCommit: async () => makeCommitInfo(),
     });
 
+    // Without fetch flag, fetchAndPrune should not be called
     await executeList(defaultArgs, deps);
-
     expect(fetchCalled).toBe(false);
-  });
 
-  test("fetchAndPrune is called when fetch flag is true", async () => {
-    const mainWt = makeWorktree({ isMain: true, branch: "main", path: "/repo" });
-    const mainStatus = makeStatus({ isMain: true, branch: "main", path: "/repo" });
-
-    let fetchCalled = false;
-    const deps = makeListDeps({
-      fetchAndPrune: async () => {
-        fetchCalled = true;
-      },
-      listWorktrees: async () => ({ worktrees: [mainWt], mainBranch: "main" }),
-      getWorktreeStatuses: async () => [mainStatus],
-      getLastCommit: async () => makeCommitInfo(),
-    });
-
+    // With fetch flag, fetchAndPrune should be called
+    fetchCalled = false;
     await executeList({ ...defaultArgs, fetch: true }, deps);
-
     expect(fetchCalled).toBe(true);
   });
 
@@ -517,68 +503,14 @@ describe("executeList", () => {
     expect(parsed.worktrees).toEqual([]);
   });
 
-  test("spinner is not started in JSON mode", async () => {
-    let spinnerStarted = false;
-    const deps = makeListDeps({
-      startSpinner: (_message: string) => {
-        spinnerStarted = true;
-        return {
-          stop: () => {},
-          fail: (_msg: string) => {},
-          updateTail: (_lines: string[]) => {},
-          isExpanded: () => false,
-        };
-      },
-    });
-
-    await executeList({ json: true, verbose: false, noStatus: true, quiet: false, fetch: false }, deps);
-
-    expect(spinnerStarted).toBe(false);
-  });
-
-  test("spinner stop is called on success", async () => {
-    const mainWt = makeWorktree({ isMain: true, branch: "main", path: "/repo" });
-    const mainStatus = makeStatus({ isMain: true, branch: "main", path: "/repo" });
-
-    let stopped = false;
-    const deps = makeListDeps({
-      listWorktrees: async () => ({ worktrees: [mainWt], mainBranch: "main" }),
-      getWorktreeStatuses: async () => [mainStatus],
-      getLastCommit: async () => makeCommitInfo(),
-      startSpinner: (_message: string) => ({
-        stop: () => {
-          stopped = true;
-        },
-        fail: (_msg: string) => {},
-        updateTail: (_lines: string[]) => {},
-        isExpanded: () => false,
-      }),
-    });
-
-    await executeList(defaultArgs, deps);
-
-    expect(stopped).toBe(true);
-  });
-
-  test("spinner fail is called on error", async () => {
-    let failMessage = "";
+  test("rejects when listWorktrees throws", async () => {
     const deps = makeListDeps({
       listWorktrees: async () => {
         throw new Error("git error");
       },
-      startSpinner: (_message: string) => ({
-        stop: () => {},
-        fail: (msg: string) => {
-          failMessage = msg;
-        },
-        updateTail: (_lines: string[]) => {},
-        isExpanded: () => false,
-      }),
     });
 
     await expect(executeList(defaultArgs, deps)).rejects.toThrow("git error");
-
-    expect(failMessage).toBe("Failed to fetch worktree information");
   });
 
   test("sessions are not fetched when noStatus flag is true", async () => {

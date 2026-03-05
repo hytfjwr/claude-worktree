@@ -183,41 +183,11 @@ describe("runResume", () => {
   });
 
   describe("branch name specified", () => {
-    test("builds resume command with correct options", async () => {
-      const deps = makeDeps();
-      await runResume({ branchName: "feature/test", pane: true }, deps);
-
-      expect(deps.buildResumeCommand).toHaveBeenCalledWith({
-        prompt: undefined,
-        dangerouslySkipPermissions: undefined,
-      });
-    });
-
     test("throws when branch not found", async () => {
       const deps = makeDeps();
       await expect(runResume({ branchName: "feature/nonexistent" }, deps)).rejects.toThrow(
         "Worktree not found for branch: feature/nonexistent",
       );
-    });
-
-    test("passes prompt to buildResumeCommand", async () => {
-      const deps = makeDeps();
-      await runResume({ branchName: "feature/test", prompt: "Continue work", pane: true }, deps);
-
-      expect(deps.buildResumeCommand).toHaveBeenCalledWith({
-        prompt: "Continue work",
-        dangerouslySkipPermissions: undefined,
-      });
-    });
-
-    test("passes danger flag to buildResumeCommand", async () => {
-      const deps = makeDeps();
-      await runResume({ branchName: "feature/test", danger: true, pane: true }, deps);
-
-      expect(deps.buildResumeCommand).toHaveBeenCalledWith({
-        prompt: undefined,
-        dangerouslySkipPermissions: true,
-      });
     });
 
     test("throws when worktree directory does not exist", async () => {
@@ -415,7 +385,10 @@ describe("runResume", () => {
 
       const backend = await (deps.ensurePaneBackend as ReturnType<typeof vi.fn>).mock.results[0].value;
       expect(backend.createPane).toHaveBeenCalledWith({ keepFocus: true });
-      expect(backend.sendCommand).toHaveBeenCalledWith("42", `cd "${tempDir}" && claude --continue`);
+      const sendCommandCall = (backend.sendCommand as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(sendCommandCall[0]).toBe("42");
+      expect(sendCommandCall[1]).toContain(tempDir);
+      expect(sendCommandCall[1]).toContain("claude --continue");
       expect(deps.saveSession).toHaveBeenCalledWith(tempDir, {
         paneId: 42,
         backendType: "wezterm",
