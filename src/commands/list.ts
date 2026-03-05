@@ -10,12 +10,11 @@ import {
   getWorktreeStatuses,
   listWorktrees,
 } from "../core/git.ts";
-import { determineSessionStatus, formatElapsed, readAllSessions } from "../core/session.ts";
+import { determineSessionStatus, fetchAllPanes, formatElapsed, readAllSessions } from "../core/session.ts";
 import { listTmuxPanes } from "../external/tmux.ts";
 import { listWeztermPanes } from "../external/wezterm.ts";
 import type {
   AheadBehind,
-  AllPanes,
   ListArgs,
   ListDeps,
   ListResult,
@@ -210,14 +209,7 @@ export async function executeList(args: ListArgs, deps: ListDeps = defaultDeps):
       const statuses = await deps.getWorktreeStatuses(worktrees, mainBranch, trackedBranches, remoteBranches);
 
       // Fetch panes from all backends and sessions by default (skip with -no-status)
-      let allPanes: AllPanes = { wezterm: null, tmux: null };
-      if (!args.noStatus) {
-        const [weztermPanes, tmuxPanesResult] = await Promise.all([
-          deps.listWeztermPanes().catch(() => null),
-          deps.listTmuxPanes().catch(() => null),
-        ]);
-        allPanes = { wezterm: weztermPanes, tmux: tmuxPanesResult };
-      }
+      const allPanes = args.noStatus ? { wezterm: null, tmux: null } : await fetchAllPanes(deps);
       const sessions = args.noStatus ? {} : await deps.readAllSessions();
 
       // Build entries (parallelize per-worktree git operations with concurrency limit)

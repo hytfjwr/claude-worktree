@@ -12,18 +12,28 @@ import {
   listWorktrees,
   removeWorktree,
 } from "../core/git.ts";
-import { deleteSession, gcSessions } from "../core/session.ts";
+import {
+  deleteSession,
+  determineSessionStatus,
+  fetchAllPanes,
+  formatElapsed,
+  gcSessions,
+  readAllSessions,
+} from "../core/session.ts";
 import { deleteSlot, gcSlots, readSlot } from "../core/slot.ts";
 import { checkGhAvailable, getPullRequestForBranch } from "../external/github.ts";
+import { listTmuxPanes } from "../external/tmux.ts";
+import { listWeztermPanes } from "../external/wezterm.ts";
 import type {
   CleanArgs,
   CleanDeps,
   CleanResult,
   ProjectConfig,
   PullRequestInfo,
+  SessionState,
   WorktreeStatus,
 } from "../types/index.ts";
-import { cyan, dim } from "../ui/color.ts";
+import { cyan, dim, yellow } from "../ui/color.ts";
 import { icons } from "../ui/icons.ts";
 import { logDebug, logInfo, logWarn } from "../ui/logger.ts";
 import { confirm, selectMultiple } from "../ui/prompt.ts";
@@ -52,7 +62,85 @@ const defaultDeps: CleanDeps = {
   startSpinner,
   checkGhAvailable,
   getPullRequestForBranch,
+  readAllSessions,
+  listWeztermPanes,
+  listTmuxPanes,
+  determineSessionStatus,
 };
+
+async function fetchRunningSessionMap(
+  cleanableStatuses: WorktreeStatus[],
+  deps: CleanDeps,
+): Promise<Map<string, SessionState>> {
+  const map = new Map<string, SessionState>();
+  try {
+    const [sessions, allPanes] = await Promise.all([deps.readAllSessions(), fetchAllPanes(deps)]);
+    for (const status of cleanableStatuses) {
+      const session = sessions[status.worktree.path];
+      if (session) {
+        const state = deps.determineSessionStatus(session, allPanes);
+        if (state.status === "running") {
+          map.set(status.worktree.path, state);
+        }
+      }
+    }
+  } catch {
+    // Non-critical: continue without session info
+  }
+  return map;
+}
+
+function logSessionWarning(status: WorktreeStatus, sessionStateMap: Map<string, SessionState>): void {
+  const state = sessionStateMap.get(status.worktree.path);
+  if (state) {
+    const elapsed = formatElapsed(state.elapsedMs);
+    const panePart = state.paneId != null ? `, pane #${state.paneId}` : "";
+    logInfo(`    ${yellow(`${icons.warning()} Claude session is running (${elapsed}${panePart})`)}`);
+  }
+}
+
+function logStatusWarnings(status: WorktreeStatus, unpushedMap: Map<string, number | null>): void {
+  if (status.worktree.isDirty) {
+    logInfo(`    ${icons.warning()} Has uncommitted changes`);
+  }
+  const unpushed = unpushedMap.get(status.worktree.path);
+  if (unpushed !== undefined && unpushed !== null && unpushed > 0) {
+    logInfo(`    ${icons.warning()} ${unpushed} unpushed commit(s)`);
+  } else if (unpushed === null && !status.branchMerged && !status.branchDeletedOnRemote) {
+    logInfo(`    ${icons.warning()} Branch has not been pushed to remote`);
+  }
+}
+
+function isRisky(status: WorktreeStatus, unpushedMap: Map<string, number | null>): boolean {
+  if (status.worktree.isDirty) return true;
+  const unpushed = unpushedMap.get(status.worktree.path);
+  if (unpushed !== undefined && unpushed !== null && unpushed > 0) return true;
+  if (unpushed === null && !status.branchMerged && !status.branchDeletedOnRemote) return true;
+  return false;
+}
+
+async function computeUnpushedMap(targets: WorktreeStatus[], deps: CleanDeps): Promise<Map<string, number | null>> {
+  const map = new Map<string, number | null>();
+  await promiseAllLimit(
+    targets.map((status) => async () => {
+      if (status.worktree.branch) {
+        const count = await deps.getUnpushedCommitCount(status.worktree.path, status.worktree.branch);
+        map.set(status.worktree.path, count);
+      }
+    }),
+  );
+  return map;
+}
+
+function buildConfirmMessage(count: number, hasRunningSessions: boolean, hasRiskyTargets: boolean): string {
+  const warnings: string[] = [];
+  if (hasRunningSessions) warnings.push("running Claude sessions");
+  if (hasRiskyTargets) warnings.push("uncommitted changes or unpushed commits");
+  if (warnings.length > 0) {
+    return `${icons.warning()} Some worktrees have ${warnings.join(" and ")}. Delete ${count} worktree(s)?`;
+  }
+  return `Delete ${count} worktree(s)?`;
+}
 
 export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDeps): Promise<CleanResult> {
   const result: CleanResult = {
@@ -124,41 +212,8 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
     }
   }
 
-  /** Compute unpushed commit counts for the given statuses and return a lookup map. */
-  async function computeUnpushedMap(targets: WorktreeStatus[]): Promise<Map<string, number | null>> {
-    const map = new Map<string, number | null>();
-    await promiseAllLimit(
-      targets.map((status) => async () => {
-        if (status.worktree.branch) {
-          const count = await deps.getUnpushedCommitCount(status.worktree.path, status.worktree.branch);
-          map.set(status.worktree.path, count);
-        }
-      }),
-    );
-    return map;
-  }
-
-  /** Log warnings for dirty state and unpushed commits. */
-  function logStatusWarnings(status: WorktreeStatus, unpushedMap: Map<string, number | null>): void {
-    if (status.worktree.isDirty) {
-      logInfo(`    ${icons.warning()} Has uncommitted changes`);
-    }
-    const unpushed = unpushedMap.get(status.worktree.path);
-    if (unpushed !== undefined && unpushed !== null && unpushed > 0) {
-      logInfo(`    ${icons.warning()} ${unpushed} unpushed commit(s)`);
-    } else if (unpushed === null && !status.branchMerged && !status.branchDeletedOnRemote) {
-      logInfo(`    ${icons.warning()} Branch has not been pushed to remote`);
-    }
-  }
-
-  /** Check if a status has risky state (dirty or unpushed commits). */
-  function isRisky(status: WorktreeStatus, unpushedMap: Map<string, number | null>): boolean {
-    if (status.worktree.isDirty) return true;
-    const unpushed = unpushedMap.get(status.worktree.path);
-    if (unpushed !== undefined && unpushed !== null && unpushed > 0) return true;
-    if (unpushed === null && !status.branchMerged && !status.branchDeletedOnRemote) return true;
-    return false;
-  }
+  // Fetch session statuses to warn about running Claude sessions
+  const sessionStateMap = await fetchRunningSessionMap(cleanableStatuses, deps);
 
   let toDelete: WorktreeStatus[];
   let unpushedMap: Map<string, number | null>;
@@ -187,7 +242,7 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
       return result;
     }
 
-    unpushedMap = await computeUnpushedMap(matched);
+    unpushedMap = await computeUnpushedMap(matched, deps);
 
     logInfo(`\n${icons.trash()}  Deletion targets:`);
     for (const status of matched) {
@@ -199,12 +254,13 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
         logInfo(`    ${dim(`PR: #${pr.number} ${pr.title} (${pr.state}) ${pr.url}`)}`);
       }
       logStatusWarnings(status, unpushedMap);
+      logSessionWarning(status, sessionStateMap);
     }
 
     toDelete = matched;
   } else if (args.all) {
     // Manual selection mode: enrich reason with PR and unpushed info for display
-    unpushedMap = await computeUnpushedMap(cleanableStatuses);
+    unpushedMap = await computeUnpushedMap(cleanableStatuses, deps);
     const enrichedStatuses = cleanableStatuses.map((s) => {
       const parts: string[] = [];
       const pr = s.worktree.branch ? prMap.get(s.worktree.branch) : undefined;
@@ -216,6 +272,9 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
         parts.push(`${unpushed} unpushed commit(s)`);
       } else if (unpushed === null && !s.branchMerged && !s.branchDeletedOnRemote) {
         parts.push("Not pushed to remote");
+      }
+      if (sessionStateMap.has(s.worktree.path)) {
+        parts.push(`${icons.warning()} Claude running`);
       }
       if (parts.length === 0) return s;
       return { ...s, reason: `${s.reason} | ${parts.join(" | ")}` };
@@ -231,7 +290,7 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
       return result;
     }
 
-    unpushedMap = await computeUnpushedMap(autoCleanable);
+    unpushedMap = await computeUnpushedMap(autoCleanable, deps);
 
     logInfo(`\n${icons.trash()}  Deletion candidates:`);
     for (const status of autoCleanable) {
@@ -244,6 +303,7 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
         logInfo(`    ${dim(`PR: #${pr.number} ${pr.title} (${pr.state}) ${pr.url}`)}`);
       }
       logStatusWarnings(status, unpushedMap);
+      logSessionWarning(status, sessionStateMap);
     }
 
     toDelete = autoCleanable;
@@ -268,21 +328,26 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
         logInfo(`    ${dim(`PR: #${pr.number} ${pr.title} (${pr.state}) ${pr.url}`)}`);
       }
       logStatusWarnings(status, unpushedMap);
+      logSessionWarning(status, sessionStateMap);
     }
     return result;
   }
 
+  // Check if any deletion targets have running sessions
+  const hasRunningSessions = toDelete.some((s) => sessionStateMap.has(s.worktree.path));
+
   // Confirmation
   if (!args.force) {
     logInfo("");
-    const confirmMessage = hasRiskyTargets
-      ? `${icons.warning()} Some worktrees have uncommitted changes or unpushed commits. Delete ${toDelete.length} worktree(s)?`
-      : `Delete ${toDelete.length} worktree(s)?`;
+    const confirmMessage = buildConfirmMessage(toDelete.length, hasRunningSessions, hasRiskyTargets);
     const confirmed = await deps.confirm(confirmMessage);
     if (!confirmed) {
       logInfo("Cancelled.");
       return result;
     }
+  } else if (hasRunningSessions) {
+    // In force mode, still show a warning for running sessions
+    logWarn(`${icons.warning()} Some worktrees have running Claude sessions.`);
   }
 
   // Load config for preClean hook

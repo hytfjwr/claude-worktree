@@ -42,6 +42,15 @@ function makeDeps(overrides: Partial<CleanDeps> = {}): CleanDeps {
     startSpinner: () => makeSpinner(),
     checkGhAvailable: async () => false,
     getPullRequestForBranch: async () => null,
+    readAllSessions: async () => ({}),
+    listWeztermPanes: async () => null,
+    listTmuxPanes: async () => null,
+    determineSessionStatus: (session, _allPanes) => ({
+      status: "done" as const,
+      elapsedMs: 0,
+      mode: session.mode,
+      paneId: session.paneId,
+    }),
     ...overrides,
   };
 }
@@ -1460,6 +1469,253 @@ describe("executeClean", () => {
 
         expect(confirmMessage).toBe("Delete 1 worktree(s)?");
       });
+    });
+  });
+
+  describe("running session warnings", () => {
+    test("shows warning when worktree has a running Claude session in branch-specific mode", async () => {
+      const wt = makeWorktree({ path: "/tmp/repo-running", branch: "feature/running" });
+      const status = makeStatus(
+        { path: "/tmp/repo-running", branch: "feature/running" },
+        { canAutoClean: false, reason: "Active" },
+      );
+      const logSpy = vi.spyOn(console, "log");
+      const deps = makeDeps({
+        listWorktrees: async () => ({ worktrees: [wt], mainBranch: "main" }),
+        getWorktreeStatuses: async () => [status],
+        readAllSessions: async () => ({
+          "/tmp/repo-running": {
+            mode: "pane",
+            paneId: 42,
+            backendType: "wezterm",
+            startedAt: new Date(Date.now() - 15 * 60_000).toISOString(),
+          },
+        }),
+        listWeztermPanes: async () => [{ paneId: 42, title: "claude", cwd: "/tmp/repo-running" }],
+        determineSessionStatus: () => ({
+          status: "running" as const,
+          elapsedMs: 15 * 60_000,
+          mode: "pane" as const,
+          paneId: 42,
+        }),
+      });
+
+      await executeClean({ ...defaultArgs, force: true, branches: ["feature/running"] }, deps);
+
+      const logMessages = logSpy.mock.calls.map((c) => c[0]);
+      expect(logMessages.some((msg) => typeof msg === "string" && msg.includes("Claude session is running"))).toBe(
+        true,
+      );
+      expect(logMessages.some((msg) => typeof msg === "string" && msg.includes("15m"))).toBe(true);
+      expect(logMessages.some((msg) => typeof msg === "string" && msg.includes("pane #42"))).toBe(true);
+    });
+
+    test("shows running session warning in auto-detect mode", async () => {
+      const wt = makeWorktree({ path: "/tmp/repo-auto-run", branch: "feature/auto-run" });
+      const status = makeStatus(
+        { path: "/tmp/repo-auto-run", branch: "feature/auto-run" },
+        { canAutoClean: true, branchMerged: true, reason: "Merged" },
+      );
+      const logSpy = vi.spyOn(console, "log");
+      const deps = makeDeps({
+        listWorktrees: async () => ({ worktrees: [wt], mainBranch: "main" }),
+        getWorktreeStatuses: async () => [status],
+        readAllSessions: async () => ({
+          "/tmp/repo-auto-run": { mode: "terminal", startedAt: new Date(Date.now() - 5 * 60_000).toISOString() },
+        }),
+        determineSessionStatus: () => ({
+          status: "running" as const,
+          elapsedMs: 5 * 60_000,
+          mode: "terminal" as const,
+        }),
+      });
+
+      await executeClean({ ...defaultArgs, force: true }, deps);
+
+      const logMessages = logSpy.mock.calls.map((c) => c[0]);
+      expect(logMessages.some((msg) => typeof msg === "string" && msg.includes("Claude session is running"))).toBe(
+        true,
+      );
+    });
+
+    test("shows running session warning in dry-run mode", async () => {
+      const wt = makeWorktree({ path: "/tmp/repo-dry-run", branch: "feature/dry-run" });
+      const status = makeStatus(
+        { path: "/tmp/repo-dry-run", branch: "feature/dry-run" },
+        { canAutoClean: true, reason: "Merged" },
+      );
+      const logSpy = vi.spyOn(console, "log");
+      const deps = makeDeps({
+        listWorktrees: async () => ({ worktrees: [wt], mainBranch: "main" }),
+        getWorktreeStatuses: async () => [status],
+        readAllSessions: async () => ({
+          "/tmp/repo-dry-run": { mode: "pane", paneId: 10, backendType: "tmux", startedAt: new Date().toISOString() },
+        }),
+        determineSessionStatus: () => ({
+          status: "running" as const,
+          elapsedMs: 0,
+          mode: "pane" as const,
+          paneId: 10,
+        }),
+      });
+
+      await executeClean({ ...defaultArgs, dryRun: true }, deps);
+
+      const logMessages = logSpy.mock.calls.map((c) => c[0]);
+      expect(logMessages.some((msg) => typeof msg === "string" && msg.includes("Claude session is running"))).toBe(
+        true,
+      );
+    });
+
+    test("shows enhanced confirmation when running sessions exist", async () => {
+      const wt = makeWorktree({ path: "/tmp/repo-confirm-run", branch: "feature/confirm-run" });
+      const status = makeStatus(
+        { path: "/tmp/repo-confirm-run", branch: "feature/confirm-run" },
+        { canAutoClean: true, branchMerged: true, reason: "Merged" },
+      );
+      let confirmMessage = "";
+      const deps = makeDeps({
+        listWorktrees: async () => ({ worktrees: [wt], mainBranch: "main" }),
+        getWorktreeStatuses: async () => [status],
+        readAllSessions: async () => ({
+          "/tmp/repo-confirm-run": {
+            mode: "pane",
+            paneId: 1,
+            backendType: "wezterm",
+            startedAt: new Date().toISOString(),
+          },
+        }),
+        determineSessionStatus: () => ({
+          status: "running" as const,
+          elapsedMs: 0,
+          mode: "pane" as const,
+          paneId: 1,
+        }),
+        confirm: async (msg) => {
+          confirmMessage = msg;
+          return true;
+        },
+      });
+
+      await executeClean({ ...defaultArgs }, deps);
+
+      expect(confirmMessage).toContain("running Claude sessions");
+    });
+
+    test("shows force-mode warning when running sessions exist with -force", async () => {
+      const wt = makeWorktree({ path: "/tmp/repo-force-run", branch: "feature/force-run" });
+      const status = makeStatus(
+        { path: "/tmp/repo-force-run", branch: "feature/force-run" },
+        { canAutoClean: true, branchMerged: true, reason: "Merged" },
+      );
+      const deps = makeDeps({
+        listWorktrees: async () => ({ worktrees: [wt], mainBranch: "main" }),
+        getWorktreeStatuses: async () => [status],
+        readAllSessions: async () => ({
+          "/tmp/repo-force-run": {
+            mode: "pane",
+            paneId: 1,
+            backendType: "wezterm",
+            startedAt: new Date().toISOString(),
+          },
+        }),
+        determineSessionStatus: () => ({
+          status: "running" as const,
+          elapsedMs: 0,
+          mode: "pane" as const,
+          paneId: 1,
+        }),
+      });
+
+      await executeClean({ ...defaultArgs, force: true }, deps);
+
+      const warnMessages = consoleWarnSpy.mock.calls.map((c) => c[0]);
+      expect(warnMessages.some((msg) => typeof msg === "string" && msg.includes("running Claude sessions"))).toBe(true);
+    });
+
+    test("does not show session warning when session is done", async () => {
+      const wt = makeWorktree({ path: "/tmp/repo-done", branch: "feature/done" });
+      const status = makeStatus(
+        { path: "/tmp/repo-done", branch: "feature/done" },
+        { canAutoClean: true, branchMerged: true, reason: "Merged" },
+      );
+      const logSpy = vi.spyOn(console, "log");
+      const deps = makeDeps({
+        listWorktrees: async () => ({ worktrees: [wt], mainBranch: "main" }),
+        getWorktreeStatuses: async () => [status],
+        readAllSessions: async () => ({
+          "/tmp/repo-done": {
+            mode: "pane",
+            paneId: 1,
+            backendType: "wezterm",
+            startedAt: new Date().toISOString(),
+            completedAt: new Date().toISOString(),
+          },
+        }),
+        determineSessionStatus: () => ({
+          status: "done" as const,
+          elapsedMs: 0,
+          mode: "pane" as const,
+          paneId: 1,
+        }),
+      });
+
+      await executeClean({ ...defaultArgs, force: true }, deps);
+
+      const logMessages = logSpy.mock.calls.map((c) => c[0]);
+      expect(logMessages.some((msg) => typeof msg === "string" && msg.includes("Claude session is running"))).toBe(
+        false,
+      );
+    });
+
+    test("enriches reason with running session info in -all mode", async () => {
+      const wt = makeWorktree({ path: "/tmp/repo-all-run", branch: "feature/all-run" });
+      const status = makeStatus(
+        { path: "/tmp/repo-all-run", branch: "feature/all-run" },
+        { canAutoClean: false, reason: "Active" },
+      );
+      let receivedStatuses: WorktreeStatus[] = [];
+      const deps = makeDeps({
+        listWorktrees: async () => ({ worktrees: [wt], mainBranch: "main" }),
+        getWorktreeStatuses: async () => [status],
+        readAllSessions: async () => ({
+          "/tmp/repo-all-run": { mode: "pane", paneId: 1, backendType: "wezterm", startedAt: new Date().toISOString() },
+        }),
+        determineSessionStatus: () => ({
+          status: "running" as const,
+          elapsedMs: 0,
+          mode: "pane" as const,
+          paneId: 1,
+        }),
+        selectMultiple: async (statuses) => {
+          receivedStatuses = statuses;
+          return [];
+        },
+      });
+
+      await executeClean({ ...defaultArgs, all: true }, deps);
+
+      expect(receivedStatuses.length).toBe(1);
+      expect(receivedStatuses[0].reason).toContain("Claude running");
+    });
+
+    test("continues without session warnings when readAllSessions fails", async () => {
+      const wt = makeWorktree({ path: "/tmp/repo-session-fail", branch: "feature/session-fail" });
+      const status = makeStatus(
+        { path: "/tmp/repo-session-fail", branch: "feature/session-fail" },
+        { canAutoClean: true, branchMerged: true, reason: "Merged" },
+      );
+      const deps = makeDeps({
+        listWorktrees: async () => ({ worktrees: [wt], mainBranch: "main" }),
+        getWorktreeStatuses: async () => [status],
+        readAllSessions: async () => {
+          throw new Error("Cache read error");
+        },
+      });
+
+      const result = await executeClean({ ...defaultArgs, force: true }, deps);
+
+      expect(result.deleted).toEqual(["/tmp/repo-session-fail"]);
     });
   });
 

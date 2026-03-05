@@ -69,6 +69,17 @@ export async function deleteSession(worktreePath: string): Promise<void> {
   });
 }
 
+export async function fetchAllPanes(deps: {
+  listWeztermPanes: () => Promise<AllPanes["wezterm"]>;
+  listTmuxPanes: () => Promise<AllPanes["tmux"]>;
+}): Promise<AllPanes> {
+  const [wezterm, tmux] = await Promise.all([
+    deps.listWeztermPanes().catch(() => null),
+    deps.listTmuxPanes().catch(() => null),
+  ]);
+  return { wezterm, tmux };
+}
+
 export function determineSessionStatus(session: SessionInfo, allPanes: AllPanes, now: Date = new Date()): SessionState {
   const startedAt = new Date(session.startedAt);
   const elapsedMs = now.getTime() - startedAt.getTime();

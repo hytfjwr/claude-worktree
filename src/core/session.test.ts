@@ -21,6 +21,7 @@ import {
   completeSession,
   deleteSession,
   determineSessionStatus,
+  fetchAllPanes,
   formatElapsed,
   gcSessions,
   readAllSessions,
@@ -31,6 +32,41 @@ import {
 // ============================================================================
 // Pure function tests
 // ============================================================================
+
+describe("fetchAllPanes", () => {
+  test("returns panes from both backends", async () => {
+    const weztermPanes = [{ paneId: 1, title: "test", cwd: "/tmp" }];
+    const tmuxPanes = [{ paneId: "%0", title: "test", cwd: "/tmp" }];
+    const result = await fetchAllPanes({
+      listWeztermPanes: async () => weztermPanes,
+      listTmuxPanes: async () => tmuxPanes,
+    });
+    expect(result).toEqual({ wezterm: weztermPanes, tmux: tmuxPanes });
+  });
+
+  test("returns null for backends that fail", async () => {
+    const result = await fetchAllPanes({
+      listWeztermPanes: async () => {
+        throw new Error("wezterm not found");
+      },
+      listTmuxPanes: async () => {
+        throw new Error("tmux not found");
+      },
+    });
+    expect(result).toEqual({ wezterm: null, tmux: null });
+  });
+
+  test("returns null only for the failing backend", async () => {
+    const weztermPanes = [{ paneId: 1, title: "test", cwd: "/tmp" }];
+    const result = await fetchAllPanes({
+      listWeztermPanes: async () => weztermPanes,
+      listTmuxPanes: async () => {
+        throw new Error("tmux not found");
+      },
+    });
+    expect(result).toEqual({ wezterm: weztermPanes, tmux: null });
+  });
+});
 
 describe("determineSessionStatus", () => {
   const now = new Date("2025-01-15T12:00:00Z");

@@ -1,6 +1,7 @@
 import type { HookVars, ProjectConfig } from "./config.ts";
 import type { GitContext, ListWorktreesResult, WorktreeInfo, WorktreeStatus } from "./git.ts";
 import type { PullRequestInfo } from "./github.ts";
+import type { AllPanes, SessionInfo, SessionState } from "./session.ts";
 import type { Spinner } from "./spinner.ts";
 
 export type CleanArgs = {
@@ -50,4 +51,8 @@ export type CleanDeps = {
   startSpinner: (message: string) => Spinner;
   checkGhAvailable: () => Promise<boolean>;
   getPullRequestForBranch: (branch: string) => Promise<PullRequestInfo | null>;
+  readAllSessions: () => Promise<Record<string, SessionInfo>>;
+  listWeztermPanes: () => Promise<AllPanes["wezterm"]>;
+  listTmuxPanes: () => Promise<AllPanes["tmux"]>;
+  determineSessionStatus: (session: SessionInfo, allPanes: AllPanes, now?: Date) => SessionState;
 };
