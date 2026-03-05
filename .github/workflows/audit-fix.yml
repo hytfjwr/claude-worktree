@@ -1,0 +1,61 @@
+name: Audit Fix
+
+on:
+  schedule:
+    - cron: "0 9 * * 1" # Every Monday at 9:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  audit-fix:
+    name: Auto-fix Dependency Vulnerabilities
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Check for vulnerabilities
+        id: check
+        run: |
+          if pnpm audit --audit-level=moderate; then
+            echo "has_vulnerabilities=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_vulnerabilities=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fix vulnerabilities
+        if: steps.check.outputs.has_vulnerabilities == 'true'
+        run: pnpm audit --fix --no-optional
+
+      - name: Reinstall to update lockfile
+        if: steps.check.outputs.has_vulnerabilities == 'true'
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Create Pull Request
+        if: steps.check.outputs.has_vulnerabilities == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "fix(deps): resolve dependency audit vulnerabilities"
+          branch: auto/audit-fix
+          title: "fix(deps): resolve dependency audit vulnerabilities"
+          body: |
+            ## Summary
+            - Automated fix for dependency audit vulnerabilities detected by `pnpm audit`
+            - This PR was created automatically by the Audit Fix workflow
+
+            ## Details
+            The CI dependency audit (`pnpm audit --audit-level=moderate`) detected vulnerabilities.
+            This PR applies `pnpm audit --fix` to resolve them.
+
+            ## Test plan
+            - [ ] CI passes (audit, lint, test, build)
+            - [ ] Verify no breaking changes from updated dependencies
+          reviewers: hytfjwr
+          delete-branch: true
