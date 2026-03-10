@@ -84,7 +84,7 @@ claude-worktree clean -dry-run
 - `-p, -pane` - Open in a new pane (requires WezTerm or tmux; default: run in current terminal)
 - `-plan <file>` - Read prompt from a file (cannot be used with inline prompt)
 - `-b, -base <branch>` - Specify base branch (default: current branch)
-- `-d, -danger` - Skip workspace warning (uses --dangerously-skip-permissions)
+- `-d, -danger` - Run Claude without permission prompts (uses --dangerously-skip-permissions)
 - `-m, -merge` - Auto-merge into base branch and cleanup after task completion
 - `-draft` - Auto-create Draft PR after task completion (cannot be used with -merge or -pr)
 - `-pr` - Auto-create PR after task completion (cannot be used with -merge or -draft)
@@ -96,7 +96,7 @@ claude-worktree clean -dry-run
 ### Resume Options
 
 - `-p, -pane` - Open in a new pane (requires WezTerm or tmux; default: run in current terminal)
-- `-d, -danger` - Skip workspace warning (uses --dangerously-skip-permissions)
+- `-d, -danger` - Run Claude without permission prompts (uses --dangerously-skip-permissions)
 - `-v, -verbose` - Show verbose output
 
 ### List Options

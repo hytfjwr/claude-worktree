@@ -34,8 +34,8 @@ Options:
   -p, -pane       Open in a new pane (requires WezTerm or tmux; default: run in current terminal)
   -plan <file>    Read prompt from a plan file (cannot be used with inline prompt)
   -b, -base <branch>  Specify base branch (default: current branch)
-  -d, -danger     Skip workspace warning (uses --dangerously-skip-permissions)
-  -m, -merge      Auto-merge into base branch and cleanup after task completion
+  -d, -danger     Run Claude without permission prompts (uses --dangerously-skip-permissions)
+  -m, -merge      Auto-merge into base branch and cleanup after task completion (cannot be used with -draft or -pr)
   -draft          Auto-create Draft PR after task completion (cannot be used with -merge or -pr)
   -pr             Auto-create PR after task completion (cannot be used with -merge or -draft)
   -pull           Fetch latest base branch from remote before creating worktree
@@ -47,7 +47,7 @@ Options:
 
 Resume options:
   -p, -pane      Open in a new pane (requires WezTerm or tmux)
-  -d, -danger    Skip workspace warning (uses --dangerously-skip-permissions)
+  -d, -danger    Run Claude without permission prompts (uses --dangerously-skip-permissions)
   -q, -quiet     Suppress informational output (errors only)
   -v, -verbose   Show verbose output
 
@@ -107,8 +107,8 @@ Options:
   -p, -pane            Open in a new pane (requires WezTerm or tmux; default: run in current terminal)
   -plan <file>         Read prompt from a plan file (cannot be used with inline prompt)
   -b, -base <branch>   Specify base branch (default: current branch)
-  -d, -danger          Skip workspace warning (uses --dangerously-skip-permissions)
-  -m, -merge           Auto-merge into base branch and cleanup after task completion
+  -d, -danger          Run Claude without permission prompts (uses --dangerously-skip-permissions)
+  -m, -merge           Auto-merge into base branch and cleanup after task completion (cannot be used with -draft or -pr)
   -draft               Auto-create Draft PR after task completion (cannot be used with -merge or -pr)
   -pr                  Auto-create PR after task completion (cannot be used with -merge or -draft)
   -pull                Fetch latest base branch from remote before creating worktree
@@ -198,7 +198,7 @@ Arguments:
 
 Options:
   -p, -pane      Open in a new pane (requires WezTerm or tmux; default: run in current terminal)
-  -d, -danger    Skip workspace warning (uses --dangerously-skip-permissions)
+  -d, -danger    Run Claude without permission prompts (uses --dangerously-skip-permissions)
   -q, -quiet     Suppress informational output (errors only)
   -v, -verbose   Show verbose output
   -h, -help      Show this help
@@ -217,40 +217,41 @@ const CREATE_USAGE = "claude-worktree <branch-name> <prompt>\n" + "  claude-work
  * Returns an error message if invalid, or null if valid.
  * See: https://git-scm.com/docs/git-check-ref-format
  */
-export function validateBranchName(name: string): string | null {
+export function validateBranchName(name: string, label = "branch name"): string | null {
+  const prefix = `Invalid ${label}`;
   if (name.startsWith("-")) {
-    return `Invalid branch name: "${name}". Branch names cannot start with "-".`;
+    return `${prefix}: "${name}". Branch names cannot start with "-".`;
   }
   if (name.startsWith(".") || name.endsWith(".")) {
-    return `Invalid branch name: "${name}". Branch names cannot start or end with ".".`;
+    return `${prefix}: "${name}". Branch names cannot start or end with ".".`;
   }
   // Check for path components starting with "." (e.g., feature/.hidden)
   const components = name.split("/");
   for (const component of components) {
     if (component.startsWith(".")) {
-      return `Invalid branch name: "${name}". Path components cannot start with ".".`;
+      return `${prefix}: "${name}". Path components cannot start with ".".`;
     }
   }
   if (name.endsWith(".lock")) {
-    return `Invalid branch name: "${name}". Branch names cannot end with ".lock".`;
+    return `${prefix}: "${name}". Branch names cannot end with ".lock".`;
   }
   if (name.includes("..")) {
-    return `Invalid branch name: "${name}". Branch names cannot contain "..".`;
+    return `${prefix}: "${name}". Branch names cannot contain "..".`;
   }
   if (name.includes("//")) {
-    return `Invalid branch name: "${name}". Branch names cannot contain consecutive slashes.`;
+    return `${prefix}: "${name}". Branch names cannot contain consecutive slashes.`;
   }
   if (name.endsWith("/")) {
-    return `Invalid branch name: "${name}". Branch names cannot end with "/".`;
+    return `${prefix}: "${name}". Branch names cannot end with "/".`;
   }
   if (name.includes("@{")) {
-    return `Invalid branch name: "${name}". Branch names cannot contain "@{".`;
+    return `${prefix}: "${name}". Branch names cannot contain "@{".`;
   }
   if (name === "@") {
-    return `Invalid branch name: "${name}". Branch name cannot be "@".`;
+    return `${prefix}: "${name}". Branch name cannot be "@".`;
   }
   if (name.includes("\\")) {
-    return `Invalid branch name: "${name}". Branch names cannot contain backslashes.`;
+    return `${prefix}: "${name}". Branch names cannot contain backslashes.`;
   }
   // Check for spaces, control characters (~, ^, :, ?, *, [)
   // biome-ignore lint/suspicious/noControlCharactersInRegex: intentionally matching git-forbidden control chars
@@ -258,7 +259,7 @@ export function validateBranchName(name: string): string | null {
   if (invalidCharMatch) {
     const char = invalidCharMatch[0];
     const displayChar = char.trim() === "" ? "whitespace" : `"${char}"`;
-    return `Invalid branch name: "${name}". Branch names cannot contain ${displayChar}.`;
+    return `${prefix}: "${name}". Branch names cannot contain ${displayChar}.`;
   }
   return null;
 }
@@ -302,6 +303,14 @@ export function parseCreateArgs(args: string[]): CreateArgs {
 
   const { pane, danger, merge, draft, pr, pull, dryRun, quiet, verbose } = booleans;
   const { baseBranch, planFile } = strings;
+
+  // Validate -base branch name
+  if (baseBranch) {
+    const baseError = validateBranchName(baseBranch, "base branch name");
+    if (baseError) {
+      throw new UsageError(baseError);
+    }
+  }
 
   // Mutual exclusivity check for -merge, -draft, and -pr
   const exclusiveFlags = [merge && "-merge", draft && "-draft", pr && "-pr"].filter(Boolean) as string[];

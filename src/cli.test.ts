@@ -828,6 +828,14 @@ describe("parseCreateArgs - branch validation", () => {
   test("branch name with spaces throws", () => {
     expect(() => parseCreateArgs(["my branch", "Prompt"])).toThrow("whitespace");
   });
+
+  test("-base with invalid branch name throws", () => {
+    expect(() => parseCreateArgs(["feature/test", "Prompt", "-base", "my branch"])).toThrow("Invalid base branch name");
+  });
+
+  test("-base with '..' in name throws", () => {
+    expect(() => parseCreateArgs(["feature/test", "Prompt", "-base", "a..b"])).toThrow("Invalid base branch name");
+  });
 });
 
 describe("parseCreateArgs - whitespace prompt", () => {
