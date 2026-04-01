@@ -66,25 +66,33 @@ After completing the task, execute the following steps:
 4. **Report completion**
    - Report the URL of the created PR`;
 
+/**
+ * Single-pass template substitution to avoid double-substitution when
+ * a value itself contains a placeholder string (e.g. branch named "{baseBranch}").
+ */
+function fillTemplate(template: string, vars: Record<string, string>): string {
+  return template.replace(/\{(\w+)\}/g, (match, key: string) => (key in vars ? vars[key] : match));
+}
+
 function buildMergeInstructions(mergeInstructions: MergeInstructions): string {
-  return MERGE_INSTRUCTION_TEMPLATE.replace("{baseBranch}", mergeInstructions.baseBranch).replace(
-    "{worktreePath}",
-    mergeInstructions.worktreePath,
-  );
+  return fillTemplate(MERGE_INSTRUCTION_TEMPLATE, {
+    baseBranch: mergeInstructions.baseBranch,
+    worktreePath: mergeInstructions.worktreePath,
+  });
 }
 
 function buildDraftInstructions(draftInstructions: DraftInstructions): string {
-  return DRAFT_INSTRUCTION_TEMPLATE.replace("{baseBranch}", draftInstructions.baseBranch).replace(
-    "{branchName}",
-    draftInstructions.branchName,
-  );
+  return fillTemplate(DRAFT_INSTRUCTION_TEMPLATE, {
+    baseBranch: draftInstructions.baseBranch,
+    branchName: draftInstructions.branchName,
+  });
 }
 
 function buildPrInstructions(prInstructions: PrInstructions): string {
-  return PR_INSTRUCTION_TEMPLATE.replace("{baseBranch}", prInstructions.baseBranch).replace(
-    "{branchName}",
-    prInstructions.branchName,
-  );
+  return fillTemplate(PR_INSTRUCTION_TEMPLATE, {
+    baseBranch: prInstructions.baseBranch,
+    branchName: prInstructions.branchName,
+  });
 }
 
 /**

@@ -282,6 +282,68 @@ describe("buildClaudeCommand", () => {
 });
 
 // ============================================================================
+// Template injection prevention tests
+// ============================================================================
+
+describe("buildClaudeCommand - template injection prevention", () => {
+  test("baseBranch containing {branchName} is not double-substituted in draftInstructions", () => {
+    const result = buildClaudeCommand({
+      prompt: "Test",
+      promptSuffix: "",
+      draftInstructions: {
+        baseBranch: "feature/{branchName}",
+        branchName: "my-branch",
+      },
+    });
+
+    expect(result).toContain("--base feature/{branchName}");
+    expect(result).toContain("git push -u origin my-branch");
+  });
+
+  test("baseBranch containing {branchName} is not double-substituted in prInstructions", () => {
+    const result = buildClaudeCommand({
+      prompt: "Test",
+      promptSuffix: "",
+      prInstructions: {
+        baseBranch: "feature/{branchName}",
+        branchName: "my-branch",
+      },
+    });
+
+    expect(result).toContain("--base feature/{branchName}");
+    expect(result).toContain("git push -u origin my-branch");
+  });
+
+  test("branchName containing {baseBranch} is not double-substituted", () => {
+    const result = buildClaudeCommand({
+      prompt: "Test",
+      promptSuffix: "",
+      prInstructions: {
+        baseBranch: "main",
+        branchName: "fix/{baseBranch}",
+      },
+    });
+
+    expect(result).toContain("--base main");
+    expect(result).toContain("git push -u origin fix/{baseBranch}");
+  });
+
+  test("worktreePath containing {baseBranch} is not double-substituted in mergeInstructions", () => {
+    const result = buildClaudeCommand({
+      prompt: "Test",
+      promptSuffix: "",
+      mergeInstructions: {
+        baseBranch: "main",
+        worktreePath: "/path/{baseBranch}/worktree",
+      },
+    });
+
+    expect(result).toContain("Merge target: main");
+    expect(result).toContain('/path/{baseBranch}/worktree"');
+  });
+});
+
+// ============================================================================
 // Edge case tests
 // ============================================================================
 
