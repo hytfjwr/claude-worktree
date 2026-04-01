@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 import { parseArgs, run } from "../src/cli.ts";
 import { ExitCode, getErrorMessage, toExitCode } from "../src/core/errors.ts";
 

@@ -3,14 +3,6 @@
   "version": "0.10.0",
   "description": "CLI for parallel development with git worktree + Claude Code",
   "type": "module",
-  "main": "dist/src/index.js",
-  "types": "dist/src/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/src/index.d.ts",
-      "import": "./dist/src/index.js"
-    }
-  },
   "bin": {
     "claude-worktree": "dist/bin/claude-worktree.js"
   },
@@ -19,8 +11,8 @@
     "LICENSE"
   ],
   "scripts": {
-    "dev": "tsc -p tsconfig.build.json && node dist/bin/claude-worktree.js",
-    "build": "tsc -p tsconfig.build.json && node scripts/postbuild.cjs",
+    "dev": "node scripts/build.mjs && node dist/bin/claude-worktree.js",
+    "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "biome check src bin",
     "lint:fix": "biome check --write src bin",
@@ -34,6 +26,7 @@
     "@biomejs/biome": "^2.3.14",
     "@types/node": "^25",
     "@vitest/coverage-v8": "^3",
+    "esbuild": "^0.27.4",
     "lefthook": "^2",
     "typescript": "^6.0",
     "vitest": "^3"
