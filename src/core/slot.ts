@@ -33,16 +33,6 @@ async function findAvailablePort(basePort: number, slots: number[]): Promise<num
   return index !== -1 ? slots[index] : null;
 }
 
-export async function findAvailableSlot(basePort: number = 8880, maxSlots: number = 9): Promise<number> {
-  validateSlotParams(basePort, maxSlots);
-  const allSlots = Array.from({ length: maxSlots }, (_, i) => i + 1);
-  const slot = await findAvailablePort(basePort, allSlots);
-  if (slot !== null) {
-    return slot;
-  }
-  throw new SlotError(`No available slots (all ports ${basePort + 1}-${basePort + maxSlots} are in use)`);
-}
-
 /**
  * Find an available slot and reserve it for the given worktree path.
  *

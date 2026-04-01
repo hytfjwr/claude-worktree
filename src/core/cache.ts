@@ -16,6 +16,9 @@ export function getCacheDir(): string {
 export const LOCK_MAX_RETRIES = 50;
 export const LOCK_RETRY_INTERVAL_MS = 100;
 
+/** Number of retries before attempting stale lock detection. */
+export const STALE_LOCK_CHECK_START = 10;
+
 /** If a lock file is older than this, consider the owning process likely dead. */
 export const STALE_LOCK_THRESHOLD_MS = 30_000;
 
@@ -76,14 +79,16 @@ export async function withLock<T>(lockFile: string, fn: () => Promise<T>, option
 
   await mkdir(dirname(lockFile), { recursive: true });
 
+  const staleCheckStart = Math.min(STALE_LOCK_CHECK_START, Math.max(maxRetries - 2, 0));
+
   let handle: Awaited<ReturnType<typeof open>> | undefined;
   for (let i = 0; i < maxRetries; i++) {
     try {
       handle = await open(lockFile, "wx");
       break;
     } catch {
-      // On the last few retries, attempt stale lock removal
-      if (i >= maxRetries - 2) {
+      // After initial retries, attempt stale lock removal on each retry
+      if (i >= staleCheckStart) {
         const removed = await tryRemoveStaleLock(lockFile);
         if (removed) {
           // Try to acquire immediately after removing the stale lock
@@ -125,13 +130,23 @@ export async function withLock<T>(lockFile: string, fn: () => Promise<T>, option
 export async function atomicWriteJson(filePath: string, data: unknown): Promise<void> {
   const tempFile = `${filePath}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
   await writeFile(tempFile, JSON.stringify(data, null, 2), "utf-8");
-  await rename(tempFile, filePath);
+  try {
+    await rename(tempFile, filePath);
+  } catch (err) {
+    try {
+      await unlink(tempFile);
+    } catch {
+      // Best-effort cleanup
+    }
+    throw err;
+  }
 }
 
 export async function readJsonFile<T>(
   filePath: string,
   fallback: T,
   onParseError: "throw" | "fallback" = "throw",
+  validate?: (data: unknown) => data is T,
 ): Promise<T> {
   let data: string;
   try {
@@ -143,12 +158,22 @@ export async function readJsonFile<T>(
     throw err;
   }
 
+  let parsed: unknown;
   try {
-    return JSON.parse(data) as T;
+    parsed = JSON.parse(data);
   } catch (err: unknown) {
     if (onParseError === "fallback") {
       return fallback;
     }
     throw err;
   }
+
+  if (validate && !validate(parsed)) {
+    if (onParseError === "fallback") {
+      return fallback;
+    }
+    throw new Error(`Invalid JSON structure in ${filePath}`);
+  }
+
+  return parsed as T;
 }

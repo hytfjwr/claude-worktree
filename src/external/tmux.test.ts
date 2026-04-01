@@ -291,45 +291,6 @@ describe("activatePane", () => {
   });
 });
 
-describe("ensureTmuxAvailable", () => {
-  let restoreEnv: () => void;
-
-  beforeEach(() => {
-    vi.resetModules();
-    restoreEnv = saveEnv("TERM_PROGRAM");
-  });
-
-  afterEach(() => {
-    restoreEnv();
-  });
-
-  test("throws when tmux is not installed", async () => {
-    const { ensureTmuxAvailable } = await import("./tmux.ts");
-    const checkFn = async () => false;
-    const isInsideFn = () => true;
-    await expect(ensureTmuxAvailable(checkFn, "claude-worktree test '...'", isInsideFn)).rejects.toThrow(
-      "tmux is not installed",
-    );
-  });
-
-  test("throws when not running inside tmux", async () => {
-    process.env.TERM_PROGRAM = "ghostty";
-    const { ensureTmuxAvailable } = await import("./tmux.ts");
-    const checkFn = async () => true;
-    const isInsideFn = () => false;
-    await expect(ensureTmuxAvailable(checkFn, "claude-worktree test '...'", isInsideFn)).rejects.toThrow(
-      "current terminal is ghostty",
-    );
-  });
-
-  test("does not throw when running inside tmux with CLI available", async () => {
-    const { ensureTmuxAvailable } = await import("./tmux.ts");
-    const checkFn = async () => true;
-    const isInsideFn = () => true;
-    await expect(ensureTmuxAvailable(checkFn, "claude-worktree test '...'", isInsideFn)).resolves.toBeUndefined();
-  });
-});
-
 describe("closePane", () => {
   beforeEach(() => {
     vi.resetModules();

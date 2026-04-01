@@ -818,6 +818,21 @@ describe("validateBranchName", () => {
     const result = validateBranchName("branch[0]");
     expect(result).toContain('"["');
   });
+
+  test("starting with / is invalid", () => {
+    const result = validateBranchName("/feature/auth");
+    expect(result).toContain('start with "/"');
+  });
+
+  test("containing { is invalid", () => {
+    const result = validateBranchName("feature/{baseBranch}");
+    expect(result).toContain("curly braces");
+  });
+
+  test("containing } is invalid", () => {
+    const result = validateBranchName("feature/name}");
+    expect(result).toContain("curly braces");
+  });
 });
 
 describe("parseCreateArgs - branch validation", () => {
@@ -1080,6 +1095,19 @@ describe("parseResumeArgs", () => {
 
   test("-h is ignored (does not throw)", () => {
     const result = parseResumeArgs(["-h"]);
+    expect(result.branchName).toBeUndefined();
+  });
+
+  test("invalid branch name throws", () => {
+    expect(() => parseResumeArgs(["feature/{baseBranch}"])).toThrow("curly braces");
+  });
+
+  test("branch name starting with / throws", () => {
+    expect(() => parseResumeArgs(["/feature/auth"])).toThrow('start with "/"');
+  });
+
+  test("no branch name - no validation error", () => {
+    const result = parseResumeArgs([]);
     expect(result.branchName).toBeUndefined();
   });
 });

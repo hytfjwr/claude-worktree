@@ -253,6 +253,12 @@ export function validateBranchName(name: string, label = "branch name"): string 
   if (name.includes("\\")) {
     return `${prefix}: "${name}". Branch names cannot contain backslashes.`;
   }
+  if (name.startsWith("/")) {
+    return `${prefix}: "${name}". Branch names cannot start with "/".`;
+  }
+  if (name.includes("{") || name.includes("}")) {
+    return `${prefix}: "${name}". Branch names cannot contain curly braces.`;
+  }
   // Check for spaces, control characters (~, ^, :, ?, *, [)
   // biome-ignore lint/suspicious/noControlCharactersInRegex: intentionally matching git-forbidden control chars
   const invalidCharMatch = name.match(/[\s~^:?*[\x00-\x1f\x7f]/);
@@ -262,6 +268,13 @@ export function validateBranchName(name: string, label = "branch name"): string 
     return `${prefix}: "${name}". Branch names cannot contain ${displayChar}.`;
   }
   return null;
+}
+
+function assertValidBranchName(name: string, label?: string): void {
+  const error = validateBranchName(name, label);
+  if (error) {
+    throw new UsageError(error);
+  }
 }
 
 export function parseCreateArgs(args: string[]): CreateArgs {
@@ -276,11 +289,7 @@ export function parseCreateArgs(args: string[]): CreateArgs {
 
   const branchName = args[0];
 
-  // Validate branch name
-  const branchError = validateBranchName(branchName);
-  if (branchError) {
-    throw new UsageError(branchError);
-  }
+  assertValidBranchName(branchName);
 
   const { booleans, strings, remaining } = extractOptions(args.slice(1), {
     options: {
@@ -304,12 +313,8 @@ export function parseCreateArgs(args: string[]): CreateArgs {
   const { pane, danger, merge, draft, pr, pull, dryRun, quiet, verbose } = booleans;
   const { baseBranch, planFile } = strings;
 
-  // Validate -base branch name
   if (baseBranch) {
-    const baseError = validateBranchName(baseBranch, "base branch name");
-    if (baseError) {
-      throw new UsageError(baseError);
-    }
+    assertValidBranchName(baseBranch, "base branch name");
   }
 
   // Mutual exclusivity check for -merge, -draft, and -pr
@@ -372,6 +377,10 @@ export function parseResumeArgs(args: string[]): ResumeArgs {
   // First remaining arg that doesn't start with - is branchName, rest is prompt
   const branchName = remaining.length > 0 ? remaining[0] : undefined;
   const prompt = remaining.length > 1 ? remaining.slice(1).join(" ").trim() || undefined : undefined;
+
+  if (branchName) {
+    assertValidBranchName(branchName);
+  }
 
   return {
     branchName,

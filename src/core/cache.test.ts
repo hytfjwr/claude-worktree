@@ -78,7 +78,7 @@ describe("withLock", () => {
     const old = new Date(Date.now() - STALE_LOCK_THRESHOLD_MS - 1000);
     await utimes(lockFile, old, old);
 
-    // maxRetries: 2 → stale check triggers at i >= 0 (maxRetries - 2), covering the final iteration
+    // maxRetries: 2 → stale check triggers at i >= 0 (min(STALE_LOCK_CHECK_START, maxRetries - 2))
     const result = await withLock(lockFile, async () => "final-ok", { maxRetries: 2, retryIntervalMs: 1 });
     expect(result).toBe("final-ok");
   });

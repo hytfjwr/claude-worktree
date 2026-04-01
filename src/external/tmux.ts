@@ -1,11 +1,14 @@
-import { DependencyError } from "../core/errors.ts";
 import { exec } from "../core/exec.ts";
 import type { PaneOptions, TmuxPane } from "../types/index.ts";
 
+let tmuxAvailableCache: boolean | undefined;
+
 export async function listTmuxPanes(): Promise<TmuxPane[] | null> {
   try {
-    const available = await checkTmuxAvailable();
-    if (!available) return null;
+    if (tmuxAvailableCache === undefined) {
+      tmuxAvailableCache = await checkTmuxAvailable();
+    }
+    if (!tmuxAvailableCache) return null;
 
     // List all panes with pane_id, pane_title, pane_current_path
     const result = await exec("tmux", ["list-panes", "-a", "-F", "#{pane_id}\t#{pane_title}\t#{pane_current_path}"])
@@ -45,40 +48,6 @@ export async function checkTmuxAvailable(): Promise<boolean> {
 
 export function isRunningInsideTmux(): boolean {
   return process.env.TMUX !== undefined;
-}
-
-export async function ensureTmuxAvailable(
-  checkFn: () => Promise<boolean>,
-  usageHint: string,
-  isInsideFn: () => boolean = isRunningInsideTmux,
-): Promise<void> {
-  const available = await checkFn();
-  if (!available) {
-    const installHint =
-      process.platform === "darwin"
-        ? "  brew install tmux    # macOS (Homebrew)"
-        : process.platform === "linux"
-          ? "  sudo apt install tmux    # Debian/Ubuntu\n  sudo dnf install tmux    # Fedora/RHEL"
-          : "  https://github.com/tmux/tmux/wiki/Installing";
-
-    throw new DependencyError(
-      "tmux is not installed. The -pane option requires WezTerm or tmux.\n\n" +
-        `Install tmux:\n${installHint}\n\n` +
-        "Or run without -pane to use the current terminal:\n" +
-        `  ${usageHint}`,
-    );
-  }
-
-  if (!isInsideFn()) {
-    const currentTerminal = process.env.TERM_PROGRAM || "unknown terminal";
-    throw new DependencyError(
-      `The -pane option requires running inside WezTerm or tmux, but the current terminal is ${currentTerminal}.\n\n` +
-        "Start a tmux session first:\n" +
-        "  tmux new-session\n\n" +
-        "Or run without -pane to use the current terminal:\n" +
-        `  ${usageHint}`,
-    );
-  }
 }
 
 export async function splitPaneRight(): Promise<string> {
