@@ -40,7 +40,7 @@ jobs:
 
       - name: Create Pull Request
         if: steps.check.outputs.has_vulnerabilities == 'true'
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           commit-message: "fix(deps): resolve dependency audit vulnerabilities"
           branch: auto/audit-fix
