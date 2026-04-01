@@ -1389,10 +1389,19 @@ async function setupTestRepo(options?: { withRemote?: boolean }) {
   };
 }
 
+// Integration tests use two CWD mechanisms:
+// - process.chdir(repoDir): required because functions under test (createWorktree, fetchAndPrune, etc.)
+//   call exec("git", [...]) internally without .cwd(), relying on process.cwd()
+// - git() helper with .cwd(repoDir): used for direct exec calls in test bodies (setup/verification)
+//   to explicitly target the temp repo regardless of process CWD state
+
 describe("createWorktree (integration)", () => {
   let cleanup: () => Promise<void>;
   let repoDir: string;
   let originalCwd: string;
+  function git(args: string[]) {
+    return exec("git", args).cwd(repoDir);
+  }
 
   beforeEach(async () => {
     originalCwd = process.cwd();
@@ -1417,7 +1426,7 @@ describe("createWorktree (integration)", () => {
     await createWorktree("feature/new", worktreePath, "main");
 
     // Verify worktree exists in git worktree list
-    const listResult = (await exec("git", ["worktree", "list", "--porcelain"]).text()).trim();
+    const listResult = (await git(["worktree", "list", "--porcelain"]).text()).trim();
     expect(listResult).toContain(worktreePath);
 
     // Verify branch was created
@@ -1430,7 +1439,7 @@ describe("createWorktree (integration)", () => {
     const worktreePath = join(repoDir, "..", "test-worktree");
 
     // Create branch first
-    await exec("git", ["branch", "feature/existing"]).quiet();
+    await git(["branch", "feature/existing"]).quiet();
 
     await expect(createWorktree("feature/existing", worktreePath, "main")).rejects.toThrow("Failed to create worktree");
   });
@@ -1440,6 +1449,9 @@ describe("removeWorktree (integration)", () => {
   let cleanup: () => Promise<void>;
   let repoDir: string;
   let originalCwd: string;
+  function git(args: string[]) {
+    return exec("git", args).cwd(repoDir);
+  }
 
   beforeEach(async () => {
     originalCwd = process.cwd();
@@ -1461,13 +1473,13 @@ describe("removeWorktree (integration)", () => {
     const worktreePath = join(repoDir, "..", "test-worktree");
 
     // Create a worktree first
-    await exec("git", ["worktree", "add", "-b", "feature/to-remove", worktreePath, "main"]).quiet();
+    await git(["worktree", "add", "-b", "feature/to-remove", worktreePath, "main"]).quiet();
 
     const { removeWorktree } = await import("./git.ts");
     await removeWorktree(worktreePath);
 
     // Verify worktree is gone
-    const listResult = (await exec("git", ["worktree", "list", "--porcelain"]).text()).trim();
+    const listResult = (await git(["worktree", "list", "--porcelain"]).text()).trim();
     expect(listResult).not.toContain(worktreePath);
   });
 
@@ -1475,14 +1487,14 @@ describe("removeWorktree (integration)", () => {
     const worktreePath = join(repoDir, "..", "test-worktree");
 
     // Create a worktree and make it dirty
-    await exec("git", ["worktree", "add", "-b", "feature/dirty", worktreePath, "main"]).quiet();
+    await git(["worktree", "add", "-b", "feature/dirty", worktreePath, "main"]).quiet();
     await writeFile(join(worktreePath, "dirty.txt"), "uncommitted change");
 
     const { removeWorktree } = await import("./git.ts");
     await removeWorktree(worktreePath, true);
 
     // Verify worktree is gone
-    const listResult = (await exec("git", ["worktree", "list", "--porcelain"]).text()).trim();
+    const listResult = (await git(["worktree", "list", "--porcelain"]).text()).trim();
     expect(listResult).not.toContain(worktreePath);
   });
 });
@@ -1491,6 +1503,9 @@ describe("deleteLocalBranch (integration)", () => {
   let cleanup: () => Promise<void>;
   let repoDir: string;
   let originalCwd: string;
+  function git(args: string[]) {
+    return exec("git", args).cwd(repoDir);
+  }
 
   beforeEach(async () => {
     originalCwd = process.cwd();
@@ -1510,39 +1525,35 @@ describe("deleteLocalBranch (integration)", () => {
 
   test("deletes merged branch with -d (default)", async () => {
     // Create and merge a branch
-    await exec("git", ["branch", "feature/merged"]).quiet();
+    await git(["branch", "feature/merged"]).quiet();
 
     const { deleteLocalBranch } = await import("./git.ts");
     await deleteLocalBranch("feature/merged");
 
     // Verify branch is gone
-    const result = await exec("git", ["show-ref", "--verify", "--quiet", "refs/heads/feature/merged"])
-      .nothrow()
-      .quiet();
+    const result = await git(["show-ref", "--verify", "--quiet", "refs/heads/feature/merged"]).nothrow().quiet();
     expect(result.exitCode).not.toBe(0);
   });
 
   test("force deletes unmerged branch with -D", async () => {
     // Create a branch with a unique commit (not merged into main)
-    await exec("git", ["checkout", "-b", "feature/unmerged"]).quiet();
-    await exec("git", ["commit", "--allow-empty", "-m", "unmerged commit"]).quiet();
-    await exec("git", ["checkout", "main"]).quiet();
+    await git(["checkout", "-b", "feature/unmerged"]).quiet();
+    await git(["commit", "--allow-empty", "-m", "unmerged commit"]).quiet();
+    await git(["checkout", "main"]).quiet();
 
     const { deleteLocalBranch } = await import("./git.ts");
     await deleteLocalBranch("feature/unmerged", true);
 
     // Verify branch is gone
-    const result = await exec("git", ["show-ref", "--verify", "--quiet", "refs/heads/feature/unmerged"])
-      .nothrow()
-      .quiet();
+    const result = await git(["show-ref", "--verify", "--quiet", "refs/heads/feature/unmerged"]).nothrow().quiet();
     expect(result.exitCode).not.toBe(0);
   });
 
   test("non-force delete of unmerged branch fails", async () => {
     // Create a branch with a unique commit (not merged into main)
-    await exec("git", ["checkout", "-b", "feature/unmerged"]).quiet();
-    await exec("git", ["commit", "--allow-empty", "-m", "unmerged commit"]).quiet();
-    await exec("git", ["checkout", "main"]).quiet();
+    await git(["checkout", "-b", "feature/unmerged"]).quiet();
+    await git(["commit", "--allow-empty", "-m", "unmerged commit"]).quiet();
+    await git(["checkout", "main"]).quiet();
 
     const { deleteLocalBranch } = await import("./git.ts");
     await expect(deleteLocalBranch("feature/unmerged")).rejects.toThrow("Failed to delete branch");
@@ -1554,6 +1565,9 @@ describe("fetchAndPrune (integration)", () => {
   let repoDir: string;
   let tempDir: string;
   let originalCwd: string;
+  function git(args: string[]) {
+    return exec("git", args).cwd(repoDir);
+  }
 
   beforeEach(async () => {
     originalCwd = process.cwd();
@@ -1576,13 +1590,13 @@ describe("fetchAndPrune (integration)", () => {
     const bareDir = join(tempDir, "origin.git");
 
     // Create a remote branch
-    await exec("git", ["checkout", "-b", "feature/to-prune"]).quiet();
-    await exec("git", ["commit", "--allow-empty", "-m", "branch commit"]).quiet();
-    await exec("git", ["push", "-u", "origin", "feature/to-prune"]).quiet();
-    await exec("git", ["checkout", "main"]).quiet();
+    await git(["checkout", "-b", "feature/to-prune"]).quiet();
+    await git(["commit", "--allow-empty", "-m", "branch commit"]).quiet();
+    await git(["push", "-u", "origin", "feature/to-prune"]).quiet();
+    await git(["checkout", "main"]).quiet();
 
     // Verify remote tracking exists
-    const beforeRefs = (await exec("git", ["branch", "-r"]).text()).trim();
+    const beforeRefs = (await git(["branch", "-r"]).text()).trim();
     expect(beforeRefs).toContain("origin/feature/to-prune");
 
     // Delete branch on bare remote directly
@@ -1593,7 +1607,7 @@ describe("fetchAndPrune (integration)", () => {
     await fetchAndPrune();
 
     // Verify remote tracking is gone
-    const afterRefs = (await exec("git", ["branch", "-r"]).text()).trim();
+    const afterRefs = (await git(["branch", "-r"]).text()).trim();
     expect(afterRefs).not.toContain("origin/feature/to-prune");
   });
 });

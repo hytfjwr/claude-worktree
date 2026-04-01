@@ -18,26 +18,36 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
 
-      - name: Read version from package.json
+      - name: Check if version changed
         id: version
         run: |
-          VERSION=$(node -p "require('./package.json').version")
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
+          CURRENT=$(node -p "require('./package.json').version")
+          PREVIOUS=$(git show HEAD~1:package.json 2>/dev/null | jq -r '.version' 2>/dev/null || echo "")
+          if [ "$CURRENT" = "$PREVIOUS" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Version unchanged ($CURRENT), skipping"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "version=$CURRENT" >> "$GITHUB_OUTPUT"
+            echo "tag=v${CURRENT}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Check if tag already exists
+        if: steps.version.outputs.changed == 'true'
         id: check
         run: |
-          if git ls-remote --tags origin "refs/tags/v${{ steps.version.outputs.version }}" | grep -q .; then
+          if git ls-remote --tags origin "refs/tags/${{ steps.version.outputs.tag }}" | grep -q .; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "Tag v${{ steps.version.outputs.version }} already exists, skipping"
+            echo "Tag ${{ steps.version.outputs.tag }} already exists, skipping"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Create and push tag
-        if: steps.check.outputs.exists == 'false'
+        if: steps.version.outputs.changed == 'true' && steps.check.outputs.exists == 'false'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -45,7 +55,7 @@ jobs:
           git push origin "${{ steps.version.outputs.tag }}"
 
       - name: Create GitHub Release
-        if: steps.check.outputs.exists == 'false'
+        if: steps.version.outputs.changed == 'true' && steps.check.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

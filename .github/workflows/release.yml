@@ -49,9 +49,9 @@ jobs:
         id: bump
         run: |
           if [ "${{ inputs.version }}" = "custom" ]; then
-            npm version "${{ inputs.custom_version }}" --no-git-tag-version
+            pnpm version "${{ inputs.custom_version }}" --no-git-tag-version
           else
-            npm version "${{ inputs.version }}" --no-git-tag-version
+            pnpm version "${{ inputs.version }}" --no-git-tag-version
           fi
           VERSION=$(node -p "require('./package.json').version")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
