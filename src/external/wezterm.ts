@@ -1,6 +1,5 @@
 import { spawn } from "node:child_process";
 
-import { DependencyError } from "../core/errors.ts";
 import { exec } from "../core/exec.ts";
 import type { WeztermPane } from "../types/index.ts";
 
@@ -15,10 +14,14 @@ function isRawWeztermPane(value: unknown): boolean {
   );
 }
 
+let weztermAvailableCache: boolean | undefined;
+
 export async function listWeztermPanes(): Promise<WeztermPane[] | null> {
   try {
-    const available = await checkWeztermAvailable();
-    if (!available) return null;
+    if (weztermAvailableCache === undefined) {
+      weztermAvailableCache = await checkWeztermAvailable();
+    }
+    if (!weztermAvailableCache) return null;
 
     const result = await exec("wezterm", ["cli", "list", "--format", "json"]).nothrow().quiet();
     if (result.exitCode !== 0) return null;
@@ -46,38 +49,6 @@ export async function checkWeztermAvailable(): Promise<boolean> {
 
 export function isRunningInsideWezterm(): boolean {
   return process.env.WEZTERM_PANE !== undefined;
-}
-
-export async function ensureWeztermAvailable(
-  checkFn: () => Promise<boolean>,
-  usageHint: string,
-  isInsideFn: () => boolean = isRunningInsideWezterm,
-): Promise<void> {
-  const available = await checkFn();
-  if (!available) {
-    const installHint =
-      process.platform === "darwin"
-        ? "  brew install --cask wezterm    # macOS (Homebrew)"
-        : process.platform === "linux"
-          ? "  https://wezfurlong.org/wezterm/install/linux.html"
-          : "  https://wezfurlong.org/wezterm/installation.html";
-
-    throw new DependencyError(
-      "WezTerm CLI is not installed. The -pane option requires WezTerm.\n\n" +
-        `Install WezTerm:\n${installHint}\n\n` +
-        "Or run without -pane to use the current terminal:\n" +
-        `  ${usageHint}`,
-    );
-  }
-
-  if (!isInsideFn()) {
-    const currentTerminal = process.env.TERM_PROGRAM || "unknown terminal";
-    throw new DependencyError(
-      `The -pane option requires running inside WezTerm, but the current terminal is ${currentTerminal}.\n\n` +
-        "Run without -pane to use the current terminal:\n" +
-        `  ${usageHint}`,
-    );
-  }
 }
 
 import type { PaneOptions } from "../types/index.ts";
