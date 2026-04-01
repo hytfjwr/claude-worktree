@@ -8,6 +8,7 @@ vi.mock("../core/config.ts", () => ({
 
 vi.mock("../core/git.ts", () => ({
   removeWorktree: vi.fn(),
+  deleteLocalBranch: vi.fn(),
 }));
 
 vi.mock("../core/session.ts", () => ({
@@ -38,12 +39,13 @@ vi.mock("../ui/spinner.ts", () => ({
 
 // Import mocked modules after vi.mock declarations
 const { runHook } = await import("../core/config.ts");
-const { removeWorktree } = await import("../core/git.ts");
+const { removeWorktree, deleteLocalBranch } = await import("../core/git.ts");
 const { deleteSession } = await import("../core/session.ts");
 const { performRollback } = await import("./rollback.ts");
 
 const mockedRunHook = vi.mocked(runHook);
 const mockedRemoveWorktree = vi.mocked(removeWorktree);
+const mockedDeleteLocalBranch = vi.mocked(deleteLocalBranch);
 const mockedDeleteSession = vi.mocked(deleteSession);
 
 function baseOptions(overrides?: Partial<RollbackOptions>): RollbackOptions {
@@ -196,6 +198,34 @@ describe("performRollback", () => {
     const allWarn = consoleWarnSpy.mock.calls.map((c) => c[0]).join("\n");
     expect(allWarn).toContain("preClean failed: hook error");
     expect(allWarn).toContain("worktree removal failed: worktree error");
+  });
+
+  test("branchName specified → deletes local branch after worktree removal", async () => {
+    const opts = baseOptions({ branchName: "feature/test" });
+
+    await performRollback(opts);
+
+    expect(mockedDeleteLocalBranch).toHaveBeenCalledWith("feature/test", true);
+  });
+
+  test("branchName not specified → skips branch deletion", async () => {
+    const opts = baseOptions();
+
+    await performRollback(opts);
+
+    expect(mockedDeleteLocalBranch).not.toHaveBeenCalled();
+  });
+
+  test("branch deletion fails → continues and shows in summary", async () => {
+    mockedDeleteLocalBranch.mockRejectedValueOnce(new Error("branch not found"));
+
+    const opts = baseOptions({ branchName: "feature/test" });
+
+    await performRollback(opts);
+
+    const allOutput = consoleLogSpy.mock.calls.map((c) => c[0]).join("\n");
+    expect(allOutput).toContain("Rollback Summary");
+    expect(allOutput).toContain("\u2717 branch deletion (branch not found)");
   });
 
   test("verbose: true + all steps succeed → no warnings logged", async () => {

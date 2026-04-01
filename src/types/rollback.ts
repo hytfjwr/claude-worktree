@@ -1,6 +1,8 @@
 export type RollbackOptions = {
   worktreePath: string;
   repoRoot: string;
+  /** Branch name to delete during rollback (created by `git worktree add -b`) */
+  branchName?: string;
   preCleanCommand?: string;
   preCleanTimeout: number;
   postCleanCommand?: string;

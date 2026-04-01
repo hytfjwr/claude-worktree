@@ -1,6 +1,6 @@
 import { runHook } from "../core/config.ts";
 import { getErrorMessage } from "../core/errors.ts";
-import { removeWorktree } from "../core/git.ts";
+import { deleteLocalBranch, removeWorktree } from "../core/git.ts";
 import { deleteSession } from "../core/session.ts";
 import { deleteSlot } from "../core/slot.ts";
 import type { RollbackOptions } from "../types/index.ts";
@@ -16,7 +16,7 @@ export async function performRollback(options: RollbackOptions): Promise<void> {
 
   logInfo("Rolling back...");
 
-  // Step 1: preClean hook
+  // preClean hook
   if (options.preCleanCommand) {
     try {
       await runHook(options.preCleanCommand, repoRoot, {
@@ -31,7 +31,7 @@ export async function performRollback(options: RollbackOptions): Promise<void> {
     }
   }
 
-  // Step 2: Remove worktree
+  // Remove worktree
   try {
     await removeWorktree(worktreePath);
     steps.push({ name: "worktree removal", success: true });
@@ -41,7 +41,19 @@ export async function performRollback(options: RollbackOptions): Promise<void> {
     steps.push({ name: "worktree removal", success: false, error: message });
   }
 
-  // Step 3: postClean hook
+  // Delete local branch (created by `git worktree add -b`)
+  if (options.branchName) {
+    try {
+      await deleteLocalBranch(options.branchName, true);
+      steps.push({ name: "branch deletion", success: true });
+    } catch (err) {
+      const message = getErrorMessage(err);
+      if (verbose) logWarn(`  branch deletion failed: ${message}`);
+      steps.push({ name: "branch deletion", success: false, error: message });
+    }
+  }
+
+  // postClean hook
   if (options.postCleanCommand) {
     const spinner = verbose
       ? null
@@ -62,7 +74,7 @@ export async function performRollback(options: RollbackOptions): Promise<void> {
     }
   }
 
-  // Step 4: Slot cleanup
+  // Slot cleanup
   if (options.slot != null) {
     try {
       await deleteSlot(worktreePath);
@@ -74,7 +86,7 @@ export async function performRollback(options: RollbackOptions): Promise<void> {
     }
   }
 
-  // Step 5: Session cleanup (only when deleteSessionData is true)
+  // Session cleanup (only when deleteSessionData is true)
   if (options.deleteSessionData) {
     try {
       await deleteSession(worktreePath);

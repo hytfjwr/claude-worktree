@@ -299,18 +299,21 @@ async function handleExistingBranch(branchName: string, deps: CreateDeps): Promi
 /**
  * Build RollbackOptions from the current context.
  */
-function buildRollbackOptions(
-  worktreePath: string,
-  repoRoot: string,
-  config: ProjectConfig | null,
-  slot: number | undefined,
-  verbose: boolean,
-  deleteSessionData: boolean,
-  deps: CreateDeps,
-): RollbackOptions {
+function buildRollbackOptions(ctx: {
+  worktreePath: string;
+  repoRoot: string;
+  branchName: string;
+  config: ProjectConfig | null;
+  slot?: number;
+  verbose: boolean;
+  deleteSessionData: boolean;
+  deps: CreateDeps;
+}): RollbackOptions {
+  const { worktreePath, config, slot, deps } = ctx;
   return {
-    worktreePath,
-    repoRoot,
+    worktreePath: ctx.worktreePath,
+    repoRoot: ctx.repoRoot,
+    branchName: ctx.branchName,
     preCleanCommand: config?.preClean
       ? deps.buildHookCommand(config.preClean, { path: worktreePath, slot })
       : undefined,
@@ -320,8 +323,8 @@ function buildRollbackOptions(
       : undefined,
     postCleanTimeout: deps.resolveHookTimeout("postClean", config),
     slot,
-    verbose,
-    deleteSessionData,
+    verbose: ctx.verbose,
+    deleteSessionData: ctx.deleteSessionData,
   };
 }
 
@@ -332,6 +335,7 @@ async function launchClaudeInPane(
   options: {
     worktreePath: string;
     repoRoot: string;
+    branchName: string;
     config: ProjectConfig | null;
     claudeOptions: ClaudeOptions;
     backend: TerminalBackend;
@@ -341,7 +345,7 @@ async function launchClaudeInPane(
   },
   deps: CreateDeps,
 ): Promise<void> {
-  const { worktreePath, repoRoot, config, claudeOptions, backend, slot, verbose, quiet } = options;
+  const { worktreePath, repoRoot, branchName, config, claudeOptions, backend, slot, verbose, quiet } = options;
 
   const claudeCommand = deps.buildClaudeCommand(claudeOptions);
 
@@ -399,7 +403,18 @@ async function launchClaudeInPane(
     }
     // Clean up temp file on failure (the pane side handles its own cleanup on success)
     await unlink(payloadPath).catch(() => {});
-    await deps.performRollback(buildRollbackOptions(worktreePath, repoRoot, config, slot, verbose, false, deps));
+    await deps.performRollback(
+      buildRollbackOptions({
+        worktreePath,
+        repoRoot,
+        branchName,
+        config,
+        slot,
+        verbose,
+        deleteSessionData: false,
+        deps,
+      }),
+    );
     throw error;
   }
 }
@@ -411,6 +426,7 @@ async function launchClaudeInTerminal(
   options: {
     worktreePath: string;
     repoRoot: string;
+    branchName: string;
     config: ProjectConfig | null;
     claudeOptions: ClaudeOptions;
     slot?: number;
@@ -418,7 +434,7 @@ async function launchClaudeInTerminal(
   },
   deps: CreateDeps,
 ): Promise<void> {
-  const { worktreePath, repoRoot, config, claudeOptions, slot, verbose } = options;
+  const { worktreePath, repoRoot, branchName, config, claudeOptions, slot, verbose } = options;
 
   // postCreate hook
   if (config?.postCreate) {
@@ -432,7 +448,18 @@ async function launchClaudeInTerminal(
     });
     if (!result.success) {
       logError(`postCreate hook failed: ${result.message}`);
-      await deps.performRollback(buildRollbackOptions(worktreePath, repoRoot, config, slot, verbose, false, deps));
+      await deps.performRollback(
+        buildRollbackOptions({
+          worktreePath,
+          repoRoot,
+          branchName,
+          config,
+          slot,
+          verbose,
+          deleteSessionData: false,
+          deps,
+        }),
+      );
       return;
     }
   }
@@ -448,10 +475,12 @@ async function launchClaudeInTerminal(
     startedAt: new Date().toISOString(),
   });
 
-  await spawnInteractive({ command: claudeCommand, cwd: worktreePath });
-
-  // Always mark session as completed in terminal mode since the process has ended
-  await deps.completeSession(worktreePath);
+  try {
+    await spawnInteractive({ command: claudeCommand, cwd: worktreePath });
+  } finally {
+    // Always mark session as completed in terminal mode since the process has ended
+    await deps.completeSession(worktreePath);
+  }
 }
 
 // =============================================================================
@@ -640,7 +669,16 @@ export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps
   // Register signal handlers for graceful cleanup during creation phase.
   // Removed before launching Claude (spawnInteractive has its own signal forwarding,
   // launchClaudeInPane has its own error handling with rollback).
-  let rollbackCtx = buildRollbackOptions(worktreePath, git.repoRoot, config, undefined, !!args.verbose, false, deps);
+  const rollbackBase = {
+    worktreePath,
+    repoRoot: git.repoRoot,
+    branchName,
+    config,
+    verbose: !!args.verbose,
+    deleteSessionData: false,
+    deps,
+  };
+  let rollbackCtx = buildRollbackOptions(rollbackBase);
 
   const createSignalHandler = (exitCode: number) => async () => {
     try {
@@ -668,12 +706,16 @@ export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps
       if (anyHookUsesSlot) {
         slot = await deps.assignSlot(worktreePath);
         // Update rollback context with slot info
-        rollbackCtx = buildRollbackOptions(worktreePath, git.repoRoot, config, slot, !!args.verbose, false, deps);
+        rollbackCtx = buildRollbackOptions({ ...rollbackBase, slot });
       }
     }
 
     // Build Claude options (use local prompt which may be overridden by plan file)
     claudeOptions = buildClaudeOptions({ ...args, prompt }, git, worktreePath, effectiveBaseBranch, branchName, config);
+  } catch (error) {
+    // Rollback worktree if assignSlot or buildClaudeOptions fails
+    await deps.performRollback(rollbackCtx);
+    throw error;
   } finally {
     // Remove signal handlers before launching Claude
     process.removeListener("SIGINT", handleSigint);
@@ -686,6 +728,7 @@ export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps
       {
         worktreePath,
         repoRoot: git.repoRoot,
+        branchName,
         config,
         claudeOptions,
         backend,
@@ -697,7 +740,7 @@ export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps
     );
   } else {
     await launchClaudeInTerminal(
-      { worktreePath, repoRoot: git.repoRoot, config, claudeOptions, slot, verbose: !!args.verbose },
+      { worktreePath, repoRoot: git.repoRoot, branchName, config, claudeOptions, slot, verbose: !!args.verbose },
       deps,
     );
   }

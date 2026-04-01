@@ -45,25 +45,34 @@ async function launchResumeInPane(
   backend: TerminalBackend,
   deps: ResumeDeps,
 ): Promise<void> {
-  const paneIdStr = await backend.createPane({ keepFocus: true });
-  logInfo(`${icons.window()} Created pane: ${paneIdStr}`);
+  let paneIdStr: string | undefined;
+  try {
+    paneIdStr = await backend.createPane({ keepFocus: true });
+    logInfo(`${icons.window()} Created pane: ${paneIdStr}`);
 
-  await backend.sendCommand(paneIdStr, `cd "${worktree.path}" && ${claudeCommand}`);
+    await backend.sendCommand(paneIdStr, `cd "${worktree.path}" && ${claudeCommand}`);
 
-  const paneId = backend.name === "wezterm" ? Number.parseInt(paneIdStr, 10) : paneIdStr;
-  await deps.saveSession(worktree.path, {
-    paneId,
-    backendType: backend.name,
-    mode: "pane",
-    startedAt: new Date().toISOString(),
-  });
+    const paneId = backend.name === "wezterm" ? Number.parseInt(paneIdStr, 10) : paneIdStr;
+    await deps.saveSession(worktree.path, {
+      paneId,
+      backendType: backend.name,
+      mode: "pane",
+      startedAt: new Date().toISOString(),
+    });
 
-  logInfo(`${icons.done()} Claude resumed in new pane`);
+    logInfo(`${icons.done()} Claude resumed in new pane`);
 
-  // Show tmux attach hint when launched from outside tmux
-  if (backend.name === "tmux" && !isRunningInsideTmux()) {
-    const sessionName = await getSessionForPane(paneIdStr);
-    logInfo(`\n  To view the session, run: tmux attach -t ${sessionName}`);
+    // Show tmux attach hint when launched from outside tmux
+    if (backend.name === "tmux" && !isRunningInsideTmux()) {
+      const sessionName = await getSessionForPane(paneIdStr);
+      logInfo(`\n  To view the session, run: tmux attach -t ${sessionName}`);
+    }
+  } catch (error) {
+    // Close orphaned pane if it was created before the failure
+    if (paneIdStr) {
+      await backend.closePane(paneIdStr).catch(() => {});
+    }
+    throw error;
   }
 }
 
@@ -81,6 +90,13 @@ async function launchResumeInTerminal(worktree: WorktreeInfo, claudeCommand: str
   // These handlers catch a subsequent signal to ensure completeSession() is called
   // before the process exits (otherwise the session stays "Running" forever).
   let signalReceived = false;
+  let sessionCompleted = false;
+
+  const doCompleteSession = async () => {
+    if (sessionCompleted) return;
+    sessionCompleted = true;
+    await deps.completeSession(worktree.path).catch(() => {});
+  };
 
   const createSignalHandler = (exitCode: number) => () => {
     if (!signalReceived) {
@@ -91,10 +107,7 @@ async function launchResumeInTerminal(worktree: WorktreeInfo, claudeCommand: str
     // Subsequent signal: clean up session and exit
     process.removeListener("SIGINT", handleSigint);
     process.removeListener("SIGTERM", handleSigterm);
-    deps
-      .completeSession(worktree.path)
-      .catch(() => {})
-      .finally(() => process.exit(exitCode));
+    doCompleteSession().finally(() => process.exit(exitCode));
   };
 
   const handleSigint = createSignalHandler(130); // 128 + SIGINT(2)
@@ -108,10 +121,9 @@ async function launchResumeInTerminal(worktree: WorktreeInfo, claudeCommand: str
   } finally {
     process.removeListener("SIGINT", handleSigint);
     process.removeListener("SIGTERM", handleSigterm);
+    // Always mark session as completed in terminal mode since the process has ended
+    await doCompleteSession();
   }
-
-  // Always mark session as completed in terminal mode since the process has ended
-  await deps.completeSession(worktree.path);
 }
 
 // =============================================================================

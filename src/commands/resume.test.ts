@@ -87,13 +87,13 @@ describe("runResume", () => {
       expect(deps.completeSession).toHaveBeenCalled();
     });
 
-    test("does not complete session when spawnInteractive throws", async () => {
+    test("completes session even when spawnInteractive throws", async () => {
       vi.mocked(spawnInteractive).mockRejectedValueOnce(new Error("spawn failed"));
       const deps = makeDeps();
 
       await expect(runResume({ branchName: "feature/test" }, deps)).rejects.toThrow("spawn failed");
       expect(deps.saveSession).toHaveBeenCalled();
-      expect(deps.completeSession).not.toHaveBeenCalled();
+      expect(deps.completeSession).toHaveBeenCalledOnce();
     });
 
     test("registers signal handlers during spawnInteractive and removes them after", async () => {

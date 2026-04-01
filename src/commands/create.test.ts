@@ -380,13 +380,13 @@ describe("runCreate", () => {
       expect(deps.completeSession).toHaveBeenCalledWith("/repo/.worktrees/feat-x");
     });
 
-    test("does not complete session when spawnInteractive throws", async () => {
+    test("completes session even when spawnInteractive throws", async () => {
       vi.mocked(spawnInteractive).mockRejectedValueOnce(new Error("process crashed"));
       const deps = makeDeps();
 
       await expect(runCreate(defaultTerminalArgs, deps)).rejects.toThrow("process crashed");
       expect(deps.saveSession).toHaveBeenCalled();
-      expect(deps.completeSession).not.toHaveBeenCalled();
+      expect(deps.completeSession).toHaveBeenCalledOnce();
     });
 
     test("completes session even when child process exits with non-zero code", async () => {
