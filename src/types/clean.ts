@@ -24,6 +24,7 @@ export type CleanDeps = {
   getRemoteBranches: () => Promise<Set<string>>;
   fetchAndPrune: () => Promise<void>;
   listWorktrees: () => Promise<ListWorktreesResult>;
+  listWorktreePaths: () => Promise<string[]>;
   getWorktreeStatuses: (
     worktrees: WorktreeInfo[],
     mainBranch: string,
@@ -50,7 +51,7 @@ export type CleanDeps = {
   selectMultiple: (statuses: WorktreeStatus[]) => Promise<WorktreeStatus[]>;
   startSpinner: (message: string) => Spinner;
   checkGhAvailable: () => Promise<boolean>;
-  getPullRequestForBranch: (branch: string) => Promise<PullRequestInfo | null>;
+  getPullRequestsForBranches: (branches: string[]) => Promise<Map<string, PullRequestInfo>>;
   readAllSessions: () => Promise<Record<string, SessionInfo>>;
   listWeztermPanes: () => Promise<AllPanes["wezterm"]>;
   listTmuxPanes: () => Promise<AllPanes["tmux"]>;

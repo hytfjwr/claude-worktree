@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { makeStatus, makeWorktree } from "../__test-utils__.ts";
-import type { CleanArgs, CleanDeps, WorktreeStatus } from "../types/index.ts";
+import type { CleanArgs, CleanDeps, PullRequestInfo, WorktreeStatus } from "../types/index.ts";
 import { executeClean } from "./clean.ts";
 
 function makeSpinner() {
@@ -19,6 +19,7 @@ function makeDeps(overrides: Partial<CleanDeps> = {}): CleanDeps {
     getRemoteBranches: async () => new Set<string>(),
     fetchAndPrune: async () => {},
     listWorktrees: async () => ({ worktrees: [], mainBranch: "main" }),
+    listWorktreePaths: async () => [],
     getWorktreeStatuses: async () => [],
     removeWorktree: async () => {},
     deleteLocalBranch: async () => {},
@@ -41,7 +42,7 @@ function makeDeps(overrides: Partial<CleanDeps> = {}): CleanDeps {
     selectMultiple: async () => [],
     startSpinner: () => makeSpinner(),
     checkGhAvailable: async () => false,
-    getPullRequestForBranch: async () => null,
+    getPullRequestsForBranches: async () => new Map(),
     readAllSessions: async () => ({}),
     listWeztermPanes: async () => null,
     listTmuxPanes: async () => null,
@@ -1042,16 +1043,17 @@ describe("executeClean", () => {
         listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status],
         checkGhAvailable: async () => true,
-        getPullRequestForBranch: async (branch) => {
-          if (branch === "feature/merged") {
-            return {
+        getPullRequestsForBranches: async (branches) => {
+          const map = new Map<string, PullRequestInfo>();
+          if (branches.includes("feature/merged")) {
+            map.set("feature/merged", {
               number: 123,
               title: "Fix login bug",
               state: "MERGED",
               url: "https://github.com/owner/repo/pull/123",
-            };
+            });
           }
-          return null;
+          return map;
         },
       });
 
@@ -1071,9 +1073,9 @@ describe("executeClean", () => {
         listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status],
         checkGhAvailable: async () => false,
-        getPullRequestForBranch: async () => {
+        getPullRequestsForBranches: async () => {
           getPrCalled = true;
-          return null;
+          return new Map();
         },
       });
 
@@ -1095,7 +1097,7 @@ describe("executeClean", () => {
         listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status],
         checkGhAvailable: async () => true,
-        getPullRequestForBranch: async () => null,
+        getPullRequestsForBranches: async () => new Map(),
       });
 
       const result = await executeClean({ ...defaultArgs, force: true }, deps);
@@ -1103,7 +1105,7 @@ describe("executeClean", () => {
       expect(result.deleted).toEqual(["/tmp/repo-pr-fail"]);
     });
 
-    test("continues deletion when getPullRequestForBranch throws", async () => {
+    test("continues deletion when getPullRequestsForBranches throws", async () => {
       const worktree = makeWorktree({
         path: "/tmp/repo-pr-throw",
         branch: "feature/pr-throw",
@@ -1117,7 +1119,7 @@ describe("executeClean", () => {
         listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status],
         checkGhAvailable: async () => true,
-        getPullRequestForBranch: async () => {
+        getPullRequestsForBranches: async () => {
           throw new Error("Network error");
         },
         startSpinner: () => spinner,
@@ -1140,9 +1142,9 @@ describe("executeClean", () => {
         listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status],
         checkGhAvailable: async () => true,
-        getPullRequestForBranch: async () => {
+        getPullRequestsForBranches: async () => {
           getPrCalled = true;
-          return null;
+          return new Map();
         },
       });
 
@@ -1165,12 +1167,13 @@ describe("executeClean", () => {
         listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status],
         checkGhAvailable: async () => true,
-        getPullRequestForBranch: async () => ({
-          number: 456,
-          title: "Add feature",
-          state: "CLOSED",
-          url: "https://github.com/owner/repo/pull/456",
-        }),
+        getPullRequestsForBranches: async () =>
+          new Map<string, PullRequestInfo>([
+            [
+              "feature/dry-pr",
+              { number: 456, title: "Add feature", state: "CLOSED", url: "https://github.com/owner/repo/pull/456" },
+            ],
+          ]),
       });
 
       await executeClean({ ...defaultArgs, dryRun: true }, deps);
@@ -1190,12 +1193,13 @@ describe("executeClean", () => {
         listWorktrees: async () => ({ worktrees: [wt], mainBranch: "main" }),
         getWorktreeStatuses: async () => [status],
         checkGhAvailable: async () => true,
-        getPullRequestForBranch: async () => ({
-          number: 789,
-          title: "New feature",
-          state: "OPEN",
-          url: "https://github.com/owner/repo/pull/789",
-        }),
+        getPullRequestsForBranches: async () =>
+          new Map<string, PullRequestInfo>([
+            [
+              "feature/all-pr",
+              { number: 789, title: "New feature", state: "OPEN", url: "https://github.com/owner/repo/pull/789" },
+            ],
+          ]),
         selectMultiple: async (statuses) => {
           receivedStatuses = statuses;
           return [];
@@ -1750,16 +1754,10 @@ describe("executeClean", () => {
       const mainWorktree = makeWorktree({ path: "/repo", branch: "main", isMain: true });
       let sessionPaths: Set<string> | undefined;
       let slotPaths: Set<string> | undefined;
-      // After deletion, listWorktrees returns only the main worktree
-      let listCallCount = 0;
       const deps = makeDeps({
-        listWorktrees: async () => {
-          listCallCount++;
-          if (listCallCount === 1) {
-            return { worktrees: [worktree, mainWorktree], mainBranch: "main" };
-          }
-          return { worktrees: [mainWorktree], mainBranch: "main" };
-        },
+        listWorktrees: async () => ({ worktrees: [worktree, mainWorktree], mainBranch: "main" }),
+        // After deletion, only the main worktree remains on disk
+        listWorktreePaths: async () => [mainWorktree.path],
         getWorktreeStatuses: async () => [status],
         gcSessions: async (paths) => {
           sessionPaths = paths;
@@ -1775,6 +1773,39 @@ describe("executeClean", () => {
 
       expect(sessionPaths).toEqual(new Set(["/repo"]));
       expect(slotPaths).toEqual(new Set(["/repo"]));
+    });
+
+    test("skips GC (no cache wipe) when listWorktreePaths fails", async () => {
+      const worktree = makeWorktree({ path: "/tmp/repo-gc-listfail", branch: "feature/gc-listfail" });
+      const status = makeStatus(
+        { path: "/tmp/repo-gc-listfail", branch: "feature/gc-listfail" },
+        { canAutoClean: true },
+      );
+      let gcSessionsCalled = false;
+      let gcSlotsCalled = false;
+      const deps = makeDeps({
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
+        getWorktreeStatuses: async () => [status],
+        // A failed listing must not let GC run with an empty valid-path set, which
+        // would otherwise delete every entry in the global slot/session caches.
+        listWorktreePaths: async () => {
+          throw new Error("git worktree list failed");
+        },
+        gcSessions: async () => {
+          gcSessionsCalled = true;
+          return 0;
+        },
+        gcSlots: async () => {
+          gcSlotsCalled = true;
+          return 0;
+        },
+      });
+
+      const result = await executeClean({ ...defaultArgs, force: true }, deps);
+
+      expect(result.deleted).toEqual(["/tmp/repo-gc-listfail"]);
+      expect(gcSessionsCalled).toBe(false);
+      expect(gcSlotsCalled).toBe(false);
     });
 
     test("does not fail when GC throws", async () => {

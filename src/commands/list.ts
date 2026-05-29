@@ -18,6 +18,7 @@ import type {
   ListArgs,
   ListDeps,
   ListResult,
+  SessionInfo,
   SessionState,
   WorktreeListEntry,
   WorktreeStatus,
@@ -206,11 +207,14 @@ export async function executeList(args: ListArgs, deps: ListDeps = defaultDeps):
     const { worktrees, mainBranch } = await deps.listWorktrees();
 
     if (worktrees.length > 0) {
-      const statuses = await deps.getWorktreeStatuses(worktrees, mainBranch, trackedBranches, remoteBranches);
-
-      // Fetch panes from all backends and sessions by default (skip with -no-status)
-      const allPanes = args.noStatus ? { wezterm: null, tmux: null } : await fetchAllPanes(deps);
-      const sessions = args.noStatus ? {} : await deps.readAllSessions();
+      // These three are independent (each derives only from `worktrees`), so run them
+      // concurrently: the git status work overlaps with the external pane spawns (wezterm/tmux)
+      // and the sessions file read, instead of paying for them sequentially.
+      const [statuses, allPanes, sessions] = await Promise.all([
+        deps.getWorktreeStatuses(worktrees, mainBranch, trackedBranches, remoteBranches),
+        args.noStatus ? Promise.resolve({ wezterm: null, tmux: null }) : fetchAllPanes(deps),
+        args.noStatus ? Promise.resolve<Record<string, SessionInfo>>({}) : deps.readAllSessions(),
+      ]);
 
       // Build entries (parallelize per-worktree git operations with concurrency limit)
       result.entries = await promiseAllLimit(

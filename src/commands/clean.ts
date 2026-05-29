@@ -9,6 +9,7 @@ import {
   getRemoteTrackingBranches,
   getUnpushedCommitCount,
   getWorktreeStatuses,
+  listWorktreePaths,
   listWorktrees,
   removeWorktree,
 } from "../core/git.ts";
@@ -21,7 +22,7 @@ import {
   readAllSessions,
 } from "../core/session.ts";
 import { deleteSlot, gcSlots, readSlot } from "../core/slot.ts";
-import { checkGhAvailable, getPullRequestForBranch } from "../external/github.ts";
+import { checkGhAvailable, getPullRequestsForBranches } from "../external/github.ts";
 import { listTmuxPanes } from "../external/tmux.ts";
 import { listWeztermPanes } from "../external/wezterm.ts";
 import type {
@@ -44,6 +45,7 @@ const defaultDeps: CleanDeps = {
   getRemoteBranches,
   fetchAndPrune,
   listWorktrees,
+  listWorktreePaths,
   getWorktreeStatuses,
   removeWorktree,
   deleteLocalBranch,
@@ -61,7 +63,7 @@ const defaultDeps: CleanDeps = {
   selectMultiple,
   startSpinner,
   checkGhAvailable,
-  getPullRequestForBranch,
+  getPullRequestsForBranches,
   readAllSessions,
   listWeztermPanes,
   listTmuxPanes,
@@ -192,19 +194,15 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
     return result;
   }
 
-  // Fetch PR info for all cleanable branches
-  const prMap = new Map<string, PullRequestInfo>();
+  // Fetch PR info for all cleanable branches in a single gh call (keyed by branch name)
+  let prMap = new Map<string, PullRequestInfo>();
   const ghAvailable = await deps.checkGhAvailable();
   if (ghAvailable) {
     const branches = cleanableStatuses.map((s) => s.worktree.branch).filter((b): b is string => b !== null);
     if (branches.length > 0) {
       const prSpinner = deps.startSpinner("Fetching PR information...");
       try {
-        const results = await promiseAllLimit(branches.map((b) => () => deps.getPullRequestForBranch(b)));
-        for (let i = 0; i < branches.length; i++) {
-          const pr = results[i];
-          if (pr) prMap.set(branches[i], pr);
-        }
+        prMap = await deps.getPullRequestsForBranches(branches);
         prSpinner.stop(`${icons.success()} Done fetching PR information.`);
       } catch {
         prSpinner.fail("Failed to fetch PR information (continuing)");
@@ -427,10 +425,11 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
     }
   }
 
-  // Garbage collect stale cache entries
+  // Garbage collect stale cache entries. Reconcile against the paths that actually exist on
+  // disk (a lightweight `git worktree list --porcelain` parse — no main-branch detection or
+  // per-worktree status), so partially-failed deletions are still reconciled correctly.
   try {
-    const freshList = await deps.listWorktrees();
-    const validPaths = new Set(freshList.worktrees.map((w) => w.path));
+    const validPaths = new Set(await deps.listWorktreePaths());
     const [gcSessionCount, gcSlotCount] = await Promise.all([deps.gcSessions(validPaths), deps.gcSlots(validPaths)]);
     if (gcSessionCount > 0 || gcSlotCount > 0) {
       logDebug(`GC: removed ${gcSessionCount} stale session(s) and ${gcSlotCount} stale slot(s)`);

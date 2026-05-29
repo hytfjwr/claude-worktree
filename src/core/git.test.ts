@@ -521,6 +521,24 @@ describe("isBranchMerged", () => {
     expect(isMerged).toBe(true);
   });
 
+  test("detects merged branch checked out in a linked worktree (+ prefix)", async () => {
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("--merged")) {
+        // `git branch --merged` prepends "+ " to branches checked out in another worktree.
+        return { stdout: "  main\n+ feature/in-worktree\n* current\n" };
+      }
+      if (args.includes("symbolic-ref")) {
+        return { stdout: "refs/remotes/origin/main\n" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { isBranchMerged } = await import("./git.ts");
+    const isMerged = await isBranchMerged("feature/in-worktree", "main");
+
+    expect(isMerged).toBe(true);
+  });
+
   test("unmerged branch - false", async () => {
     mockExecImpl.current = createExecStub((_cmd, args) => {
       if (args.includes("--merged")) {
@@ -838,6 +856,54 @@ describe("listWorktrees", () => {
 
     const { listWorktrees } = await import("./git.ts");
     await expect(listWorktrees()).rejects.toThrow("Failed to list worktrees");
+  });
+});
+
+describe("listWorktreePaths", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    mockExecImpl.current = null;
+  });
+  afterEach(() => {
+    mockExecImpl.current = null;
+  });
+
+  test("returns only the worktree paths from porcelain output", async () => {
+    const porcelainOutput = [
+      "worktree /path/to/repo",
+      "HEAD abc123",
+      "branch refs/heads/main",
+      "",
+      "worktree /path/to/repo-feature",
+      "HEAD def456",
+      "branch refs/heads/feature/test",
+    ].join("\n");
+
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("--porcelain") && args.includes("list")) {
+        return { stdout: porcelainOutput };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { listWorktreePaths } = await import("./git.ts");
+    const paths = await listWorktreePaths();
+
+    expect(paths).toEqual(["/path/to/repo", "/path/to/repo-feature"]);
+  });
+
+  test("throws when git worktree list fails (keeps GC fail-safe)", async () => {
+    // Returning [] here would make the GC step wipe the global slot/session caches,
+    // so a failed listing must throw and let the caller skip GC.
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("--porcelain") && args.includes("list")) {
+        return { stdout: "", exitCode: 128 };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { listWorktreePaths } = await import("./git.ts");
+    await expect(listWorktreePaths()).rejects.toThrow("Failed to list worktrees");
   });
 });
 
@@ -1238,6 +1304,28 @@ describe("getWorktreeStatuses", () => {
     const worktree = createWorktree();
     const statuses = await getWorktreeStatuses([worktree], "main", defaultTracked);
 
+    expect(statuses[0].canAutoClean).toBe(true);
+    expect(statuses[0].reason).toBe("Merged");
+  });
+
+  test("detects merged branch checked out in a linked worktree (+ prefix)", async () => {
+    // `git branch --merged` marks worktree-checked-out branches with "+ ". Since this
+    // tool manages worktrees, cleanable branches are typically in this state, so the
+    // merge check must still recognize them.
+    mockExecImpl.current = createExecStub((_cmd, args) => {
+      if (args.includes("--merged")) {
+        return { stdout: "  main\n+ feature/test\n" };
+      }
+      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+    });
+
+    const { getWorktreeStatuses } = await import("./git.ts");
+    const worktree = createWorktree();
+    const tracked = new Set(["feature/test"]);
+    const remote = new Set(["feature/test"]); // still on remote (not deleted)
+    const statuses = await getWorktreeStatuses([worktree], "main", tracked, remote);
+
+    expect(statuses[0].branchMerged).toBe(true);
     expect(statuses[0].canAutoClean).toBe(true);
     expect(statuses[0].reason).toBe("Merged");
   });

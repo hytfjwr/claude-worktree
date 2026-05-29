@@ -162,6 +162,29 @@ export async function listWorktrees(): Promise<ListWorktreesResult> {
   return { worktrees, mainBranch };
 }
 
+/**
+ * List worktree paths only, via a single `git worktree list --porcelain` call.
+ * Lighter than listWorktrees(): skips main-branch detection and the per-worktree
+ * `git status` calls. Used by `clean`'s GC step, which only needs the set of paths
+ * that currently exist on disk to reconcile stale cache entries.
+ *
+ * Throws on failure (mirroring listWorktrees) rather than returning an empty list:
+ * the GC step removes cache entries whose path is absent from this set, so a silent
+ * empty result on a failed `git worktree list` would wipe the global slot/session
+ * caches for every repo. Throwing lets the caller's try/catch skip GC instead.
+ */
+export async function listWorktreePaths(): Promise<string[]> {
+  const result = await exec("git", ["worktree", "list", "--porcelain"]).nothrow().quiet();
+  if (result.exitCode !== 0) {
+    throw new GitError("Failed to list worktrees. Are you in a git repository?");
+  }
+  return result
+    .text()
+    .split("\n")
+    .filter((line) => line.startsWith("worktree "))
+    .map((line) => line.substring(9));
+}
+
 export async function isWorktreeDirty(worktreePath: string): Promise<boolean> {
   const result = await exec("git", ["-C", worktreePath, "status", "--porcelain"]).nothrow().quiet();
   if (result.exitCode !== 0) {
@@ -170,21 +193,33 @@ export async function isWorktreeDirty(worktreePath: string): Promise<boolean> {
   return result.text().trim().length > 0;
 }
 
-export async function isBranchMerged(branch: string, baseBranch?: string): Promise<boolean> {
-  const base = baseBranch || (await getMainBranch());
-
-  // Check if branch is merged into base
+/**
+ * Fetch the set of branches merged into `base` in a single `git branch --merged <base>` call.
+ * Returns an empty Set if the command fails. Used to batch the merge check across many
+ * worktrees instead of spawning `git branch --merged` once per worktree.
+ */
+export async function getMergedBranches(base: string): Promise<Set<string>> {
   const result = await exec("git", ["branch", "--merged", base]).nothrow().quiet();
   if (result.exitCode !== 0) {
-    return false;
+    return new Set();
   }
-
   const mergedBranches = result
     .text()
     .trim()
     .split("\n")
-    .map((b: string) => b.trim().replace("* ", ""));
-  return mergedBranches.includes(branch);
+    // Strip the markers `git branch` prepends: "* " for the current branch and
+    // "+ " for branches checked out in a linked worktree. Since this tool manages
+    // worktrees, merged branches are typically checked out in their worktree and
+    // appear as "+ branch" — not stripping "+ " would silently miss them.
+    .map((b: string) => b.trim().replace(/^[*+] /, ""))
+    .filter((b) => b.length > 0);
+  return new Set(mergedBranches);
+}
+
+export async function isBranchMerged(branch: string, baseBranch?: string): Promise<boolean> {
+  const base = baseBranch || (await getMainBranch());
+  const mergedBranches = await getMergedBranches(base);
+  return mergedBranches.has(branch);
 }
 
 /**
@@ -375,6 +410,13 @@ export async function getWorktreeStatuses(
   remoteBranches?: Set<string>,
 ): Promise<WorktreeStatus[]> {
   const effectiveTracked = trackedBranches ?? new Set<string>();
+
+  // Compute the merged-branch set once (single `git branch --merged <mainBranch>`) instead of
+  // spawning that command for every worktree — the base is constant, so the output is identical
+  // for each. Mirrors the batched remoteBranches pattern (getRemoteBranches + Set lookup).
+  const needsMergeCheck = worktrees.some((w) => !w.isMain && !w.isLocked && w.branch);
+  const mergedBranches = needsMergeCheck ? await getMergedBranches(mainBranch) : new Set<string>();
+
   return promiseAllLimit(
     worktrees.map((worktree) => async (): Promise<WorktreeStatus> => {
       if (worktree.isMain) {
@@ -404,7 +446,7 @@ export async function getWorktreeStatuses(
           : await isRemoteBranchDeleted(worktree.branch, effectiveTracked)
         : false;
 
-      const branchMerged = worktree.branch ? await isBranchMerged(worktree.branch, mainBranch) : false;
+      const branchMerged = worktree.branch ? mergedBranches.has(worktree.branch) : false;
 
       // Dirty worktrees that are not merged and not remote-deleted cannot be auto-cleaned.
       // But dirty worktrees whose branch is merged or remote-deleted are still auto-cleanable.

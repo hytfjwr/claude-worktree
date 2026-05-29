@@ -54,7 +54,7 @@ describe("checkGhAvailable", () => {
   });
 });
 
-describe("getPullRequestForBranch", () => {
+describe("getPullRequestsForBranches", () => {
   beforeEach(() => {
     vi.resetModules();
     mockExecImpl.current = null;
@@ -63,9 +63,22 @@ describe("getPullRequestForBranch", () => {
     mockExecImpl.current = null;
   });
 
-  test("returns PR info on success", async () => {
+  test("returns a map of branch -> PR info on success", async () => {
     const prJson = JSON.stringify([
-      { number: 123, title: "Fix login bug", state: "MERGED", url: "https://github.com/owner/repo/pull/123" },
+      {
+        number: 123,
+        title: "Fix login bug",
+        state: "MERGED",
+        url: "https://github.com/owner/repo/pull/123",
+        headRefName: "feature/login-fix",
+      },
+      {
+        number: 124,
+        title: "Add API",
+        state: "OPEN",
+        url: "https://github.com/owner/repo/pull/124",
+        headRefName: "feature/api",
+      },
     ]);
 
     mockExecImpl.current = createExecStub((_cmd, args) => {
@@ -75,102 +88,141 @@ describe("getPullRequestForBranch", () => {
       throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
     });
 
-    const { getPullRequestForBranch } = await import("./github.ts");
-    const result = await getPullRequestForBranch("feature/login-fix");
-    expect(result).toEqual({
+    const { getPullRequestsForBranches } = await import("./github.ts");
+    const map = await getPullRequestsForBranches(["feature/login-fix", "feature/api"]);
+
+    expect(map.get("feature/login-fix")).toEqual({
       number: 123,
       title: "Fix login bug",
       state: "MERGED",
       url: "https://github.com/owner/repo/pull/123",
     });
+    expect(map.get("feature/api")).toEqual({
+      number: 124,
+      title: "Add API",
+      state: "OPEN",
+      url: "https://github.com/owner/repo/pull/124",
+    });
   });
 
-  test("returns null when gh command fails", async () => {
-    mockExecImpl.current = createExecStub((_cmd, args) => {
-      if (_cmd === "gh") {
-        return { stdout: "", exitCode: 1 };
-      }
-      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+  test("returns empty map without calling gh when branch list is empty", async () => {
+    let ghCalled = false;
+    mockExecImpl.current = createExecStub((cmd) => {
+      if (cmd === "gh") ghCalled = true;
+      return { stdout: "[]" };
     });
 
-    const { getPullRequestForBranch } = await import("./github.ts");
-    expect(await getPullRequestForBranch("feature/test")).toBeNull();
+    const { getPullRequestsForBranches } = await import("./github.ts");
+    const map = await getPullRequestsForBranches([]);
+
+    expect(map.size).toBe(0);
+    expect(ghCalled).toBe(false);
   });
 
-  test("returns null when result is empty array", async () => {
-    mockExecImpl.current = createExecStub((_cmd, args) => {
-      if (_cmd === "gh") {
+  test("excludes branches not in the requested set", async () => {
+    const prJson = JSON.stringify([
+      { number: 1, title: "Other", state: "OPEN", url: "https://github.com/o/r/pull/1", headRefName: "feature/other" },
+    ]);
+    mockExecImpl.current = createExecStub((cmd) => {
+      if (cmd === "gh") return { stdout: prJson };
+      throw new Error(`Unhandled exec call: ${cmd}`);
+    });
+
+    const { getPullRequestsForBranches } = await import("./github.ts");
+    const map = await getPullRequestsForBranches(["feature/wanted"]);
+
+    expect(map.size).toBe(0);
+  });
+
+  test("keeps the first (most recent) PR per head branch", async () => {
+    const prJson = JSON.stringify([
+      {
+        number: 200,
+        title: "Newer",
+        state: "OPEN",
+        url: "https://github.com/o/r/pull/200",
+        headRefName: "feature/dup",
+      },
+      {
+        number: 100,
+        title: "Older",
+        state: "CLOSED",
+        url: "https://github.com/o/r/pull/100",
+        headRefName: "feature/dup",
+      },
+    ]);
+    mockExecImpl.current = createExecStub((cmd) => {
+      if (cmd === "gh") return { stdout: prJson };
+      throw new Error(`Unhandled exec call: ${cmd}`);
+    });
+
+    const { getPullRequestsForBranches } = await import("./github.ts");
+    const map = await getPullRequestsForBranches(["feature/dup"]);
+
+    expect(map.get("feature/dup")?.number).toBe(200);
+  });
+
+  test("returns empty map when gh command fails", async () => {
+    mockExecImpl.current = createExecStub((cmd) => {
+      if (cmd === "gh") return { stdout: "", exitCode: 1 };
+      throw new Error(`Unhandled exec call: ${cmd}`);
+    });
+
+    const { getPullRequestsForBranches } = await import("./github.ts");
+    const map = await getPullRequestsForBranches(["feature/test"]);
+    expect(map.size).toBe(0);
+  });
+
+  test("returns empty map when JSON is invalid", async () => {
+    mockExecImpl.current = createExecStub((cmd) => {
+      if (cmd === "gh") return { stdout: "not json" };
+      throw new Error(`Unhandled exec call: ${cmd}`);
+    });
+
+    const { getPullRequestsForBranches } = await import("./github.ts");
+    const map = await getPullRequestsForBranches(["feature/test"]);
+    expect(map.size).toBe(0);
+  });
+
+  test("skips PRs with missing fields or unexpected state", async () => {
+    const prJson = JSON.stringify([
+      { number: 1, title: "Missing url+state", headRefName: "feature/a" },
+      { number: 2, title: "Draft", state: "DRAFT", url: "https://github.com/o/r/pull/2", headRefName: "feature/b" },
+      { number: 3, title: "Valid", state: "OPEN", url: "https://github.com/o/r/pull/3", headRefName: "feature/c" },
+    ]);
+    mockExecImpl.current = createExecStub((cmd) => {
+      if (cmd === "gh") return { stdout: prJson };
+      throw new Error(`Unhandled exec call: ${cmd}`);
+    });
+
+    const { getPullRequestsForBranches } = await import("./github.ts");
+    const map = await getPullRequestsForBranches(["feature/a", "feature/b", "feature/c"]);
+
+    expect(map.has("feature/a")).toBe(false);
+    expect(map.has("feature/b")).toBe(false);
+    expect(map.get("feature/c")?.number).toBe(3);
+  });
+
+  test("passes correct arguments to gh (state all, headRefName, no per-branch --head)", async () => {
+    let capturedArgs: string[] = [];
+    mockExecImpl.current = createExecStub((cmd, args) => {
+      if (cmd === "gh") {
+        capturedArgs = args;
         return { stdout: "[]" };
       }
-      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
+      throw new Error(`Unhandled exec call: ${cmd}`);
     });
 
-    const { getPullRequestForBranch } = await import("./github.ts");
-    expect(await getPullRequestForBranch("feature/test")).toBeNull();
-  });
-
-  test("returns null when JSON is invalid", async () => {
-    mockExecImpl.current = createExecStub((_cmd, args) => {
-      if (_cmd === "gh") {
-        return { stdout: "not json" };
-      }
-      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
-    });
-
-    const { getPullRequestForBranch } = await import("./github.ts");
-    expect(await getPullRequestForBranch("feature/test")).toBeNull();
-  });
-
-  test("returns null when PR object has missing fields", async () => {
-    const prJson = JSON.stringify([{ number: 123, title: "Test" }]);
-
-    mockExecImpl.current = createExecStub((_cmd, args) => {
-      if (_cmd === "gh") {
-        return { stdout: prJson };
-      }
-      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
-    });
-
-    const { getPullRequestForBranch } = await import("./github.ts");
-    expect(await getPullRequestForBranch("feature/test")).toBeNull();
-  });
-
-  test("returns null when PR state is unexpected value", async () => {
-    const prJson = JSON.stringify([{ number: 1, title: "Test", state: "DRAFT", url: "https://github.com/o/r/pull/1" }]);
-
-    mockExecImpl.current = createExecStub((_cmd, args) => {
-      if (_cmd === "gh") {
-        return { stdout: prJson };
-      }
-      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
-    });
-
-    const { getPullRequestForBranch } = await import("./github.ts");
-    expect(await getPullRequestForBranch("feature/test")).toBeNull();
-  });
-
-  test("passes correct arguments to gh", async () => {
-    let capturedArgs: string[] = [];
-    const prJson = JSON.stringify([{ number: 1, title: "Test", state: "OPEN", url: "https://github.com/o/r/pull/1" }]);
-
-    mockExecImpl.current = createExecStub((_cmd, args) => {
-      if (_cmd === "gh") {
-        capturedArgs = args;
-        return { stdout: prJson };
-      }
-      throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
-    });
-
-    const { getPullRequestForBranch } = await import("./github.ts");
-    await getPullRequestForBranch("feature/auth");
+    const { getPullRequestsForBranches } = await import("./github.ts");
+    await getPullRequestsForBranches(["feature/auth"]);
 
     expect(capturedArgs).toContain("pr");
     expect(capturedArgs).toContain("list");
-    expect(capturedArgs).toContain("--head");
-    expect(capturedArgs).toContain("feature/auth");
     expect(capturedArgs).toContain("--state");
     expect(capturedArgs).toContain("all");
+    expect(capturedArgs).toContain("--json");
+    expect(capturedArgs.some((a) => a.includes("headRefName"))).toBe(true);
     expect(capturedArgs).toContain("--limit");
-    expect(capturedArgs).toContain("1");
+    expect(capturedArgs).not.toContain("--head");
   });
 });
