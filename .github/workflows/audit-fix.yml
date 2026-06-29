@@ -57,5 +57,4 @@ jobs:
             ## Test plan
             - [ ] CI passes (audit, lint, test, build)
             - [ ] Verify no breaking changes from updated dependencies
-          reviewers: hytfjwr
           delete-branch: true
