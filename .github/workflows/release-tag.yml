@@ -16,7 +16,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      # Release Tag pushes a tag, so the checkout token must persist.
+      - name: Checkout repository # zizmor: ignore[artipacked]
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 2
@@ -30,33 +31,40 @@ jobs:
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "Version unchanged ($CURRENT), skipping"
           else
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-            echo "version=$CURRENT" >> "$GITHUB_OUTPUT"
-            echo "tag=v${CURRENT}" >> "$GITHUB_OUTPUT"
+            {
+              echo "changed=true"
+              echo "version=$CURRENT"
+              echo "tag=v${CURRENT}"
+            } >> "$GITHUB_OUTPUT"
           fi
 
       - name: Check if tag already exists
         if: steps.version.outputs.changed == 'true'
         id: check
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
         run: |
-          if git ls-remote --tags origin "refs/tags/${{ steps.version.outputs.tag }}" | grep -q .; then
+          if git ls-remote --tags origin "refs/tags/${TAG}" | grep -q .; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "Tag ${{ steps.version.outputs.tag }} already exists, skipping"
+            echo "Tag ${TAG} already exists, skipping"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Create and push tag
         if: steps.version.outputs.changed == 'true' && steps.check.outputs.exists == 'false'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag "${{ steps.version.outputs.tag }}"
-          git push origin "${{ steps.version.outputs.tag }}"
+          git tag "$TAG"
+          git push origin "$TAG"
 
       - name: Create GitHub Release
         if: steps.version.outputs.changed == 'true' && steps.check.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
         run: |
-          gh release create "${{ steps.version.outputs.tag }}" --generate-notes
+          gh release create "$TAG" --generate-notes

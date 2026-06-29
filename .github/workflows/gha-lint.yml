@@ -1,0 +1,40 @@
+name: GHA Lint
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  gha-lint:
+    name: Lint & audit workflows
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      # Run the three GitHub Actions static-analysis tools concurrently.
+      # `parallel` runs each step as a background step with an implicit wait
+      # after the group. See:
+      # https://github.blog/changelog/2026-06-25-actions-steps-can-now-be-run-in-parallel/
+      - parallel:
+          - name: Lint workflows (actionlint)
+            uses: raven-actions/actionlint@3d39aea434753780c3b3d4a1a31c854b4dbf49d7 # v2.2.0
+
+          - name: Audit workflows (zizmor)
+            uses: zizmorcore/zizmor-action@192e21d79ab29983730a13d1382995c2307fbcaa # v0.5.7
+            with:
+              advanced-security: false
+              annotations: true
+
+          - name: Verify actions are pinned (pinact)
+            uses: suzuki-shunsuke/pinact-action@896d595f299e71d65b9d28349d6956abe144390a # v3.0.0
+            with:
+              fix: "false"

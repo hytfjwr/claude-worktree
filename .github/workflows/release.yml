@@ -29,17 +29,20 @@ jobs:
     steps:
       - name: Validate custom version
         if: inputs.version == 'custom'
+        env:
+          CUSTOM_VERSION: ${{ inputs.custom_version }}
         run: |
-          if [ -z "${{ inputs.custom_version }}" ]; then
+          if [ -z "$CUSTOM_VERSION" ]; then
             echo "::error::custom_version is required when version is 'custom'"
             exit 1
           fi
-          if ! echo "${{ inputs.custom_version }}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+          if ! echo "$CUSTOM_VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
             echo "::error::custom_version must be a valid semver (e.g. 1.2.3)"
             exit 1
           fi
 
-      - name: Checkout repository
+      # Release pushes a branch, so the checkout token must persist.
+      - name: Checkout repository # zizmor: ignore[artipacked]
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Setup
@@ -47,11 +50,14 @@ jobs:
 
       - name: Bump version
         id: bump
+        env:
+          VERSION_TYPE: ${{ inputs.version }}
+          CUSTOM_VERSION: ${{ inputs.custom_version }}
         run: |
-          if [ "${{ inputs.version }}" = "custom" ]; then
-            pnpm version "${{ inputs.custom_version }}" --no-git-tag-version
+          if [ "$VERSION_TYPE" = "custom" ]; then
+            pnpm version "$CUSTOM_VERSION" --no-git-tag-version
           else
-            pnpm version "${{ inputs.version }}" --no-git-tag-version
+            pnpm version "$VERSION_TYPE" --no-git-tag-version
           fi
           VERSION=$(node -p "require('./package.json').version")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
@@ -59,8 +65,8 @@ jobs:
       - name: Create branch, commit, and push
         env:
           LEFTHOOK: "0"
+          VERSION: ${{ steps.bump.outputs.version }}
         run: |
-          VERSION="${{ steps.bump.outputs.version }}"
           BRANCH="release/v${VERSION}"
 
           git config user.name "github-actions[bot]"
@@ -74,8 +80,8 @@ jobs:
       - name: Create Pull Request
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.bump.outputs.version }}
         run: |
-          VERSION="${{ steps.bump.outputs.version }}"
           BRANCH="release/v${VERSION}"
           EXISTING=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number')
           if [ -n "$EXISTING" ]; then
