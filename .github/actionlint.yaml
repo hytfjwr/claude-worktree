@@ -1,0 +1,13 @@
+# actionlint configuration
+# https://github.com/rhysd/actionlint/blob/main/docs/config.md
+
+paths:
+  # gha-lint.yml uses the `parallel:` step keyword, a GitHub Actions feature
+  # shipped on 2026-06-25. GitHub's runner supports it, but actionlint does not
+  # yet recognize the keyword and reports a false "step must run script ..."
+  # syntax error. Scope the ignore to this single file so the check stays active
+  # everywhere else. Remove this entry once actionlint adds support.
+  # https://github.blog/changelog/2026-06-25-actions-steps-can-now-be-run-in-parallel/
+  .github/workflows/gha-lint.yml:
+    ignore:
+      - 'step must run script with "run" section or run action with "uses" section'
