@@ -361,6 +361,11 @@ describe("getGitContext", () => {
       if (args.includes("--show-toplevel")) {
         return { stdout: "", stderr: "fatal: not a git repository", exitCode: 128 };
       }
+      // getGitContext runs both queries concurrently, so the branch query fires
+      // even when repo detection fails — its result must not mask the repo error
+      if (args.includes("--show-current")) {
+        return { stdout: "main\n" };
+      }
       throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
     });
 
@@ -850,6 +855,11 @@ describe("listWorktrees", () => {
     mockExecImpl.current = createExecStub((_cmd, args) => {
       if (args.includes("--porcelain") && args.includes("list")) {
         return { stdout: "", exitCode: 128 };
+      }
+      // listWorktrees runs main-branch detection concurrently with the listing,
+      // so getMainBranch's symbolic-ref query fires even when the listing fails
+      if (args.includes("symbolic-ref")) {
+        return { stdout: "refs/remotes/origin/main\n" };
       }
       throw new Error(`Unhandled exec call: ${_cmd} ${args.join(" ")}`);
     });

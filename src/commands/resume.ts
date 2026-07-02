@@ -159,9 +159,16 @@ export async function runResume(args: ResumeArgs, deps: ResumeDeps = defaultDeps
     backend = await deps.ensurePaneBackend("claude-worktree resume <branch-name>");
   }
 
-  // Get worktree list
-  await deps.getGitContext();
-  const { worktrees } = await deps.listWorktrees();
+  // Get worktree list. Both calls are independent; when both fail (e.g. not a
+  // git repo), prefer getGitContext's friendlier error message.
+  const [ctxResult, listResult] = await Promise.allSettled([deps.getGitContext(), deps.listWorktrees()]);
+  if (ctxResult.status === "rejected") {
+    throw ctxResult.reason;
+  }
+  if (listResult.status === "rejected") {
+    throw listResult.reason;
+  }
+  const { worktrees } = listResult.value;
   const nonMainWorktrees = worktrees.filter((w) => !w.isMain);
 
   if (nonMainWorktrees.length === 0) {
