@@ -14,10 +14,15 @@ import { GitError } from "./errors.ts";
 import { exec } from "./exec.ts";
 
 export async function getGitContext(): Promise<GitContext> {
-  let repoRoot: string;
-  try {
-    repoRoot = (await exec("git", ["rev-parse", "--show-toplevel"]).text()).trim();
-  } catch (err) {
+  // Both are independent read-only queries — run them concurrently.
+  // Error handling prefers the repo-detection failure so user-facing messages stay the same.
+  const [rootResult, branchResult] = await Promise.allSettled([
+    exec("git", ["rev-parse", "--show-toplevel"]).text(),
+    exec("git", ["branch", "--show-current"]).text(),
+  ]);
+
+  if (rootResult.status === "rejected") {
+    const err = rootResult.reason;
     const message = err instanceof Error ? err.message : String(err);
     // Distinguish "not a git repo" from other failures (e.g., git not installed)
     if (message.includes("not a git repository") || message.includes("ENOENT")) {
@@ -29,6 +34,8 @@ export async function getGitContext(): Promise<GitContext> {
     }
     throw new GitError(`Failed to detect git repository: ${message}`);
   }
+
+  const repoRoot = rootResult.value.trim();
   if (!repoRoot) {
     throw new GitError(
       `Not in a git repository (cwd: ${process.cwd()})\n\n` +
@@ -37,7 +44,10 @@ export async function getGitContext(): Promise<GitContext> {
     );
   }
 
-  const currentBranch = (await exec("git", ["branch", "--show-current"]).text()).trim();
+  if (branchResult.status === "rejected") {
+    throw branchResult.reason;
+  }
+  const currentBranch = branchResult.value.trim();
   if (!currentBranch) {
     throw new GitError("Could not determine current branch. You may be in a detached HEAD state.");
   }
@@ -143,12 +153,15 @@ export function parseWorktreePorcelain(output: string, mainBranch: string): Pars
 }
 
 export async function listWorktrees(): Promise<ListWorktreesResult> {
-  const result = await exec("git", ["worktree", "list", "--porcelain"]).nothrow().quiet();
+  // The worktree listing and main-branch detection are independent — run them concurrently.
+  const [result, mainBranch] = await Promise.all([
+    exec("git", ["worktree", "list", "--porcelain"]).nothrow().quiet(),
+    getMainBranch(),
+  ]);
   if (result.exitCode !== 0) {
     throw new GitError("Failed to list worktrees. Are you in a git repository?");
   }
   const output = result.text().trim();
-  const mainBranch = await getMainBranch();
   if (!output) {
     return { worktrees: [], mainBranch };
   }

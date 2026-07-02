@@ -257,8 +257,8 @@ async function handleExistingWorktree(
     }
   }
 
-  await deps.deleteSlot(existingWorktree.path);
-  await deps.deleteSession(existingWorktree.path);
+  // Slot and session caches use separate lock files — safe to delete concurrently.
+  await Promise.all([deps.deleteSlot(existingWorktree.path), deps.deleteSession(existingWorktree.path)]);
 
   logInfo("");
   return true;
@@ -507,6 +507,15 @@ export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps
   const worktreePath = deps.getWorktreePath(git.repoRoot, git.repoName, branchName);
   const effectiveBaseBranch = baseBranch ?? git.currentBranch;
 
+  // Kick off independent local lookups now — they overlap with base-branch
+  // verification and the optional -pull fetch below. No-op catches prevent an
+  // unhandled rejection if an earlier step throws first; real errors still
+  // surface at the awaits below.
+  const configPromise = deps.loadProjectConfig(git.repoRoot);
+  const worktreesPromise = deps.listWorktrees();
+  configPromise.catch(() => {});
+  worktreesPromise.catch(() => {});
+
   // Verify base branch exists when explicitly specified
   if (baseBranch) {
     const exists = await deps.verifyBranchRef(baseBranch);
@@ -544,10 +553,10 @@ export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps
     }
   }
 
-  const config = await deps.loadProjectConfig(git.repoRoot);
+  const config = await configPromise;
 
   // Fetch worktrees once and reuse for both limit check and existing worktree detection
-  const { worktrees } = await deps.listWorktrees();
+  const { worktrees } = await worktreesPromise;
   const existingWorktree = worktrees.find((w) => w.branch === branchName) ?? null;
 
   // Detect worktree path collision (e.g., "feature/auth" and "feature-auth" both map to the same path)

@@ -183,6 +183,14 @@ export async function executeList(args: ListArgs, deps: ListDeps = defaultDeps):
   let succeeded = false;
 
   try {
+    // Kick off the local worktree scan immediately — it is independent of the remote
+    // ref lookups below, so it overlaps with the `git ls-remote` network round-trip.
+    // The no-op catch prevents an unhandled rejection from crashing the process if
+    // the scan fails while the remote lookups are still in flight; the real error
+    // still surfaces at the `await` below.
+    const worktreesPromise = deps.listWorktrees();
+    worktreesPromise.catch(() => {});
+
     // Capture remote tracking branches BEFORE fetching/pruning
     let trackedBranches: Set<string> | undefined;
     let remoteBranches: Set<string> | undefined;
@@ -204,39 +212,44 @@ export async function executeList(args: ListArgs, deps: ListDeps = defaultDeps):
       }
     }
 
-    const { worktrees, mainBranch } = await deps.listWorktrees();
+    const { worktrees, mainBranch } = await worktreesPromise;
 
     if (worktrees.length > 0) {
-      // These three are independent (each derives only from `worktrees`), so run them
-      // concurrently: the git status work overlaps with the external pane spawns (wezterm/tmux)
-      // and the sessions file read, instead of paying for them sequentially.
-      const [statuses, allPanes, sessions] = await Promise.all([
+      // All four are independent (each derives only from `worktrees`), so run them
+      // concurrently: the status computation overlaps with the external pane spawns
+      // (wezterm/tmux), the sessions file read, and the per-worktree commit lookups.
+      const [statuses, allPanes, sessions, commitInfos] = await Promise.all([
         deps.getWorktreeStatuses(worktrees, mainBranch, trackedBranches, remoteBranches),
         args.noStatus ? Promise.resolve({ wezterm: null, tmux: null }) : fetchAllPanes(deps),
         args.noStatus ? Promise.resolve<Record<string, SessionInfo>>({}) : deps.readAllSessions(),
+        promiseAllLimit(
+          worktrees.map(
+            (worktree) => () =>
+              Promise.all([
+                deps.getLastCommit(worktree.path),
+                worktree.branch && !worktree.isMain
+                  ? deps.getAheadBehind(worktree.branch, mainBranch)
+                  : Promise.resolve<AheadBehind | null>(null),
+              ]),
+          ),
+        ),
       ]);
 
-      // Build entries (parallelize per-worktree git operations with concurrency limit)
-      result.entries = await promiseAllLimit(
-        statuses.map((status) => async () => {
-          const [commit, aheadBehind] = await Promise.all([
-            deps.getLastCommit(status.worktree.path),
-            status.worktree.branch && !status.worktree.isMain
-              ? deps.getAheadBehind(status.worktree.branch, mainBranch)
-              : Promise.resolve(null),
-          ]);
+      // Both getWorktreeStatuses and promiseAllLimit preserve input order, so
+      // statuses[i] and commitInfos[i] refer to worktrees[i].
+      result.entries = statuses.map((status, i) => {
+        const [commit, aheadBehind] = commitInfos[i];
 
-          let session: SessionState | undefined;
-          if (!args.noStatus) {
-            const sessionInfo = sessions[status.worktree.path];
-            if (sessionInfo) {
-              session = determineSessionStatus(sessionInfo, allPanes);
-            }
+        let session: SessionState | undefined;
+        if (!args.noStatus) {
+          const sessionInfo = sessions[status.worktree.path];
+          if (sessionInfo) {
+            session = determineSessionStatus(sessionInfo, allPanes);
           }
+        }
 
-          return { worktree: status.worktree, status, commit, aheadBehind, session };
-        }),
-      );
+        return { worktree: status.worktree, status, commit, aheadBehind, session };
+      });
     }
 
     succeeded = true;

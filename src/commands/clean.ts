@@ -156,6 +156,12 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
   // Note: getRemoteBranches() calls `git ls-remote` (network I/O), so show a spinner
   let trackedBranches: Set<string> | undefined;
   let remoteBranches: Set<string> | undefined;
+  // Kick off the local worktree scan immediately so it overlaps with the
+  // `git ls-remote` network round-trip below. The no-op catch prevents an
+  // unhandled rejection from crashing the process before the `await` below.
+  const worktreesResultPromise = deps.listWorktrees();
+  worktreesResultPromise.catch(() => {});
+
   const fetchSpinner = deps.startSpinner("Updating remote references...");
   try {
     [trackedBranches, remoteBranches] = await Promise.all([deps.getRemoteTrackingBranches(), deps.getRemoteBranches()]);
@@ -171,7 +177,7 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
   let worktrees: Awaited<ReturnType<CleanDeps["listWorktrees"]>>["worktrees"];
   let statuses: Awaited<ReturnType<CleanDeps["getWorktreeStatuses"]>>;
   try {
-    const listResult = await deps.listWorktrees();
+    const listResult = await worktreesResultPromise;
     worktrees = listResult.worktrees;
 
     if (worktrees.length === 0) {
@@ -194,6 +200,10 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
     return result;
   }
 
+  // Session-status lookup is independent of the PR lookup below and never rejects
+  // (errors are swallowed inside) — run it concurrently with the gh call.
+  const sessionStateMapPromise = fetchRunningSessionMap(cleanableStatuses, deps);
+
   // Fetch PR info for all cleanable branches in a single gh call (keyed by branch name)
   let prMap = new Map<string, PullRequestInfo>();
   const ghAvailable = await deps.checkGhAvailable();
@@ -211,7 +221,7 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
   }
 
   // Fetch session statuses to warn about running Claude sessions
-  const sessionStateMap = await fetchRunningSessionMap(cleanableStatuses, deps);
+  const sessionStateMap = await sessionStateMapPromise;
 
   let toDelete: WorktreeStatus[];
   let unpushedMap: Map<string, number | null>;
@@ -413,8 +423,8 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
       }
 
       // Delete cached slot and session
-      await deps.deleteSlot(worktree.path);
-      await deps.deleteSession(worktree.path);
+      // Slot and session caches use separate lock files — safe to delete concurrently.
+      await Promise.all([deps.deleteSlot(worktree.path), deps.deleteSession(worktree.path)]);
 
       spinner.stop(`${icons.success()} ${label}`);
       result.deleted.push(worktree.path);
