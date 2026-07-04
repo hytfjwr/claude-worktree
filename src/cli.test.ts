@@ -99,6 +99,7 @@ describe("parseArgs", () => {
           pr: false,
           pull: false,
           baseBranch: undefined,
+          model: undefined,
           pane: false,
           quiet: false,
           verbose: false,
@@ -186,6 +187,7 @@ describe("parseCreateArgs", () => {
       pr: false,
       pull: false,
       baseBranch: undefined,
+      model: undefined,
       pane: false,
       quiet: false,
       verbose: false,
@@ -467,6 +469,23 @@ describe("parseCreateArgs", () => {
 
   test("-base without argument throws", () => {
     expect(() => parseCreateArgs(["feature/test", "Prompt", "-base"])).toThrow("-base requires a branch name argument");
+  });
+
+  test("-model option", () => {
+    const result = parseCreateArgs(["feature/test", "Prompt", "-model", "sonnet"]);
+    expect(result.model).toBe("sonnet");
+  });
+
+  test("-model requires an argument", () => {
+    expect(() => parseCreateArgs(["feature/test", "Prompt", "-model"])).toThrow(
+      "-model requires a model name argument",
+    );
+  });
+
+  test("-m is still merge, not model", () => {
+    const result = parseCreateArgs(["feature/test", "Prompt", "-m"]);
+    expect(result.merge).toBe(true);
+    expect(result.model).toBeUndefined();
   });
 
   test("no arguments throws usage error", () => {
@@ -983,6 +1002,7 @@ describe("parseResumeArgs", () => {
       branchName: undefined,
       prompt: undefined,
       danger: false,
+      model: undefined,
       pane: false,
       quiet: false,
       verbose: false,
@@ -995,6 +1015,7 @@ describe("parseResumeArgs", () => {
       branchName: "feature/test",
       prompt: undefined,
       danger: false,
+      model: undefined,
       pane: false,
       quiet: false,
       verbose: false,
@@ -1007,6 +1028,7 @@ describe("parseResumeArgs", () => {
       branchName: "feature/test",
       prompt: "Continue the work",
       danger: false,
+      model: undefined,
       pane: false,
       quiet: false,
       verbose: false,
@@ -1057,6 +1079,18 @@ describe("parseResumeArgs", () => {
   test("-v option", () => {
     const result = parseResumeArgs(["feature/test", "-v"]);
     expect(result.verbose).toBe(true);
+  });
+
+  test("-model option", () => {
+    const result = parseResumeArgs(["feature/test", "-model", "opus"]);
+    expect(result.model).toBe("opus");
+  });
+
+  test("-model with branch and prompt", () => {
+    const result = parseResumeArgs(["feature/test", "-model", "sonnet", "continue"]);
+    expect(result.branchName).toBe("feature/test");
+    expect(result.prompt).toBe("continue");
+    expect(result.model).toBe("sonnet");
   });
 
   test("all options combined", () => {

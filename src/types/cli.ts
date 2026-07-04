@@ -10,6 +10,7 @@ export type CreateArgs = {
   draft?: boolean;
   pr?: boolean;
   baseBranch?: string;
+  model?: string;
   pull?: boolean;
   pane?: boolean;
   verbose?: boolean;
@@ -21,6 +22,7 @@ export type ResumeArgs = {
   branchName?: string;
   prompt?: string;
   danger?: boolean;
+  model?: string;
   pane?: boolean;
   verbose?: boolean;
   quiet?: boolean;

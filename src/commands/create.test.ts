@@ -251,6 +251,23 @@ describe("buildClaudeOptions", () => {
     expect(result).not.toHaveProperty("draftInstructions");
     expect(result).not.toHaveProperty("prInstructions");
   });
+
+  test("sets model from model arg", () => {
+    const result = buildClaudeOptions(
+      { prompt: "do it", model: "sonnet" },
+      git,
+      "/repo/.worktrees/feat-x",
+      "main",
+      "feat/x",
+      null,
+    );
+    expect(result.model).toBe("sonnet");
+  });
+
+  test("omits model when not set", () => {
+    const result = buildClaudeOptions({ prompt: "do it" }, git, "/repo/.worktrees/feat-x", "main", "feat/x", null);
+    expect(result).not.toHaveProperty("model");
+  });
 });
 
 // =============================================================================

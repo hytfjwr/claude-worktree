@@ -231,6 +231,7 @@ export async function runResume(args: ResumeArgs, deps: ResumeDeps = defaultDeps
   const claudeCommand = deps.buildResumeCommand({
     prompt,
     dangerouslySkipPermissions: args.danger,
+    model: args.model,
   });
 
   if (verbose) {

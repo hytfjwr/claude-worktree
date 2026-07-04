@@ -34,6 +34,7 @@ Options:
   -p, -pane       Open in a new pane (requires WezTerm or tmux; default: run in current terminal)
   -plan <file>    Read prompt from a plan file (cannot be used with inline prompt)
   -b, -base <branch>  Specify base branch (default: current branch)
+  -model <name>   Language model to use (e.g. sonnet, opus; passed to claude --model)
   -d, -danger     Run Claude without permission prompts (uses --dangerously-skip-permissions)
   -m, -merge      Auto-merge into base branch and cleanup after task completion (cannot be used with -draft or -pr)
   -draft          Auto-create Draft PR after task completion (cannot be used with -merge or -pr)
@@ -48,6 +49,7 @@ Options:
 Resume options:
   -p, -pane      Open in a new pane (requires WezTerm or tmux)
   -d, -danger    Run Claude without permission prompts (uses --dangerously-skip-permissions)
+  -model <name>  Language model to use (passed to claude --model)
   -q, -quiet     Suppress informational output (errors only)
   -v, -verbose   Show verbose output
 
@@ -107,6 +109,7 @@ Options:
   -p, -pane            Open in a new pane (requires WezTerm or tmux; default: run in current terminal)
   -plan <file>         Read prompt from a plan file (cannot be used with inline prompt)
   -b, -base <branch>   Specify base branch (default: current branch)
+  -model <name>        Language model to use (e.g. sonnet, opus; passed to claude --model)
   -d, -danger          Run Claude without permission prompts (uses --dangerously-skip-permissions)
   -m, -merge           Auto-merge into base branch and cleanup after task completion (cannot be used with -draft or -pr)
   -draft               Auto-create Draft PR after task completion (cannot be used with -merge or -pr)
@@ -199,6 +202,7 @@ Arguments:
 Options:
   -p, -pane      Open in a new pane (requires WezTerm or tmux; default: run in current terminal)
   -d, -danger    Run Claude without permission prompts (uses --dangerously-skip-permissions)
+  -model <name>  Language model to use (passed to claude --model)
   -q, -quiet     Suppress informational output (errors only)
   -v, -verbose   Show verbose output
   -h, -help      Show this help
@@ -304,6 +308,7 @@ export function parseCreateArgs(args: string[]): CreateArgs {
       verbose: { type: "boolean", flag: "-verbose", alias: "-v" },
       baseBranch: { type: "string", flag: "-base", alias: "-b", errorMessage: "-base requires a branch name argument" },
       planFile: { type: "string", flag: "-plan", errorMessage: "-plan requires a file path argument" },
+      model: { type: "string", flag: "-model", errorMessage: "-model requires a model name argument" },
     },
     unknownHandling: "error",
     ignoredFlags: ["-h", "-help"],
@@ -311,7 +316,7 @@ export function parseCreateArgs(args: string[]): CreateArgs {
   });
 
   const { pane, danger, merge, draft, pr, pull, dryRun, quiet, verbose } = booleans;
-  const { baseBranch, planFile } = strings;
+  const { baseBranch, planFile, model } = strings;
 
   if (baseBranch) {
     assertValidBranchName(baseBranch, "base branch name");
@@ -352,6 +357,7 @@ export function parseCreateArgs(args: string[]): CreateArgs {
     pr,
     pull,
     baseBranch,
+    model,
     pane,
     quiet,
     verbose,
@@ -360,12 +366,13 @@ export function parseCreateArgs(args: string[]): CreateArgs {
 }
 
 export function parseResumeArgs(args: string[]): ResumeArgs {
-  const { booleans, remaining } = extractOptions(args, {
+  const { booleans, strings, remaining } = extractOptions(args, {
     options: {
       pane: { type: "boolean", flag: "-pane", alias: "-p" },
       danger: { type: "boolean", flag: "-danger", alias: "-d" },
       quiet: { type: "boolean", flag: "-quiet", alias: "-q" },
       verbose: { type: "boolean", flag: "-verbose", alias: "-v" },
+      model: { type: "string", flag: "-model", errorMessage: "-model requires a model name argument" },
     },
     unknownHandling: "error",
     ignoredFlags: ["-h", "-help"],
@@ -386,6 +393,7 @@ export function parseResumeArgs(args: string[]): ResumeArgs {
     branchName,
     prompt,
     danger,
+    model: strings.model,
     pane,
     quiet,
     verbose,

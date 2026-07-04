@@ -104,15 +104,16 @@ export function shellEscape(s: string): string {
 }
 
 export function buildResumeCommand(options: ResumeCommandOptions): string {
-  const { prompt, dangerouslySkipPermissions = false } = options;
+  const { prompt, dangerouslySkipPermissions = false, model } = options;
 
   const dangerFlag = dangerouslySkipPermissions ? " --dangerously-skip-permissions" : "";
+  const modelFlag = model ? ` --model ${shellEscape(model)}` : "";
 
   if (!prompt) {
-    return `claude --continue${dangerFlag}`;
+    return `claude --continue${dangerFlag}${modelFlag}`;
   }
 
-  return `claude --continue${dangerFlag} -- ${shellEscape(prompt)}`;
+  return `claude --continue${dangerFlag}${modelFlag} -- ${shellEscape(prompt)}`;
 }
 
 export function buildClaudeCommand(options: ClaudeOptions): string {
@@ -121,6 +122,7 @@ export function buildClaudeCommand(options: ClaudeOptions): string {
     prompt,
     promptSuffix = DEFAULT_PROMPT_SUFFIX,
     dangerouslySkipPermissions = false,
+    model,
     mergeInstructions,
     draftInstructions,
     prInstructions,
@@ -141,6 +143,7 @@ export function buildClaudeCommand(options: ClaudeOptions): string {
   }
 
   const dangerFlag = dangerouslySkipPermissions ? "--dangerously-skip-permissions " : "";
+  const modelFlag = model ? `--model ${shellEscape(model)} ` : "";
 
-  return `claude ${dangerFlag}--permission-mode ${permissionMode} -- ${shellEscape(fullPrompt)}`;
+  return `claude ${dangerFlag}${modelFlag}--permission-mode ${permissionMode} -- ${shellEscape(fullPrompt)}`;
 }

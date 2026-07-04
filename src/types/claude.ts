@@ -22,6 +22,7 @@ export type ClaudeOptions = {
   prompt: string;
   promptSuffix?: string;
   dangerouslySkipPermissions?: boolean;
+  model?: string;
   mergeInstructions?: MergeInstructions;
   draftInstructions?: DraftInstructions;
   prInstructions?: PrInstructions;
@@ -30,4 +31,5 @@ export type ClaudeOptions = {
 export type ResumeCommandOptions = {
   prompt?: string;
   dangerouslySkipPermissions?: boolean;
+  model?: string;
 };
