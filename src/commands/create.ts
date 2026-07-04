@@ -148,7 +148,7 @@ export function getSelfCommand(): string {
  * Build Claude command options from create args and git context.
  */
 export function buildClaudeOptions(
-  args: Pick<CreateArgs, "prompt" | "danger" | "merge" | "draft" | "pr">,
+  args: Pick<CreateArgs, "prompt" | "danger" | "merge" | "draft" | "pr" | "model">,
   git: GitContext,
   worktreePath: string,
   effectiveBaseBranch: string,
@@ -158,6 +158,7 @@ export function buildClaudeOptions(
   return {
     prompt: args.prompt,
     dangerouslySkipPermissions: args.danger,
+    ...(args.model && { model: args.model }),
     ...(config?.permissionMode && { permissionMode: config.permissionMode }),
     ...(args.merge && {
       mergeInstructions: {

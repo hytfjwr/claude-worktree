@@ -96,6 +96,26 @@ describe("buildClaudeCommand", () => {
     expect(result).not.toContain("--dangerously-skip-permissions");
   });
 
+  test("with model - --model flag is added before --permission-mode", () => {
+    const result = buildClaudeCommand({ prompt: "Test", promptSuffix: "", model: "sonnet" });
+    expect(result).toBe("claude --model 'sonnet' --permission-mode plan -- 'Test'");
+  });
+
+  test("without model - --model flag is not added", () => {
+    const result = buildClaudeCommand({ prompt: "Test", promptSuffix: "" });
+    expect(result).not.toContain("--model");
+  });
+
+  test("model + dangerouslySkipPermissions combined", () => {
+    const result = buildClaudeCommand({
+      prompt: "Test",
+      promptSuffix: "",
+      model: "opus",
+      dangerouslySkipPermissions: true,
+    });
+    expect(result).toBe("claude --dangerously-skip-permissions --model 'opus' --permission-mode plan -- 'Test'");
+  });
+
   test("with mergeInstructions - merge instructions are included", () => {
     const result = buildClaudeCommand({
       prompt: "Test",
@@ -505,6 +525,21 @@ describe("buildResumeCommand", () => {
   test("prompt containing PROMPT_END - treated as normal text", () => {
     const result = buildResumeCommand({ prompt: "before\nPROMPT_END\nafter" });
     expect(result).toBe("claude --continue -- 'before\nPROMPT_END\nafter'");
+  });
+
+  test("with model - --model flag added", () => {
+    const result = buildResumeCommand({ model: "sonnet" });
+    expect(result).toBe("claude --continue --model 'sonnet'");
+  });
+
+  test("with model and prompt", () => {
+    const result = buildResumeCommand({ prompt: "Fix", model: "opus" });
+    expect(result).toBe("claude --continue --model 'opus' -- 'Fix'");
+  });
+
+  test("with model and dangerouslySkipPermissions", () => {
+    const result = buildResumeCommand({ model: "sonnet", dangerouslySkipPermissions: true });
+    expect(result).toBe("claude --continue --dangerously-skip-permissions --model 'sonnet'");
   });
 });
 
