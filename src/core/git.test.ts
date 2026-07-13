@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -14,6 +14,7 @@ import {
   parseAheadBehind,
   parseCommitLog,
   parseWorktreePorcelain,
+  removeWorktreeParentDirIfEmpty,
 } from "./git.ts";
 
 // Hoisted mock for ./exec — default passthrough, overridable per-test via mockExecImpl
@@ -39,31 +40,31 @@ vi.mock("./exec.ts", async (importOriginal) => {
 // ============================================================================
 
 describe("getWorktreePath", () => {
-  test("branch with slash - feature/test -> repo-feature-test", () => {
+  test("branch with slash - feature/test -> repo-worktrees/feature-test", () => {
     const result = getWorktreePath("/path/to/repo", "repo", "feature/test");
-    expect(result).toBe("/path/to/repo-feature-test");
+    expect(result).toBe("/path/to/repo-worktrees/feature-test");
   });
 
-  test("multiple slashes - feature/auth/oauth -> repo-feature-auth-oauth", () => {
+  test("multiple slashes - feature/auth/oauth -> repo-worktrees/feature-auth-oauth", () => {
     const result = getWorktreePath("/path/to/repo", "repo", "feature/auth/oauth");
-    expect(result).toBe("/path/to/repo-feature-auth-oauth");
+    expect(result).toBe("/path/to/repo-worktrees/feature-auth-oauth");
   });
 
-  test("no slash - main -> repo-main", () => {
+  test("no slash - main -> repo-worktrees/main", () => {
     const result = getWorktreePath("/path/to/repo", "repo", "main");
-    expect(result).toBe("/path/to/repo-main");
+    expect(result).toBe("/path/to/repo-worktrees/main");
   });
 
   test("different repository name", () => {
     const result = getWorktreePath("/home/user/projects/my-app", "my-app", "fix/bug-123");
-    expect(result).toBe("/home/user/projects/my-app-fix-bug-123");
+    expect(result).toBe("/home/user/projects/my-app-worktrees/fix-bug-123");
   });
 
   test("branches differing only in / vs - produce the same path (collision scenario)", () => {
     const result1 = getWorktreePath("/path/to/repo", "repo", "feature/auth");
     const result2 = getWorktreePath("/path/to/repo", "repo", "feature-auth");
     expect(result1).toBe(result2);
-    expect(result1).toBe("/path/to/repo-feature-auth");
+    expect(result1).toBe("/path/to/repo-worktrees/feature-auth");
   });
 });
 
@@ -1594,6 +1595,68 @@ describe("removeWorktree (integration)", () => {
     // Verify worktree is gone
     const listResult = (await git(["worktree", "list", "--porcelain"]).text()).trim();
     expect(listResult).not.toContain(worktreePath);
+  });
+});
+
+describe("removeWorktreeParentDirIfEmpty (integration)", () => {
+  let tempDir: string;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "worktree-parent-"));
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  test("empty -worktrees directory is removed and returns true", async () => {
+    const parentDir = join(tempDir, "repo-worktrees");
+    await mkdir(parentDir);
+
+    const result = await removeWorktreeParentDirIfEmpty(join(parentDir, "some-branch"));
+
+    expect(result).toBe(true);
+    await expect(stat(parentDir)).rejects.toThrow();
+  });
+
+  test("non-empty -worktrees directory is not removed and returns false", async () => {
+    const parentDir = join(tempDir, "repo-worktrees");
+    await mkdir(parentDir);
+    await writeFile(join(parentDir, "other-branch"), "");
+
+    const result = await removeWorktreeParentDirIfEmpty(join(parentDir, "some-branch"));
+
+    expect(result).toBe(false);
+    await expect(stat(parentDir)).resolves.toBeDefined();
+  });
+
+  test("directory not ending with -worktrees is not removed even when empty", async () => {
+    const parentDir = join(tempDir, "repo-other");
+    await mkdir(parentDir);
+
+    const result = await removeWorktreeParentDirIfEmpty(join(parentDir, "some-branch"));
+
+    expect(result).toBe(false);
+    await expect(stat(parentDir)).resolves.toBeDefined();
+  });
+
+  test("non-existent parent directory returns false", async () => {
+    const parentDir = join(tempDir, "nonexistent-worktrees");
+
+    const result = await removeWorktreeParentDirIfEmpty(join(parentDir, "some-branch"));
+
+    expect(result).toBe(false);
+  });
+
+  test("-worktrees directory containing only .DS_Store is removed and returns true", async () => {
+    const parentDir = join(tempDir, "repo-worktrees");
+    await mkdir(parentDir);
+    await writeFile(join(parentDir, ".DS_Store"), "");
+
+    const result = await removeWorktreeParentDirIfEmpty(join(parentDir, "some-branch"));
+
+    expect(result).toBe(true);
+    await expect(stat(parentDir)).rejects.toThrow();
   });
 });
 
