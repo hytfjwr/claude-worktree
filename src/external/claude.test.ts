@@ -151,6 +151,7 @@ describe("buildClaudeCommand", () => {
     });
 
     expect(result).toContain('Remove worktree: git worktree remove "/custom/path/to/worktree"');
+    expect(result).toContain('Remove worktrees dir if empty: rmdir "/custom/path/to" 2>/dev/null || true');
   });
 
   test("without mergeInstructions - merge instructions are not included", () => {

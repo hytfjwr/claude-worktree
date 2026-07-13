@@ -1,6 +1,6 @@
 import { runHook } from "../core/config.ts";
 import { getErrorMessage } from "../core/errors.ts";
-import { deleteLocalBranch, removeWorktree } from "../core/git.ts";
+import { deleteLocalBranch, removeWorktree, removeWorktreeParentDirIfEmpty } from "../core/git.ts";
 import { deleteSession } from "../core/session.ts";
 import { deleteSlot } from "../core/slot.ts";
 import type { RollbackOptions } from "../types/index.ts";
@@ -35,6 +35,7 @@ export async function performRollback(options: RollbackOptions): Promise<void> {
   try {
     await removeWorktree(worktreePath);
     steps.push({ name: "worktree removal", success: true });
+    await removeWorktreeParentDirIfEmpty(worktreePath);
   } catch (err) {
     const message = getErrorMessage(err);
     if (verbose) logWarn(`  worktree removal failed: ${message}`);

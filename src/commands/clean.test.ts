@@ -22,6 +22,7 @@ function makeDeps(overrides: Partial<CleanDeps> = {}): CleanDeps {
     listWorktreePaths: async () => [],
     getWorktreeStatuses: async () => [],
     removeWorktree: async () => {},
+    removeWorktreeParentDirIfEmpty: vi.fn(async () => false),
     deleteLocalBranch: async () => {},
     getGitContext: async () => ({
       repoRoot: "/repo",
@@ -325,6 +326,40 @@ describe("executeClean", () => {
 
       expect(result.deleted).toEqual(["/tmp/repo-ok", "/tmp/repo-ok2"]);
       expect(result.errors).toEqual([{ path: "/tmp/repo-fail", error: "Failed" }]);
+    });
+
+    test("calls removeWorktreeParentDirIfEmpty for each successfully deleted worktree", async () => {
+      const wt1 = makeWorktree({ path: "/tmp/repo-a", branch: "feature/a" });
+      const wt2 = makeWorktree({ path: "/tmp/repo-b", branch: "feature/b" });
+      const status1 = makeStatus({ path: "/tmp/repo-a", branch: "feature/a" }, { canAutoClean: true });
+      const status2 = makeStatus({ path: "/tmp/repo-b", branch: "feature/b" }, { canAutoClean: true });
+      const removeWorktreeParentDirIfEmpty = vi.fn(async () => false);
+      const deps = makeDeps({
+        listWorktrees: async () => ({ worktrees: [wt1, wt2], mainBranch: "main" }),
+        getWorktreeStatuses: async () => [status1, status2],
+        removeWorktreeParentDirIfEmpty,
+      });
+
+      await executeClean({ ...defaultArgs, force: true }, deps);
+
+      expect(removeWorktreeParentDirIfEmpty).toHaveBeenCalledWith("/tmp/repo-a");
+      expect(removeWorktreeParentDirIfEmpty).toHaveBeenCalledWith("/tmp/repo-b");
+      expect(removeWorktreeParentDirIfEmpty).toHaveBeenCalledTimes(2);
+    });
+
+    test("does not call removeWorktreeParentDirIfEmpty when nothing is deleted (dry-run)", async () => {
+      const worktree = makeWorktree({ path: "/tmp/repo-dry-parent", branch: "feature/dry-parent" });
+      const status = makeStatus({ path: "/tmp/repo-dry-parent", branch: "feature/dry-parent" }, { canAutoClean: true });
+      const removeWorktreeParentDirIfEmpty = vi.fn(async () => false);
+      const deps = makeDeps({
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
+        getWorktreeStatuses: async () => [status],
+        removeWorktreeParentDirIfEmpty,
+      });
+
+      await executeClean({ ...defaultArgs, dryRun: true }, deps);
+
+      expect(removeWorktreeParentDirIfEmpty).not.toHaveBeenCalled();
     });
   });
 
