@@ -32,6 +32,7 @@ export type CleanDeps = {
     remoteBranches?: Set<string>,
   ) => Promise<WorktreeStatus[]>;
   removeWorktree: (path: string, force?: boolean) => Promise<void>;
+  removeWorktreeParentDirIfEmpty: (worktreePath: string) => Promise<boolean>;
   deleteLocalBranch: (branchName: string, force?: boolean) => Promise<void>;
   getGitContext: () => Promise<GitContext>;
   loadProjectConfig: (repoRoot: string) => Promise<ProjectConfig | null>;

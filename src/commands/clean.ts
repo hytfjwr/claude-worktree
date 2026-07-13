@@ -12,6 +12,7 @@ import {
   listWorktreePaths,
   listWorktrees,
   removeWorktree,
+  removeWorktreeParentDirIfEmpty,
 } from "../core/git.ts";
 import {
   deleteSession,
@@ -48,6 +49,7 @@ const defaultDeps: CleanDeps = {
   listWorktreePaths,
   getWorktreeStatuses,
   removeWorktree,
+  removeWorktreeParentDirIfEmpty,
   deleteLocalBranch,
   getGitContext,
   loadProjectConfig,
@@ -372,6 +374,7 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
 
   // Execute deletion
   logInfo("");
+  const removedWorktreePaths: string[] = [];
   for (const status of toDelete) {
     const { worktree } = status;
     const label = worktree.branch || worktree.path;
@@ -396,6 +399,7 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
       }
 
       await deps.removeWorktree(worktree.path, worktree.isDirty);
+      removedWorktreePaths.push(worktree.path);
 
       // Delete local branch (skip for detached HEAD)
       if (worktree.branch) {
@@ -433,6 +437,10 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
       spinner.fail(`${label}: ${message}`);
       result.errors.push({ path: worktree.path, error: message });
     }
+  }
+
+  for (const removedPath of removedWorktreePaths) {
+    await deps.removeWorktreeParentDirIfEmpty(removedPath);
   }
 
   // Garbage collect stale cache entries. Reconcile against the paths that actually exist on

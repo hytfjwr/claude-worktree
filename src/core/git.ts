@@ -1,4 +1,5 @@
-import { basename, join } from "node:path";
+import { readdir, rm } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 
 import type {
   AheadBehind,
@@ -60,7 +61,7 @@ export async function getGitContext(): Promise<GitContext> {
 }
 
 export function getWorktreePath(repoRoot: string, repoName: string, branchName: string): string {
-  return join(repoRoot, "..", `${repoName}-${branchName.replace(/\//g, "-")}`);
+  return join(repoRoot, "..", `${repoName}-worktrees`, branchName.replace(/\//g, "-"));
 }
 
 export function buildWorktreeCommand(branchName: string, worktreePath: string, baseBranch: string): string {
@@ -320,6 +321,24 @@ export async function removeWorktree(worktreePath: string, force = false): Promi
     await exec("git", ["worktree", "remove", "--force", worktreePath]);
   } else {
     await exec("git", ["worktree", "remove", worktreePath]);
+  }
+}
+
+/**
+ * Remove the `{repoName}-worktrees` parent directory of `worktreePath` if it is empty
+ * (ignoring stray `.DS_Store` files). Best-effort: never throws, and does nothing if
+ * the parent directory doesn't end in `-worktrees` or still has entries.
+ */
+export async function removeWorktreeParentDirIfEmpty(worktreePath: string): Promise<boolean> {
+  const parentDir = dirname(worktreePath);
+  if (!basename(parentDir).endsWith("-worktrees")) return false;
+  try {
+    const entries = await readdir(parentDir);
+    if (entries.filter((entry) => entry !== ".DS_Store").length > 0) return false;
+    await rm(parentDir, { recursive: true, force: true });
+    return true;
+  } catch {
+    return false;
   }
 }
 

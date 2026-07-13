@@ -1,3 +1,5 @@
+import { dirname } from "node:path";
+
 import type {
   ClaudeOptions,
   DraftInstructions,
@@ -21,6 +23,7 @@ After completing the task, execute the following steps:
    - Resolve any conflicts if they occur
 3. **Cleanup**
    - Remove worktree: git worktree remove "{worktreePath}"
+   - Remove worktrees dir if empty: rmdir "{parentDir}" 2>/dev/null || true
    - Delete branch: git branch -d <merged-branch>
 4. **Report completion**`;
 
@@ -78,6 +81,7 @@ function buildMergeInstructions(mergeInstructions: MergeInstructions): string {
   return fillTemplate(MERGE_INSTRUCTION_TEMPLATE, {
     baseBranch: mergeInstructions.baseBranch,
     worktreePath: mergeInstructions.worktreePath,
+    parentDir: dirname(mergeInstructions.worktreePath),
   });
 }
 

@@ -8,6 +8,7 @@ vi.mock("../core/config.ts", () => ({
 
 vi.mock("../core/git.ts", () => ({
   removeWorktree: vi.fn(),
+  removeWorktreeParentDirIfEmpty: vi.fn(),
   deleteLocalBranch: vi.fn(),
 }));
 
@@ -39,12 +40,13 @@ vi.mock("../ui/spinner.ts", () => ({
 
 // Import mocked modules after vi.mock declarations
 const { runHook } = await import("../core/config.ts");
-const { removeWorktree, deleteLocalBranch } = await import("../core/git.ts");
+const { removeWorktree, removeWorktreeParentDirIfEmpty, deleteLocalBranch } = await import("../core/git.ts");
 const { deleteSession } = await import("../core/session.ts");
 const { performRollback } = await import("./rollback.ts");
 
 const mockedRunHook = vi.mocked(runHook);
 const mockedRemoveWorktree = vi.mocked(removeWorktree);
+const mockedRemoveWorktreeParentDirIfEmpty = vi.mocked(removeWorktreeParentDirIfEmpty);
 const mockedDeleteLocalBranch = vi.mocked(deleteLocalBranch);
 const mockedDeleteSession = vi.mocked(deleteSession);
 
@@ -84,6 +86,14 @@ describe("performRollback", () => {
     expect(allOutput).not.toContain("Rollback Summary");
     const allWarn = consoleWarnSpy.mock.calls.map((c) => c[0]).join("\n");
     expect(allWarn).not.toContain("WARNING");
+  });
+
+  test("worktree removal succeeds → removeWorktreeParentDirIfEmpty called with worktreePath", async () => {
+    const opts = baseOptions();
+
+    await performRollback(opts);
+
+    expect(mockedRemoveWorktreeParentDirIfEmpty).toHaveBeenCalledWith("/tmp/repo-feature");
   });
 
   test("step fails → summary printed with ✗ marker and error detail", async () => {
