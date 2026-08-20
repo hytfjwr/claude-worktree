@@ -190,6 +190,11 @@ describe("runResume", () => {
       );
     });
 
+    test("suggests a similar branch when not found", async () => {
+      const deps = makeDeps();
+      await expect(runResume({ branchName: "feature/tset" }, deps)).rejects.toThrow('Did you mean "feature/test"?');
+    });
+
     test("throws when worktree directory does not exist", async () => {
       const deps = makeDeps({
         listWorktrees: async () => ({

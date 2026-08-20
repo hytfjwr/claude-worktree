@@ -23,6 +23,7 @@ import {
   readAllSessions,
 } from "../core/session.ts";
 import { deleteSlot, gcSlots, readSlot } from "../core/slot.ts";
+import { findClosestMatch } from "../core/suggest.ts";
 import { checkGhAvailable, getPullRequestsForBranches } from "../external/github.ts";
 import { listTmuxPanes } from "../external/tmux.ts";
 import { listWeztermPanes } from "../external/wezterm.ts";
@@ -242,7 +243,10 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
         if (isMain) {
           logWarn(`Branch "${branchName}" is the main worktree and cannot be cleaned.`);
         } else {
-          logWarn(`Worktree for branch "${branchName}" not found.`);
+          const candidates = cleanableStatuses.map((s) => s.worktree.branch).filter((b): b is string => b !== null);
+          const suggestion = findClosestMatch(branchName, candidates);
+          const hint = suggestion ? ` (did you mean "${suggestion}"?)` : "";
+          logWarn(`Worktree for branch "${branchName}" not found.${hint}`);
         }
       }
     }

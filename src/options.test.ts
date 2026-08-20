@@ -204,6 +204,58 @@ describe("extractOptions", () => {
     });
   });
 
+  describe("typo hint (Levenshtein)", () => {
+    const schema: OptionSchema = {
+      options: {
+        pane: { type: "boolean", flag: "-pane", alias: "-p" },
+        dryRun: { type: "boolean", flag: "-dry-run", alias: "-n" },
+        verbose: { type: "boolean", flag: "-verbose", alias: "-v" },
+        base: { type: "string", flag: "-base", alias: "-b", errorMessage: "-base requires a branch name argument" },
+      },
+      unknownHandling: "error",
+      ignoredFlags: ["-h", "-help"],
+      unknownErrorPrefix: "Unknown option for test",
+    };
+
+    test("single-dash typo suggests the closest flag", () => {
+      expect(() => extractOptions(["-panne"], schema)).toThrow(
+        'Unknown option for test: "-panne" (did you mean "-pane"?)',
+      );
+    });
+
+    test("double-dash typo suggests the closest flag", () => {
+      expect(() => extractOptions(["--verbse"], schema)).toThrow(
+        'Unknown option for test: "--verbse" (did you mean "-verbose"?)',
+      );
+    });
+
+    test("string option typo suggests the closest flag", () => {
+      expect(() => extractOptions(["-bse", "main"], schema)).toThrow(
+        'Unknown option for test: "-bse" (did you mean "-base"?)',
+      );
+    });
+
+    test("prefix of a flag is suggested", () => {
+      expect(() => extractOptions(["-dry"], schema)).toThrow(
+        'Unknown option for test: "-dry" (did you mean "-dry-run"?)',
+      );
+    });
+
+    test("ignored flags are suggestion candidates too", () => {
+      expect(() => extractOptions(["-hepl"], schema)).toThrow(
+        'Unknown option for test: "-hepl" (did you mean "-help"?)',
+      );
+    });
+
+    test("no hint when nothing is close enough", () => {
+      expect(() => extractOptions(["-zzz"], schema)).toThrow("Unknown option for test: -zzz");
+    });
+
+    test("no hint for single-character typos", () => {
+      expect(() => extractOptions(["-x"], schema)).toThrow("Unknown option for test: -x");
+    });
+  });
+
   describe("combined scenarios", () => {
     const schema: OptionSchema = {
       options: {

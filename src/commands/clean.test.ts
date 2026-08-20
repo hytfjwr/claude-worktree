@@ -974,6 +974,21 @@ describe("executeClean", () => {
       expect(consoleWarnSpy).toHaveBeenCalled();
     });
 
+    test("suggests a similar branch when not found", async () => {
+      const wt = makeWorktree({ path: "/tmp/repo-a", branch: "feature/auth" });
+      const status = makeStatus({ path: "/tmp/repo-a", branch: "feature/auth" });
+      const deps = makeDeps({
+        listWorktrees: async () => ({ worktrees: [wt], mainBranch: "main" }),
+        getWorktreeStatuses: async () => [status],
+      });
+
+      await executeClean({ ...defaultArgs, force: true, branches: ["feature/auht"] }, deps);
+
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Worktree for branch "feature/auht" not found. (did you mean "feature/auth"?)'),
+      );
+    });
+
     test("deletes found branches and warns about not-found branches", async () => {
       const wt = makeWorktree({ path: "/tmp/repo-a", branch: "feature/a" });
       const status = makeStatus({ path: "/tmp/repo-a", branch: "feature/a" });

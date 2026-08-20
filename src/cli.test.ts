@@ -172,6 +172,42 @@ describe("parseArgs", () => {
       expect(result.type).toBe("create");
     });
   });
+
+  describe("command typo hint", () => {
+    test.each([
+      ["lst", "list"],
+      ["lists", "list"],
+      ["clen", "clean"],
+      ["resum", "resume"],
+    ])('"%s" suggests the "%s" command', (input, expected) => {
+      expect(() => parseArgs([input])).toThrow(`Did you mean the "${expected}" command?`);
+    });
+
+    test("hint is added on top of the missing prompt error", () => {
+      expect(() => parseArgs(["lst"])).toThrow('Missing prompt for branch "lst"');
+    });
+
+    test("mistyped command with its own options suggests the command", () => {
+      expect(() => parseArgs(["lst", "-json"])).toThrow('Did you mean the "list" command?');
+    });
+
+    test("command written as a flag suggests the command", () => {
+      expect(() => parseArgs(["-list"])).toThrow('Did you mean the "list" command?');
+    });
+
+    test('"help" suggests the -help flag', () => {
+      expect(() => parseArgs(["help"])).toThrow('Did you mean "-help"?');
+    });
+
+    test('"version" suggests the -version flag', () => {
+      expect(() => parseArgs(["version"])).toThrow('Did you mean "-version"?');
+    });
+
+    test("no hint for a plain branch name", () => {
+      expect(() => parseArgs(["feature/test"])).toThrow('Missing prompt for branch "feature/test"');
+      expect(() => parseArgs(["feature/test"])).not.toThrow("Did you mean");
+    });
+  });
 });
 
 describe("parseCreateArgs", () => {
@@ -536,6 +572,24 @@ describe("parseCreateArgs", () => {
   test("--base suggests -base", () => {
     expect(() => parseCreateArgs(["feature/test", "Prompt", "--base", "develop"])).toThrow(
       'Unknown option: "--base" (did you mean "-base"?)',
+    );
+  });
+
+  test("-panne suggests -pane", () => {
+    expect(() => parseCreateArgs(["feature/test", "Prompt", "-panne"])).toThrow(
+      'Unknown option: "-panne" (did you mean "-pane"?)',
+    );
+  });
+
+  test("-dry suggests -dry-run", () => {
+    expect(() => parseCreateArgs(["feature/test", "Prompt", "-dry"])).toThrow(
+      'Unknown option: "-dry" (did you mean "-dry-run"?)',
+    );
+  });
+
+  test("-mode suggests -model", () => {
+    expect(() => parseCreateArgs(["feature/test", "Prompt", "-mode", "opus"])).toThrow(
+      'Unknown option: "-mode" (did you mean "-model"?)',
     );
   });
 });
