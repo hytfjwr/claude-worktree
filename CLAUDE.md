@@ -138,6 +138,8 @@ src/
     slot.test.ts
     spawn.ts           # Interactive process spawning with signal forwarding
     spawn.test.ts
+    suggest.ts         # Levenshtein-based "did you mean ...?" suggestions
+    suggest.test.ts
   commands/            # Command implementations
     clean.ts           # Worktree cleanup orchestration
     clean.test.ts

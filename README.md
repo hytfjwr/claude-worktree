@@ -74,6 +74,26 @@ claude-worktree -version
 claude-worktree --version
 ```
 
+### Typo Suggestions
+
+Mistyped options, commands and branch names are matched against the known ones by
+Levenshtein distance, and the closest candidate is suggested:
+
+```console
+$ claude-worktree list -jsom
+Unknown option for list command: "-jsom" (did you mean "-json"?)
+
+$ claude-worktree lst
+Missing prompt for branch "lst".
+...
+Did you mean the "list" command?
+
+$ claude-worktree resume feature/aut
+Worktree not found for branch: feature/aut
+
+Did you mean "feature/auth"?
+```
+
 ### Options
 
 - `-p, -pane` - Open in a new pane (requires WezTerm or tmux; default: run in current terminal)
