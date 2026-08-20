@@ -4,6 +4,7 @@ import { executeList } from "./commands/list.ts";
 import { runResume } from "./commands/resume.ts";
 import { executeRunInPane, parseRunInPaneArgs } from "./commands/run-in-pane.ts";
 import { UsageError } from "./core/errors.ts";
+import { findClosestMatch } from "./core/suggest.ts";
 import { extractOptions } from "./options.ts";
 import type { CleanArgs, Command, CreateArgs, ListArgs, ResumeArgs } from "./types/index.ts";
 import { createQuietLogger, logInfo, setLogger } from "./ui/logger.ts";
@@ -455,6 +456,21 @@ export function parseListArgs(args: string[]): ListArgs {
 
 const KNOWN_COMMANDS = ["list", "clean", "resume"] as const;
 
+/** Commands come first so they win ties against the global flags. */
+const TOP_LEVEL_CANDIDATES = [...KNOWN_COMMANDS, "-help", "-version"];
+
+/**
+ * Builds a "did you mean ...?" hint for a first argument that looks like a
+ * mistyped command or global flag. Returns an empty string when nothing is close.
+ */
+function topLevelHint(name: string): string {
+  const match = findClosestMatch(name, TOP_LEVEL_CANDIDATES);
+  if (!match) {
+    return "";
+  }
+  return match.startsWith("-") ? `\n\nDid you mean "${match}"?` : `\n\nDid you mean the "${match}" command?`;
+}
+
 function hasHelpFlag(subArgs: string[]): boolean {
   return subArgs.includes("-h") || subArgs.includes("-help");
 }
@@ -518,11 +534,24 @@ export function parseArgs(args: string[]): Command {
   if (args.length === 1 && !args[0].startsWith("-")) {
     throw new UsageError(
       `Missing prompt for branch "${args[0]}".\n\n` +
-        `Usage:\n  claude-worktree ${args[0]} '<prompt>'\n  claude-worktree ${args[0]} -plan <file-path>`,
+        `Usage:\n  claude-worktree ${args[0]} '<prompt>'\n  claude-worktree ${args[0]} -plan <file-path>` +
+        topLevelHint(args[0]),
     );
   }
 
-  return { type: "create", args: parseCreateArgs(args) };
+  try {
+    return { type: "create", args: parseCreateArgs(args) };
+  } catch (error) {
+    // A typo in the command name lands here as a create-command error
+    // (unknown option, invalid branch name, ...) — point at the command instead.
+    if (error instanceof UsageError) {
+      const hint = topLevelHint(args[0]);
+      if (hint) {
+        throw new UsageError(`${error.message}${hint}`);
+      }
+    }
+    throw error;
+  }
 }
 
 export async function run(command: Command): Promise<void> {

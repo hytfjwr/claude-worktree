@@ -4,6 +4,7 @@ import { GitError } from "../core/errors.ts";
 import { getGitContext, listWorktrees } from "../core/git.ts";
 import { completeSession, determineSessionStatus, readSession, saveSession } from "../core/session.ts";
 import { spawnInteractive } from "../core/spawn.ts";
+import { findClosestMatch } from "../core/suggest.ts";
 import { buildResumeCommand } from "../external/claude.ts";
 import { ensurePaneBackendAvailable } from "../external/terminal-backend.ts";
 import { getSessionForPane, isRunningInsideTmux, listTmuxPanes } from "../external/tmux.ts";
@@ -139,7 +140,10 @@ async function resolveTargetWorktree(
     const target = worktrees.find((w) => w.branch === branchName) ?? null;
     if (!target) {
       const available = worktrees.map((w) => `  ${w.branch ?? "(detached)"}  (${w.path})`).join("\n");
-      throw new GitError(`Worktree not found for branch: ${branchName}\n\nAvailable worktrees:\n${available}`);
+      const branches = worktrees.map((w) => w.branch).filter((b): b is string => b !== null);
+      const suggestion = findClosestMatch(branchName, branches);
+      const hint = suggestion ? `\n\nDid you mean "${suggestion}"?` : "";
+      throw new GitError(`Worktree not found for branch: ${branchName}${hint}\n\nAvailable worktrees:\n${available}`);
     }
     return target;
   }

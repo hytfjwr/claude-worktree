@@ -1,5 +1,13 @@
 import { UsageError } from "./core/errors.ts";
+import { findClosestMatch } from "./core/suggest.ts";
 import type { ExtractResult, OptionDef, OptionSchema } from "./types/index.ts";
+
+function unknownOptionError(schema: OptionSchema, arg: string, suggestion: string | null): UsageError {
+  const prefix = schema.unknownErrorPrefix ?? "Unknown option";
+  return suggestion
+    ? new UsageError(`${prefix}: "${arg}" (did you mean "${suggestion}"?)`)
+    : new UsageError(`${prefix}: ${arg}`);
+}
 
 export function extractOptions(args: string[], schema: OptionSchema): ExtractResult {
   const booleans: Record<string, boolean> = {};
@@ -26,6 +34,9 @@ export function extractOptions(args: string[], schema: OptionSchema): ExtractRes
 
   const ignoredSet = new Set(schema.ignoredFlags ?? []);
 
+  // Candidates for "did you mean ...?" hints: every flag, alias and ignored flag
+  const knownFlags = [...flagMap.keys(), ...ignoredSet];
+
   // Single-pass scan
   let i = 0;
   while (i < args.length) {
@@ -47,17 +58,14 @@ export function extractOptions(args: string[], schema: OptionSchema): ExtractRes
     } else if (arg.startsWith("--")) {
       const singleDash = `-${arg.slice(2)}`;
       if (flagMap.has(singleDash) || ignoredSet.has(singleDash)) {
-        const prefix = schema.unknownErrorPrefix ?? "Unknown option";
-        throw new UsageError(`${prefix}: "${arg}" (did you mean "${singleDash}"?)`);
+        throw unknownOptionError(schema, arg, singleDash);
       }
       if (schema.unknownHandling === "error") {
-        const prefix = schema.unknownErrorPrefix ?? "Unknown option";
-        throw new UsageError(`${prefix}: ${arg}`);
+        throw unknownOptionError(schema, arg, findClosestMatch(arg, knownFlags));
       }
       remaining.push(arg);
     } else if (schema.unknownHandling === "error" && arg.startsWith("-")) {
-      const prefix = schema.unknownErrorPrefix ?? "Unknown option";
-      throw new UsageError(`${prefix}: ${arg}`);
+      throw unknownOptionError(schema, arg, findClosestMatch(arg, knownFlags));
     } else {
       remaining.push(arg);
     }
