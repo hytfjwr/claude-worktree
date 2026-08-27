@@ -1,4 +1,4 @@
-import { type ChildProcess, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { TextDecoder } from "node:util";
@@ -7,7 +7,7 @@ import type { HookVars, ProjectConfig } from "../types/index.ts";
 import { projectConfigFields, VALID_PERMISSION_MODES } from "../types/index.ts";
 import { logWarn } from "../ui/logger.ts";
 import { getErrorMessage, HookError, isNodeError } from "./errors.ts";
-import { exec } from "./exec.ts";
+import { escalateKill, exec } from "./exec.ts";
 
 function checkField(field: string, value: unknown, expected: typeof Number | typeof String): string | null {
   if (expected === Number) {
@@ -118,30 +118,6 @@ export function buildHookCommand(template: string, vars: HookVars): string {
 }
 
 export const DEFAULT_HOOK_TIMEOUT = 600;
-
-export const SIGKILL_GRACE_MS = 5000;
-
-/**
- * Send SIGTERM, then escalate to SIGKILL after a grace period
- * if the process hasn't exited.
- */
-function escalateKill(proc: ChildProcess, graceMs = SIGKILL_GRACE_MS): void {
-  let sent: boolean;
-  try {
-    sent = proc.kill("SIGTERM");
-  } catch {
-    return;
-  }
-  if (!sent) return;
-  const killTimer = setTimeout(() => {
-    try {
-      proc.kill("SIGKILL");
-    } catch {
-      // Process already exited
-    }
-  }, graceMs);
-  proc.once("exit", () => clearTimeout(killTimer));
-}
 
 export function resolveHookTimeout(
   hookName: "postCreate" | "preClean" | "postClean",

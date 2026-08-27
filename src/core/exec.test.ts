@@ -1,6 +1,7 @@
-import { describe, expect, test } from "vitest";
+import { spawn } from "node:child_process";
+import { describe, expect, test, vi } from "vitest";
 
-import { ExecError, exec } from "./exec.ts";
+import { ExecError, escalateKill, exec, SIGKILL_GRACE_MS } from "./exec.ts";
 
 // ============================================================================
 // Basic execution tests
@@ -250,6 +251,57 @@ describe("timeout", () => {
     const result = await exec("echo", ["ok"]).timeout(5000).nothrow().quiet();
     expect(result.text().trim()).toBe("ok");
   });
+});
+
+// ============================================================================
+// timeout escalation tests
+// ============================================================================
+
+describe("timeout escalation", () => {
+  test("SIGKILL_GRACE_MS is 5000ms", () => {
+    expect(SIGKILL_GRACE_MS).toBe(5000);
+  });
+
+  test("settles and kills a child that ignores SIGTERM", async () => {
+    // A pure-sh child: `trap` is installed before the PID is printed, and sh starts
+    // far faster than a node process, so this stays reliable under parallel test load.
+    const script = 'trap "" TERM; echo $$; while :; do sleep 0.1; done';
+
+    let error: unknown;
+    try {
+      await exec("sh", ["-c", script]).quiet().timeout(2000, 200);
+    } catch (err) {
+      error = err;
+    }
+
+    expect(error).toBeInstanceOf(ExecError);
+    const pidLine = (error as ExecError).text().trim().split("\n")[0];
+    const pid = Number(pidLine);
+    expect(Number.isInteger(pid) && pid > 0).toBe(true);
+    expect((error as ExecError).message).toMatch(/timed out/);
+
+    // Poll until the child is gone (generous budget so parallel load cannot flake it)
+    let exited = false;
+    for (let i = 0; i < 60; i++) {
+      try {
+        process.kill(pid, 0);
+      } catch {
+        exited = true;
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    expect(exited).toBe(true);
+  }, 30000);
+
+  test("clears the SIGKILL timer when the child exits on its own", async () => {
+    const clearSpy = vi.spyOn(globalThis, "clearTimeout");
+    const proc = spawn("sh", ["-c", "sleep 0.05"]);
+    escalateKill(proc, 60_000);
+    await new Promise<void>((resolve) => proc.once("close", () => resolve()));
+    expect(clearSpy).toHaveBeenCalled();
+    clearSpy.mockRestore();
+  }, 15000);
 });
 
 // ============================================================================
