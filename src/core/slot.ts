@@ -2,7 +2,8 @@ import { unlink } from "node:fs/promises";
 import { createServer } from "node:net";
 import { join } from "node:path";
 
-import { atomicWriteJson, getCacheDir, readJsonFile, withLock } from "./cache.ts";
+import { logDebug } from "../ui/logger.ts";
+import { atomicWriteJson, getCacheDir, pathExists, pruneMissingPaths, readJsonFile, withLock } from "./cache.ts";
 import { SlotError } from "./errors.ts";
 
 export function isPortInUse(port: number): Promise<boolean> {
@@ -56,8 +57,26 @@ export async function assignSlot(worktreePath: string, basePort: number = 8880, 
       return cache[worktreePath];
     }
 
-    const assignedSlots = new Set(Object.values(cache));
-    const candidates = Array.from({ length: maxSlots }, (_, i) => i + 1).filter((s) => !assignedSlots.has(s));
+    const buildCandidates = (): number[] => {
+      const assignedSlots = new Set(Object.values(cache));
+      return Array.from({ length: maxSlots }, (_, i) => i + 1).filter((s) => !assignedSlots.has(s));
+    };
+
+    let candidates = buildCandidates();
+
+    // Before declaring the pool exhausted, reclaim assignments whose worktree
+    // directory no longer exists (removed by `git worktree remove`, `rm -rf`, or
+    // a crashed run). Slots are limited to `maxSlots`, so without this the tool
+    // becomes unusable even when nothing is actually running.
+    if (candidates.length === 0) {
+      const reclaimed = await pruneMissingPaths(cache);
+      if (reclaimed > 0) {
+        await atomicWriteJson(getCacheFile(), cache);
+        logDebug(`Reclaimed ${reclaimed} slot(s) whose worktree no longer exists`);
+        candidates = buildCandidates();
+      }
+    }
+
     if (candidates.length === 0) {
       throw new SlotError(`No available slots (all ${maxSlots} slots are assigned)`);
     }
@@ -110,6 +129,46 @@ export async function gcSlots(validPaths: Set<string>): Promise<number> {
       }
     }
 
+    if (removed === 0) return;
+
+    if (Object.keys(cache).length === 0) {
+      try {
+        await unlink(getCacheFile());
+      } catch {
+        // File may already be deleted
+      }
+      return;
+    }
+
+    await atomicWriteJson(getCacheFile(), cache);
+  });
+
+  return removed;
+}
+
+/**
+ * Reclaim slot assignments whose worktree directory no longer exists.
+ *
+ * Unlike {@link gcSlots} this needs no list of valid paths, so it is safe to call
+ * from any command without knowing which repository the entries belong to.
+ * Cheap fast path: the cache is read without the lock first and the lock is only
+ * taken when there is something to reclaim.
+ */
+export async function gcMissingSlots(): Promise<number> {
+  const snapshot = await readJsonFile<SlotCache>(getCacheFile(), {}, "fallback");
+  const snapshotPaths = Object.keys(snapshot);
+  if (snapshotPaths.length === 0) {
+    return 0;
+  }
+  const existence = await Promise.all(snapshotPaths.map((path) => pathExists(path)));
+  if (!existence.includes(false)) {
+    return 0;
+  }
+
+  let removed = 0;
+  await withLock(getLockFile(), async () => {
+    const cache = await readJsonFile<SlotCache>(getCacheFile(), {}, "fallback");
+    removed = await pruneMissingPaths(cache);
     if (removed === 0) return;
 
     if (Object.keys(cache).length === 0) {

@@ -1,5 +1,5 @@
-import { existsSync } from "node:fs";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -23,6 +23,7 @@ import {
   determineSessionStatus,
   fetchAllPanes,
   formatElapsed,
+  gcMissingSessions,
   gcSessions,
   readAllSessions,
   readSession,
@@ -412,5 +413,136 @@ describe("gcSessions", () => {
     expect(removed).toBe(2);
     const all = await readAllSessions();
     expect(Object.keys(all)).toEqual(["/tmp/wt-valid"]);
+  });
+});
+
+// ============================================================================
+// Corrupt cache handling (B1)
+// ============================================================================
+
+describe("corrupt session cache", () => {
+  let tempDir: string;
+  let restoreEnv: () => void;
+
+  beforeEach(async () => {
+    tempDir = join(
+      tmpdir(),
+      `claude-worktree-corrupt-session-test-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    );
+    await mkdir(tempDir, { recursive: true });
+    restoreEnv = saveEnv("CLAUDE_WORKTREE_CACHE_DIR");
+    process.env.CLAUDE_WORKTREE_CACHE_DIR = tempDir;
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+
+  afterEach(async () => {
+    restoreEnv();
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  test("readSession does not throw and returns undefined", async () => {
+    await writeFile(join(tempDir, "sessions.json"), "{ this is not json", "utf-8");
+
+    await expect(readSession("/tmp/wt-1")).resolves.toBeUndefined();
+  });
+
+  test("readAllSessions does not throw and returns an empty object", async () => {
+    await writeFile(join(tempDir, "sessions.json"), "{ this is not json", "utf-8");
+
+    await expect(readAllSessions()).resolves.toEqual({});
+  });
+
+  test("saveSession does not throw, persists the value, and quarantines the corrupt file", async () => {
+    const corruptContent = "{ this is not json";
+    await writeFile(join(tempDir, "sessions.json"), corruptContent, "utf-8");
+
+    const session: SessionInfo = { mode: "terminal", startedAt: "2025-01-15T11:00:00Z" };
+    await expect(saveSession("/tmp/wt-1", session)).resolves.toBeUndefined();
+
+    expect(await readSession("/tmp/wt-1")).toEqual(session);
+
+    const quarantined = readdirSync(tempDir).filter((name) => name.startsWith("sessions.json.corrupt-"));
+    expect(quarantined).toHaveLength(1);
+    const quarantinedContent = await readFile(join(tempDir, quarantined[0]), "utf-8");
+    expect(quarantinedContent).toBe(corruptContent);
+  });
+
+  test("completeSession does not throw", async () => {
+    await writeFile(join(tempDir, "sessions.json"), "{ this is not json", "utf-8");
+
+    await expect(completeSession("/tmp/wt-1")).resolves.toBeUndefined();
+  });
+
+  test("deleteSession does not throw", async () => {
+    await writeFile(join(tempDir, "sessions.json"), "{ this is not json", "utf-8");
+
+    await expect(deleteSession("/tmp/wt-1")).resolves.toBeUndefined();
+  });
+
+  test("gcSessions does not throw and returns 0", async () => {
+    await writeFile(join(tempDir, "sessions.json"), "{ this is not json", "utf-8");
+
+    await expect(gcSessions(new Set())).resolves.toBe(0);
+  });
+
+  test("structurally invalid but parseable JSON degrades to an empty cache", async () => {
+    await writeFile(join(tempDir, "sessions.json"), JSON.stringify({ "/tmp/wt": { mode: "bogus" } }), "utf-8");
+
+    await expect(readAllSessions()).resolves.toEqual({});
+
+    const session: SessionInfo = { mode: "terminal", startedAt: "2025-01-15T11:00:00Z" };
+    await expect(saveSession("/tmp/wt-2", session)).resolves.toBeUndefined();
+    expect(await readSession("/tmp/wt-2")).toEqual(session);
+  });
+});
+
+// ============================================================================
+// gcMissingSessions tests (B3)
+// ============================================================================
+
+describe("gcMissingSessions", () => {
+  let tempDir: string;
+  let restoreEnv: () => void;
+  let worktreeDir: string;
+
+  beforeEach(async () => {
+    tempDir = join(
+      tmpdir(),
+      `claude-worktree-gc-missing-session-test-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    );
+    await mkdir(tempDir, { recursive: true });
+    restoreEnv = saveEnv("CLAUDE_WORKTREE_CACHE_DIR");
+    process.env.CLAUDE_WORKTREE_CACHE_DIR = tempDir;
+    worktreeDir = mkdtempSync(join(tmpdir(), "claude-worktree-gc-missing-session-wt-"));
+  });
+
+  afterEach(async () => {
+    restoreEnv();
+    await rm(tempDir, { recursive: true, force: true });
+    try {
+      rmSync(worktreeDir, { recursive: true });
+    } catch {
+      // Ignore cleanup errors
+    }
+  });
+
+  test("removes only sessions whose worktree path no longer exists", async () => {
+    await saveSession(worktreeDir, { mode: "terminal", startedAt: "2025-01-15T11:00:00Z" });
+    await saveSession("/tmp/does-not-exist-session", { mode: "terminal", startedAt: "2025-01-15T12:00:00Z" });
+
+    const removed = await gcMissingSessions();
+
+    expect(removed).toBe(1);
+    expect(await readSession(worktreeDir)).toBeDefined();
+    expect(await readSession("/tmp/does-not-exist-session")).toBeUndefined();
+  });
+
+  test("returns 0 when all worktree paths exist", async () => {
+    await saveSession(worktreeDir, { mode: "terminal", startedAt: "2025-01-15T11:00:00Z" });
+
+    const removed = await gcMissingSessions();
+
+    expect(removed).toBe(0);
+    expect(await readSession(worktreeDir)).toBeDefined();
   });
 });

@@ -469,6 +469,10 @@ async function launchClaudeInPane(
   await writeFile(payloadPath, JSON.stringify(runInPaneArgs), { encoding: "utf-8", flag: "wx", mode: 0o600 });
 
   let paneIdStr: string | undefined;
+  // Tracks whether this process wrote the session entry. Rollback may only delete
+  // a session entry this process created — a worktree path can be reused, and
+  // deleting an entry written by another process would drop a live session.
+  let sessionSaved = false;
   try {
     paneIdStr = await backend.createPane({ keepFocus: true });
     logInfo(`${icons.window()} Created pane: ${paneIdStr}`);
@@ -483,6 +487,7 @@ async function launchClaudeInPane(
       mode: "pane",
       startedAt: new Date().toISOString(),
     });
+    sessionSaved = true;
 
     logInfo(`${icons.done()} Worktree created and Claude started in new pane`);
 
@@ -506,7 +511,7 @@ async function launchClaudeInPane(
         config,
         slot,
         verbose,
-        deleteSessionData: false,
+        deleteSessionData: sessionSaved,
         deps,
       }),
     );
@@ -551,6 +556,7 @@ async function launchClaudeInTerminal(
           config,
           slot,
           verbose,
+          // No session entry exists yet — saveSession runs after this point.
           deleteSessionData: false,
           deps,
         }),
@@ -570,11 +576,45 @@ async function launchClaudeInTerminal(
     startedAt: new Date().toISOString(),
   });
 
+  // spawnInteractive handles the first signal by forwarding it to the child process.
+  // These handlers catch a subsequent signal to ensure completeSession() is called
+  // before the process exits (otherwise the session stays "Running" forever).
+  let signalReceived = false;
+  let sessionCompleted = false;
+
+  const doCompleteSession = async () => {
+    if (sessionCompleted) return;
+    sessionCompleted = true;
+    // Swallow the error: this runs in a `finally`, where a throw would replace the
+    // original spawnInteractive error and hide the real failure.
+    await deps.completeSession(worktreePath).catch(() => {});
+  };
+
+  const createSignalHandler = (exitCode: number) => () => {
+    if (!signalReceived) {
+      // First signal: let spawnInteractive forward it to the child process
+      signalReceived = true;
+      return;
+    }
+    // Subsequent signal: clean up session and exit
+    process.removeListener("SIGINT", handleSigint);
+    process.removeListener("SIGTERM", handleSigterm);
+    doCompleteSession().finally(() => process.exit(exitCode));
+  };
+
+  const handleSigint = createSignalHandler(130); // 128 + SIGINT(2)
+  const handleSigterm = createSignalHandler(143); // 128 + SIGTERM(15)
+
+  process.on("SIGINT", handleSigint);
+  process.on("SIGTERM", handleSigterm);
+
   try {
     await spawnInteractive({ command: claudeCommand, cwd: worktreePath });
   } finally {
+    process.removeListener("SIGINT", handleSigint);
+    process.removeListener("SIGTERM", handleSigterm);
     // Always mark session as completed in terminal mode since the process has ended
-    await deps.completeSession(worktreePath);
+    await doCompleteSession();
   }
 }
 

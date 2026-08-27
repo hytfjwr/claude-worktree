@@ -6,6 +6,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, test, vi } from "vit
 import { makeWorktree } from "../__test-utils__.ts";
 import { DependencyError, GitError } from "../core/errors.ts";
 import { spawnInteractive } from "../core/spawn.ts";
+import { getSessionForPane } from "../external/tmux.ts";
 import type { CreateArgs, CreateDeps, GitContext, ProjectConfig } from "../types/index.ts";
 import {
   buildClaudeOptions,
@@ -19,6 +20,14 @@ import {
 // Mock spawnInteractive to avoid spawning real processes in terminal mode
 vi.mock("../core/spawn.ts", () => ({
   spawnInteractive: vi.fn(async () => 0),
+}));
+
+// Mock tmux.ts so pane-mode tests can control the "show attach hint" step (which
+// runs after saveSession) without needing a real tmux binary. Default succeeds;
+// individual tests can override with mockRejectedValueOnce.
+vi.mock("../external/tmux.ts", () => ({
+  isRunningInsideTmux: vi.fn(() => false),
+  getSessionForPane: vi.fn(async () => "session-name"),
 }));
 
 describe("readPlanFile", () => {
@@ -436,6 +445,116 @@ describe("runCreate", () => {
       await runCreate(defaultTerminalArgs, deps);
 
       expect(deps.ensurePaneBackend).not.toHaveBeenCalled();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Terminal mode: repeated-signal session cleanup
+  // ---------------------------------------------------------------------------
+
+  describe("terminal mode signal handling", () => {
+    afterEach(() => {
+      // Some tests below replace spawnInteractive's implementation (not just a single
+      // resolved/rejected value) to simulate signals firing while it runs. Reset it to
+      // the module's default so later tests in this file see normal behavior.
+      vi.mocked(spawnInteractive).mockReset();
+      vi.mocked(spawnInteractive).mockImplementation(async () => 0);
+    });
+
+    test("marks the session completed on a repeated signal during terminal launch", async () => {
+      const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+      const handlers: Record<string, ((...args: unknown[]) => void)[]> = {};
+      const originalOn = process.on.bind(process);
+      const onSpy = vi.spyOn(process, "on").mockImplementation(((
+        event: string,
+        handler: (...args: unknown[]) => void,
+      ) => {
+        if (event === "SIGINT" || event === "SIGTERM") {
+          handlers[event] = handlers[event] || [];
+          handlers[event].push(handler);
+        }
+        return originalOn(event, handler);
+      }) as typeof process.on);
+
+      vi.mocked(spawnInteractive).mockImplementation(async () => {
+        // runCreate also registers a short-lived SIGINT/SIGTERM pair via process.once
+        // during the creation phase (removed before launchClaudeInTerminal runs). Node's
+        // once() registers through on() internally, so it lands in `handlers` too — take
+        // the last-registered handler, which is launchClaudeInTerminal's own.
+        const handler = handlers.SIGINT?.at(-1);
+        // Simulate double SIGINT: first is forwarded to child, second triggers cleanup
+        handler?.();
+        handler?.();
+        // Wait for async completeSession in the handler
+        await new Promise((r) => setTimeout(r, 10));
+        return 0;
+      });
+
+      const deps = makeDeps();
+      await runCreate(defaultTerminalArgs, deps);
+
+      // completeSession is called by the signal handler AND by normal flow
+      expect(deps.completeSession).toHaveBeenCalled();
+      expect(exitSpy).toHaveBeenCalledWith(130);
+
+      exitSpy.mockRestore();
+      onSpy.mockRestore();
+    });
+
+    test("first signal during terminal launch does not exit", async () => {
+      const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+      const handlers: Record<string, ((...args: unknown[]) => void)[]> = {};
+      const originalOn = process.on.bind(process);
+      const onSpy = vi.spyOn(process, "on").mockImplementation(((
+        event: string,
+        handler: (...args: unknown[]) => void,
+      ) => {
+        if (event === "SIGINT" || event === "SIGTERM") {
+          handlers[event] = handlers[event] || [];
+          handlers[event].push(handler);
+        }
+        return originalOn(event, handler);
+      }) as typeof process.on);
+
+      vi.mocked(spawnInteractive).mockImplementation(async () => {
+        // Simulate only one SIGINT (first signal). See the note above about why we
+        // take the last-registered handler rather than every captured one.
+        handlers.SIGINT?.at(-1)?.();
+        return 0;
+      });
+
+      const deps = makeDeps();
+      await runCreate(defaultTerminalArgs, deps);
+
+      // process.exit should NOT be called on first signal
+      expect(exitSpy).not.toHaveBeenCalled();
+      // completeSession is still called via normal flow after spawnInteractive resolves
+      expect(deps.completeSession).toHaveBeenCalled();
+
+      exitSpy.mockRestore();
+      onSpy.mockRestore();
+    });
+
+    test("does not mask the spawnInteractive error when completeSession fails", async () => {
+      vi.mocked(spawnInteractive).mockRejectedValueOnce(new Error("process crashed"));
+      const deps = makeDeps({
+        completeSession: vi.fn(async () => {
+          throw new Error("session write failed");
+        }),
+      });
+
+      await expect(runCreate(defaultTerminalArgs, deps)).rejects.toThrow("process crashed");
+    });
+
+    test("removes its signal listeners after terminal launch", async () => {
+      const sigintBefore = process.listenerCount("SIGINT");
+      const sigtermBefore = process.listenerCount("SIGTERM");
+
+      const deps = makeDeps();
+      await runCreate(defaultTerminalArgs, deps);
+
+      expect(process.listenerCount("SIGINT")).toBe(sigintBefore);
+      expect(process.listenerCount("SIGTERM")).toBe(sigtermBefore);
     });
   });
 
@@ -969,6 +1088,24 @@ describe("runCreate", () => {
       expect(spawnInteractive).not.toHaveBeenCalled();
     });
 
+    test("terminal-mode postCreate rollback keeps the session entry flag false", async () => {
+      const config: ProjectConfig = {
+        postCreate: "cd {path} && setup",
+      };
+      const deps = makeDeps({
+        loadProjectConfig: vi.fn(async () => config),
+        executeHookWithSpinner: vi.fn(async () => ({
+          success: false as const,
+          message: "setup failed",
+        })),
+      });
+      await runCreate(defaultTerminalArgs, deps);
+
+      // No session entry exists yet at this point — saveSession has not run.
+      expect(deps.saveSession).not.toHaveBeenCalled();
+      expect(deps.performRollback).toHaveBeenCalledWith(expect.objectContaining({ deleteSessionData: false }));
+    });
+
     test("does not execute postCreate hook in pane mode (delegated to pane process)", async () => {
       const config: ProjectConfig = {
         postCreate: "cd {path} && setup",
@@ -1274,6 +1411,41 @@ describe("runCreate", () => {
       await expect(runCreate(defaultPaneArgs, deps)).rejects.toThrow("send failed");
       expect(failingBackend.closePane).toHaveBeenCalledWith("42");
       expect(deps.performRollback).toHaveBeenCalled();
+    });
+
+    test("pane rollback does not delete a session entry it never wrote", async () => {
+      const failingBackend = {
+        name: "wezterm" as const,
+        createPane: vi.fn(async () => "42"),
+        sendCommand: vi.fn(async () => {
+          throw new Error("send failed");
+        }),
+        closePane: vi.fn(async () => {}),
+      };
+      const deps = makeDeps({ ensurePaneBackend: vi.fn(async () => failingBackend) });
+
+      await expect(runCreate(defaultPaneArgs, deps)).rejects.toThrow("send failed");
+      // sendCommand fails before saveSession runs — no entry exists to delete.
+      expect(deps.saveSession).not.toHaveBeenCalled();
+      expect(deps.performRollback).toHaveBeenCalledWith(expect.objectContaining({ deleteSessionData: false }));
+    });
+
+    test("pane rollback deletes the session entry it wrote", async () => {
+      // Fail the tmux "show attach hint" step, which runs after saveSession succeeds.
+      vi.mocked(getSessionForPane).mockRejectedValueOnce(new Error("tmux lookup failed"));
+
+      const tmuxBackend = {
+        name: "tmux" as const,
+        createPane: vi.fn(async () => "42"),
+        sendCommand: vi.fn(async () => {}),
+        closePane: vi.fn(async () => {}),
+      };
+      const deps = makeDeps({ ensurePaneBackend: vi.fn(async () => tmuxBackend) });
+
+      await expect(runCreate(defaultPaneArgs, deps)).rejects.toThrow("tmux lookup failed");
+      expect(deps.saveSession).toHaveBeenCalled();
+      expect(deps.performRollback).toHaveBeenCalledWith(expect.objectContaining({ deleteSessionData: true }));
+      expect(tmuxBackend.closePane).toHaveBeenCalledWith("42");
     });
   });
 

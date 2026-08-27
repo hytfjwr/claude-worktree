@@ -1,8 +1,33 @@
-import { spawn } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
 
 import type { ExecResult } from "../types/index.ts";
 
 export type { ExecResult } from "../types/index.ts";
+
+/** Grace period between SIGTERM and SIGKILL when killing a timed-out child process. */
+export const SIGKILL_GRACE_MS = 5000;
+
+/**
+ * Send SIGTERM, then escalate to SIGKILL after a grace period
+ * if the process hasn't exited.
+ */
+export function escalateKill(proc: ChildProcess, graceMs = SIGKILL_GRACE_MS): void {
+  let sent: boolean;
+  try {
+    sent = proc.kill("SIGTERM");
+  } catch {
+    return;
+  }
+  if (!sent) return;
+  const killTimer = setTimeout(() => {
+    try {
+      proc.kill("SIGKILL");
+    } catch {
+      // Process already exited
+    }
+  }, graceMs);
+  proc.once("exit", () => clearTimeout(killTimer));
+}
 
 /**
  * Error thrown when a command exits with non-zero code (unless .nothrow() is used).
@@ -37,6 +62,7 @@ export class ExecBuilder implements PromiseLike<ExecResult> {
   private _quiet = false;
   private _cwd: string | undefined;
   private _timeout: number | undefined;
+  private _sigkillGraceMs: number | undefined;
 
   constructor(
     private readonly cmd: string,
@@ -61,9 +87,16 @@ export class ExecBuilder implements PromiseLike<ExecResult> {
     return this;
   }
 
-  /** Kill the process after the specified duration (milliseconds). */
-  timeout(ms: number): ExecBuilder {
+  /**
+   * Kill the process after the specified duration (milliseconds).
+   *
+   * The timed-out process is sent SIGTERM and then SIGKILL after `sigkillGraceMs`,
+   * so a child that ignores or blocks SIGTERM still terminates and the promise
+   * still settles.
+   */
+  timeout(ms: number, sigkillGraceMs?: number): ExecBuilder {
     this._timeout = ms;
+    this._sigkillGraceMs = sigkillGraceMs;
     return this;
   }
 
@@ -97,7 +130,10 @@ export class ExecBuilder implements PromiseLike<ExecResult> {
       if (this._timeout) {
         timer = setTimeout(() => {
           timedOut = true;
-          proc.kill("SIGTERM");
+          // SIGTERM first, then SIGKILL after the grace period. Without the
+          // escalation a child that ignores SIGTERM never emits `close` and this
+          // promise would never settle.
+          escalateKill(proc, this._sigkillGraceMs);
         }, this._timeout);
       }
 

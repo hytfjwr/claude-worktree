@@ -10,7 +10,6 @@ import {
   loadProjectConfig,
   resolveHookTimeout,
   runHook,
-  SIGKILL_GRACE_MS,
   validateProjectConfig,
 } from "./config.ts";
 
@@ -345,13 +344,13 @@ describe("runHook timeout", () => {
   });
 
   test("kills SIGTERM-resistant process via SIGKILL escalation (onLine mode)", async () => {
-    const testGraceMs = 100;
-    // Use 'exec' so sh replaces itself with node; without it, sh may fork
-    // on Linux, causing SIGTERM to kill sh while node survives as an orphan.
-    const trapCmd = `exec node -e "console.log(process.pid); process.on('SIGTERM', () => {}); setTimeout(() => {}, 30000)"`;
+    const testGraceMs = 200;
+    // A pure-sh child: the trap is installed before the PID is printed, and sh
+    // starts far faster than node, so this stays reliable under parallel load.
+    const trapCmd = 'trap "" TERM; echo $$; while :; do sleep 0.1; done';
     const lines: string[] = [];
     await expect(
-      runHook(trapCmd, testCwd, { timeout: 0.5, onLine: (line) => lines.push(line), sigkillGraceMs: testGraceMs }),
+      runHook(trapCmd, testCwd, { timeout: 2, onLine: (line) => lines.push(line), sigkillGraceMs: testGraceMs }),
     ).rejects.toThrow(/timed out/);
 
     const pidLine = lines.find((line) => /^\d+$/.test(line));
@@ -361,7 +360,7 @@ describe("runHook timeout", () => {
 
     // Poll until the process exits (SIGKILL is sent after testGraceMs)
     let processExited = false;
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 60; i++) {
       try {
         process.kill(pid, 0);
       } catch {
@@ -371,13 +370,7 @@ describe("runHook timeout", () => {
       await new Promise((r) => setTimeout(r, 100));
     }
     expect(processExited).toBe(true);
-  }, 15000);
-});
-
-describe("SIGKILL_GRACE_MS", () => {
-  test("is 5000ms", () => {
-    expect(SIGKILL_GRACE_MS).toBe(5000);
-  });
+  }, 30000);
 });
 
 describe("runHook onLine", () => {

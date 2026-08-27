@@ -9,6 +9,12 @@ export type RollbackOptions = {
   postCleanTimeout: number;
   slot?: number;
   verbose: boolean;
-  /** Whether to delete session data during rollback (true for pane mode, false for terminal mode pre-session) */
+  /**
+   * Whether to delete the session entry during rollback. Set it only when the
+   * rolling-back process owns that entry: the pane-side child (which is the
+   * session), or the parent once its `saveSession` has succeeded. A worktree path
+   * can be reused, so deleting an entry this process did not write could drop
+   * another process's live session.
+   */
   deleteSessionData: boolean;
 };
