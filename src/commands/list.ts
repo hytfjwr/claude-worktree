@@ -18,6 +18,7 @@ import {
   readAllSessions,
 } from "../core/session.ts";
 import { gcMissingSlots } from "../core/slot.ts";
+import { truncateToWidth } from "../core/width.ts";
 import { listTmuxPanes } from "../external/tmux.ts";
 import { listWeztermPanes } from "../external/wezterm.ts";
 import type {
@@ -110,11 +111,12 @@ export function formatRelativeTime(date: Date, now: Date = new Date()): string {
   return `${diffYear} year${diffYear === 1 ? "" : "s"} ago`;
 }
 
+/**
+ * Truncates to `maxLength` display columns. Measured in terminal columns rather
+ * than UTF-16 units, so a wide character counts as two.
+ */
 export function truncate(text: string, maxLength: number): string {
-  if (text.length <= maxLength) {
-    return text;
-  }
-  return `${text.slice(0, maxLength - 3)}...`;
+  return truncateToWidth(text, maxLength, "...");
 }
 
 export function shortenPath(fullPath: string, repoRoot: string): string {
