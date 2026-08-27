@@ -9,6 +9,10 @@ export type ListArgs = {
   noStatus: boolean;
   quiet: boolean;
   fetch: boolean;
+  /** Live-refresh mode (-watch): redraw the list until the user quits. */
+  watch?: boolean;
+  /** Refresh interval for -watch, in seconds. */
+  intervalSeconds?: number;
 };
 
 export type WorktreeListEntry = {
@@ -42,4 +46,25 @@ export type ListDeps = {
   listTmuxPanes: () => Promise<TmuxPane[] | null>;
   gcMissingSessions: () => Promise<number>;
   gcMissingSlots: () => Promise<number>;
+};
+
+/**
+ * Terminal and timer seam for `list -watch`. Injecting it keeps the redraw loop
+ * drivable from tests without a real TTY or wall-clock timers.
+ */
+export type ListWatchIo = {
+  write: (chunk: string) => void;
+  rows: () => number;
+  columns: () => number;
+  now: () => Date;
+  setRawMode: (enabled: boolean) => void;
+  /** Subscribes to key presses; returns an unsubscribe function. */
+  onKey: (listener: (data: Buffer) => void) => () => void;
+  /** Subscribes to terminal resizes (SIGWINCH); returns an unsubscribe function. */
+  onResize: (listener: () => void) => () => void;
+  /** Subscribes to process exit; returns an unsubscribe function. */
+  onExit: (listener: () => void) => () => void;
+  /** Starts a repeating timer; returns a cancel function. */
+  setInterval: (callback: () => void, ms: number) => () => void;
+  exit: (code: number) => void;
 };

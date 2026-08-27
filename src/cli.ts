@@ -1,6 +1,7 @@
 import { executeClean } from "./commands/clean.ts";
 import { runCreate } from "./commands/create.ts";
 import { executeList } from "./commands/list.ts";
+import { executeListWatch } from "./commands/list-watch.ts";
 import { runResume } from "./commands/resume.ts";
 import { executeRunInPane, parseRunInPaneArgs } from "./commands/run-in-pane.ts";
 import { UsageError } from "./core/errors.ts";
@@ -94,7 +95,16 @@ const GLOBAL_HELP: HelpSpec = {
       entries: [
         { flags: "-j, -json", description: "Output as JSON" },
         { flags: "-no-status", description: "Hide Claude session status (shown by default)" },
-        { flags: "-fetch", description: "Fetch from remote before listing (default: local only)" },
+        {
+          flags: "-fetch",
+          description:
+            "Fetch from remote before listing (default: local only; with -watch, only the first refresh fetches)",
+        },
+        {
+          flags: "-w, -watch",
+          description: "Redraw the list on an interval until you quit (requires a TTY; cannot be used with -json)",
+        },
+        { flags: "-interval <seconds>", description: "Refresh interval for -watch (default: 2, min: 1, max: 60)" },
         { flags: "-q, -quiet", description: "Suppress informational output (errors only)" },
         { flags: "-v, -verbose", description: "Show full paths and details" },
       ],
@@ -139,6 +149,7 @@ const GLOBAL_HELP: HelpSpec = {
         { arg: "claude-worktree resume" },
         { arg: "claude-worktree list" },
         { arg: "claude-worktree list -json" },
+        { arg: "claude-worktree list -watch" },
         { arg: "claude-worktree clean" },
         { arg: "claude-worktree clean feature/auth" },
         { arg: "claude-worktree clean feature/auth fix/bug-123" },
@@ -225,7 +236,7 @@ const LIST_HELP: HelpSpec = {
   name: "claude-worktree list",
   tagline: "List existing worktrees with status",
   description:
-    "Displays all git worktrees managed by claude-worktree, including branch info, commit details, and optionally Claude session status.",
+    "Displays all git worktrees managed by claude-worktree, including branch info, commit details, and optionally Claude session status. With -watch, the list is redrawn on an interval in an alternate screen buffer until you quit.",
   usage: ["claude-worktree list [options]"],
   sections: [
     {
@@ -234,7 +245,16 @@ const LIST_HELP: HelpSpec = {
       entries: [
         { flags: "-j, -json", description: "Output as JSON (machine-readable format)" },
         { flags: "-no-status", description: "Hide Claude session status (shown by default)" },
-        { flags: "-fetch", description: "Fetch from remote before listing (default: local only)" },
+        {
+          flags: "-fetch",
+          description:
+            "Fetch from remote before listing (default: local only; with -watch, only the first refresh fetches)",
+        },
+        {
+          flags: "-w, -watch",
+          description: "Redraw the list on an interval until you quit (requires a TTY; cannot be used with -json)",
+        },
+        { flags: "-interval <seconds>", description: "Refresh interval for -watch (default: 2, min: 1, max: 60)" },
         { flags: "-q, -quiet", description: "Suppress informational output (errors only)" },
         { flags: "-v, -verbose", description: "Show full paths and details" },
         { flags: "-h, -help, --help", description: "Show this help" },
@@ -248,6 +268,8 @@ const LIST_HELP: HelpSpec = {
         { arg: "claude-worktree list -fetch" },
         { arg: "claude-worktree list -no-status" },
         { arg: "claude-worktree list -json" },
+        { arg: "claude-worktree list -watch" },
+        { arg: "claude-worktree list -watch -interval 5" },
         { arg: "claude-worktree list -verbose" },
       ],
     },
@@ -578,12 +600,39 @@ export function parseCleanArgs(args: string[]): CleanArgs {
   };
 }
 
-export function parseListArgs(args: string[]): ListArgs {
-  const { booleans, remaining } = extractOptions(args, {
+const DEFAULT_WATCH_INTERVAL_SECONDS = 2;
+const MIN_WATCH_INTERVAL_SECONDS = 1;
+const MAX_WATCH_INTERVAL_SECONDS = 60;
+
+/** `-watch` draws a full-screen view and reads key presses, so both ends must be a TTY. */
+function isInteractiveTerminal(): boolean {
+  return Boolean(process.stdin.isTTY && process.stdout.isTTY);
+}
+
+function parseWatchInterval(raw: string | undefined): number {
+  if (raw === undefined) {
+    return DEFAULT_WATCH_INTERVAL_SECONDS;
+  }
+  if (!/^\d+$/.test(raw)) {
+    throw new UsageError(`-interval requires a whole number of seconds (got "${raw}").`);
+  }
+  const seconds = Number.parseInt(raw, 10);
+  if (seconds < MIN_WATCH_INTERVAL_SECONDS || seconds > MAX_WATCH_INTERVAL_SECONDS) {
+    throw new UsageError(
+      `-interval must be between ${MIN_WATCH_INTERVAL_SECONDS} and ${MAX_WATCH_INTERVAL_SECONDS} seconds (got "${raw}").`,
+    );
+  }
+  return seconds;
+}
+
+export function parseListArgs(args: string[], isTty: () => boolean = isInteractiveTerminal): ListArgs {
+  const { booleans, strings, remaining } = extractOptions(args, {
     options: {
       json: { type: "boolean", flag: "-json", alias: "-j" },
       noStatus: { type: "boolean", flag: "-no-status" },
       fetch: { type: "boolean", flag: "-fetch" },
+      watch: { type: "boolean", flag: "-watch", alias: "-w" },
+      interval: { type: "string", flag: "-interval", errorMessage: "-interval requires a number of seconds argument" },
       quiet: { type: "boolean", flag: "-quiet", alias: "-q" },
       verbose: { type: "boolean", flag: "-verbose", alias: "-v" },
     },
@@ -605,12 +654,34 @@ export function parseListArgs(args: string[]): ListArgs {
     );
   }
 
+  const intervalSeconds = parseWatchInterval(strings.interval);
+
+  if (booleans.watch && booleans.json) {
+    throw new UsageError(
+      "Cannot use both -watch and -json options.\n\n" +
+        "  -watch  Continuously redraw the worktree list until you quit\n" +
+        "  -json   Print a single machine-readable snapshot\n\n" +
+        "These options are mutually exclusive. Use only one.",
+    );
+  }
+
+  if (booleans.watch && !isTty()) {
+    throw new UsageError(
+      "-watch requires an interactive terminal.\n\n" +
+        "Standard input or output is not a TTY (piped or redirected), so the live view cannot be drawn\n" +
+        "and key presses cannot be read.\n\n" +
+        "Use `claude-worktree list` for a one-shot snapshot, or `claude-worktree list -json` when capturing output.",
+    );
+  }
+
   return {
     json: booleans.json,
     quiet: booleans.quiet,
     verbose: booleans.verbose,
     noStatus: booleans.noStatus,
     fetch: booleans.fetch,
+    watch: booleans.watch,
+    intervalSeconds,
   };
 }
 
@@ -752,7 +823,11 @@ export async function run(command: Command): Promise<void> {
       await runResume(command.args);
       break;
     case "list":
-      await executeList(command.args);
+      if (command.args.watch) {
+        await executeListWatch(command.args);
+      } else {
+        await executeList(command.args);
+      }
       break;
     case "clean":
       await executeClean(command.args);
