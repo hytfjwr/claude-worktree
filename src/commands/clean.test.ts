@@ -81,7 +81,7 @@ describe("executeClean", () => {
 
       const result = await executeClean(defaultArgs, deps);
 
-      expect(result).toEqual({ deleted: [], skipped: [], errors: [] });
+      expect(result).toEqual({ deleted: [], skipped: [], errors: [], branchDeletionFailures: [] });
     });
   });
 
@@ -95,7 +95,7 @@ describe("executeClean", () => {
 
       const result = await executeClean(defaultArgs, deps);
 
-      expect(result).toEqual({ deleted: [], skipped: [], errors: [] });
+      expect(result).toEqual({ deleted: [], skipped: [], errors: [], branchDeletionFailures: [] });
     });
   });
 
@@ -109,7 +109,7 @@ describe("executeClean", () => {
 
       const result = await executeClean(defaultArgs, deps);
 
-      expect(result).toEqual({ deleted: [], skipped: [], errors: [] });
+      expect(result).toEqual({ deleted: [], skipped: [], errors: [], branchDeletionFailures: [] });
     });
 
     test("deletes canAutoClean worktrees", async () => {
@@ -169,7 +169,7 @@ describe("executeClean", () => {
 
       const result = await executeClean({ ...defaultArgs, all: true }, deps);
 
-      expect(result).toEqual({ deleted: [], skipped: [], errors: [] });
+      expect(result).toEqual({ deleted: [], skipped: [], errors: [], branchDeletionFailures: [] });
     });
   });
 
@@ -195,7 +195,7 @@ describe("executeClean", () => {
       const result = await executeClean({ ...defaultArgs, dryRun: true }, deps);
 
       expect(removeWorktreeCalled).toBe(false);
-      expect(result).toEqual({ deleted: [], skipped: [], errors: [] });
+      expect(result).toEqual({ deleted: [], skipped: [], errors: [], branchDeletionFailures: [] });
     });
   });
 
@@ -216,7 +216,7 @@ describe("executeClean", () => {
       const result = await executeClean(defaultArgs, deps);
 
       expect(removeWorktreeCalled).toBe(false);
-      expect(result).toEqual({ deleted: [], skipped: [], errors: [] });
+      expect(result).toEqual({ deleted: [], skipped: [], errors: [], branchDeletionFailures: [] });
     });
 
     test("-force skips confirmation", async () => {
@@ -926,6 +926,49 @@ describe("executeClean", () => {
       await executeClean({ ...defaultArgs, force: true }, deps);
 
       expect(deleteLocalBranchCalled).toBe(false);
+    });
+
+    test("records a branch deletion failure and warns when deleteLocalBranch throws", async () => {
+      const worktree = makeWorktree({
+        path: "/tmp/repo-branch-kept",
+        branch: "feature/branch-kept",
+      });
+      const status = makeStatus(
+        { path: "/tmp/repo-branch-kept", branch: "feature/branch-kept" },
+        { canAutoClean: true },
+      );
+      const deps = makeDeps({
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
+        getWorktreeStatuses: async () => [status],
+        deleteLocalBranch: async () => {
+          throw new Error("cannot lock ref");
+        },
+      });
+
+      const result = await executeClean({ ...defaultArgs, force: true }, deps);
+
+      expect(result.branchDeletionFailures).toEqual([
+        { path: "/tmp/repo-branch-kept", branch: "feature/branch-kept", error: "cannot lock ref" },
+      ]);
+      expect(result.deleted).toEqual(["/tmp/repo-branch-kept"]);
+      const warnCalls = consoleWarnSpy.mock.calls.flat();
+      expect(warnCalls.some((arg) => typeof arg === "string" && arg.includes("kept"))).toBe(true);
+    });
+
+    test("branchDeletionFailures is empty when branch deletion succeeds", async () => {
+      const worktree = makeWorktree({
+        path: "/tmp/repo-branch-ok",
+        branch: "feature/branch-ok",
+      });
+      const status = makeStatus({ path: "/tmp/repo-branch-ok", branch: "feature/branch-ok" }, { canAutoClean: true });
+      const deps = makeDeps({
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
+        getWorktreeStatuses: async () => [status],
+      });
+
+      const result = await executeClean({ ...defaultArgs, force: true }, deps);
+
+      expect(result.branchDeletionFailures).toEqual([]);
     });
   });
 
