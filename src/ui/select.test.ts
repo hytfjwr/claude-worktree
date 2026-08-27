@@ -3,7 +3,16 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { saveEnv } from "../__test-utils__.ts";
 import { stringWidth, stripAnsi } from "../core/width.ts";
 import { _resetColorCache, styles } from "./color.ts";
-import { computeViewport, computeViewportHeight, filterItems, fuzzyMatch, selectMany, selectSingle } from "./select.ts";
+import {
+  computeViewport,
+  computeViewportHeight,
+  filterItems,
+  fuzzyMatch,
+  locateClick,
+  scrollViewport,
+  selectMany,
+  selectSingle,
+} from "./select.ts";
 
 // Mock readline for non-TTY fallback tests.
 // TTY tests bypass this because they enter the raw-mode path.
@@ -172,7 +181,8 @@ const sampleItems = [
 let restoreEnv: () => void;
 
 beforeEach(() => {
-  restoreEnv = saveEnv("NO_COLOR");
+  restoreEnv = saveEnv("NO_COLOR", "CLAUDE_WORKTREE_NO_MOUSE");
+  delete process.env.CLAUDE_WORKTREE_NO_MOUSE;
   _resetColorCache();
 });
 
@@ -848,6 +858,62 @@ describe("viewport rendering", () => {
   });
 });
 
+describe("scrollViewport", () => {
+  test("a list shorter than the viewport never scrolls", () => {
+    expect(scrollViewport(3, 10, 0, 1, 5)).toEqual({ offset: 0, cursor: 1 });
+    expect(scrollViewport(3, 10, 0, 1, -5)).toEqual({ offset: 0, cursor: 1 });
+  });
+
+  test("scrolling down pulls the cursor back inside the new window", () => {
+    expect(scrollViewport(20, 6, 0, 0, 3)).toEqual({ offset: 3, cursor: 4 });
+  });
+
+  test("a cursor still inside the new window is left where it is, clamped to maxCursor", () => {
+    // offset 3, windowSize 6, maxOffset 14, scrolloff 1 -> maxCursor = 3 + 6 - 1 - 1 = 7
+    expect(scrollViewport(20, 6, 0, 10, 3)).toEqual({ offset: 3, cursor: 7 });
+  });
+
+  test("scrolling up does not go past the top", () => {
+    expect(scrollViewport(20, 6, 0, 0, -3)).toEqual({ offset: 0, cursor: 0 });
+  });
+
+  test("scrolling down does not go past the bottom", () => {
+    expect(scrollViewport(20, 6, 14, 19, 3)).toEqual({ offset: 14, cursor: 19 });
+  });
+
+  test("an empty list returns all zeros", () => {
+    expect(scrollViewport(0, 6, 5, 3, 2)).toEqual({ offset: 0, cursor: 0 });
+  });
+});
+
+describe("locateClick", () => {
+  const layout = {
+    lineToVisible: new Map([[4, 2]]),
+    scrollUpLine: 2,
+    scrollDownLine: 8,
+  };
+
+  test("baseRow null (no cursor position report yet) ignores every click", () => {
+    expect(locateClick(layout, null, 15)).toEqual({ kind: "none" });
+  });
+
+  test("a row within lineToVisible resolves to that candidate", () => {
+    expect(locateClick(layout, 11, 15)).toEqual({ kind: "row", visibleIndex: 2 });
+  });
+
+  test("the scroll-up indicator line resolves to scroll_up", () => {
+    expect(locateClick(layout, 11, 13)).toEqual({ kind: "scroll_up" });
+  });
+
+  test("the scroll-down indicator line resolves to scroll_down", () => {
+    expect(locateClick(layout, 11, 19)).toEqual({ kind: "scroll_down" });
+  });
+
+  test("a row that maps to nothing resolves to none", () => {
+    expect(locateClick(layout, 11, 100)).toEqual({ kind: "none" });
+  });
+});
+
 // =============================================================================
 // Filtering
 // =============================================================================
@@ -1187,5 +1253,236 @@ describe("filtering with selectMany", () => {
       emitKey(KEY_ENTER); // confirm
       await promise;
     });
+  });
+});
+
+// =============================================================================
+// Mouse
+// =============================================================================
+
+describe("mouse (TTY)", () => {
+  // With rows: 12, computeViewportHeight(12, 0) = 6, so the viewport height
+  // below is 6 candidate rows.
+  function sgr(button: number, x: number, y: number, press = true): number[] {
+    return [...Buffer.from(`\x1b[<${button};${x};${y}${press ? "M" : "m"}`, "latin1")];
+  }
+  function dsr(row: number, col = 1): number[] {
+    return [...Buffer.from(`\x1b[${row};${col}R`, "latin1")];
+  }
+
+  test("enables mouse tracking on start and disables it on exit", () => {
+    return withTTYStdin(
+      async (emitKey) => {
+        const writeSpy = vi.spyOn(process.stdout, "write");
+        const promise = selectSingle({ message: "Pick:", items: manyItems(20) });
+
+        const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+        expect(output).toContain("\x1b[?1000;1006h");
+        expect(output).toContain("\x1b[?1002h");
+
+        emitKey(KEY_ENTER);
+        await promise;
+
+        const afterOutput = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+        expect(afterOutput).toContain("\x1b[?1002l");
+        expect(afterOutput).toContain("\x1b[?1000l");
+        expect(afterOutput).toContain("\x1b[?1006l");
+      },
+      { rows: 12 },
+    );
+  });
+
+  test("CLAUDE_WORKTREE_NO_MOUSE opts out of mouse tracking and clicks", () => {
+    process.env.CLAUDE_WORKTREE_NO_MOUSE = "1";
+    return withTTYStdin(
+      async (emitKey) => {
+        const writeSpy = vi.spyOn(process.stdout, "write");
+        const promise = selectSingle({ message: "Pick:", items: manyItems(20) });
+
+        const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+        expect(output).not.toContain("\x1b[?1000");
+
+        emitKey(sgr(0, 1, 15));
+        const lastOutput = String(writeSpy.mock.calls[writeSpy.mock.calls.length - 1][0]);
+        expect(stripAnsi(lastOutput)).toContain("1/20");
+
+        emitKey(KEY_ENTER);
+        const result = await promise;
+        expect(result).toBe("v1");
+      },
+      { rows: 12 },
+    );
+  });
+
+  test("wheel down scrolls the viewport and clamps the cursor into view", () => {
+    return withTTYStdin(
+      async (emitKey) => {
+        const writeSpy = vi.spyOn(process.stdout, "write");
+        const promise = selectSingle({ message: "Pick:", items: manyItems(20) });
+
+        emitKey(sgr(65, 1, 1)); // wheel down
+        const lastOutput = stripAnsi(String(writeSpy.mock.calls[writeSpy.mock.calls.length - 1][0]));
+        expect(lastOutput).toContain("↑ 3 more");
+        expect(lastOutput).toContain("5/20");
+
+        emitKey(KEY_ENTER);
+        await promise;
+      },
+      { rows: 12 },
+    );
+  });
+
+  test("wheel up does not scroll past the top", () => {
+    return withTTYStdin(
+      async (emitKey) => {
+        const writeSpy = vi.spyOn(process.stdout, "write");
+        const promise = selectSingle({ message: "Pick:", items: manyItems(20) });
+
+        emitKey(sgr(64, 1, 1)); // wheel up
+        const lastOutput = stripAnsi(String(writeSpy.mock.calls[writeSpy.mock.calls.length - 1][0]));
+        expect(lastOutput).toContain("1/20");
+
+        emitKey(KEY_ENTER);
+        await promise;
+      },
+      { rows: 12 },
+    );
+  });
+
+  test("a click before the terminal answers the cursor position request is ignored", () => {
+    return withTTYStdin(
+      async (emitKey) => {
+        const writeSpy = vi.spyOn(process.stdout, "write");
+        const promise = selectSingle({ message: "Pick:", items: manyItems(20) });
+
+        // Ignored: no draw follows, so the frame still shows the initial position.
+        emitKey(sgr(0, 1, 15)); // left click, no DSR reply sent
+        const output = stripAnsi(writeSpy.mock.calls.map((c) => String(c[0])).join(""));
+        expect(output).toContain("1/20");
+
+        emitKey(KEY_ENTER);
+        await promise;
+      },
+      { rows: 12 },
+    );
+  });
+
+  test("a click after a DSR reply moves the cursor to the clicked candidate", () => {
+    return withTTYStdin(
+      async (emitKey) => {
+        const writeSpy = vi.spyOn(process.stdout, "write");
+        const promise = selectSingle({ message: "Pick:", items: manyItems(20) });
+
+        emitKey(dsr(21)); // frame is 10 lines tall, so baseRow = 21 - 10 = 11
+        emitKey(sgr(0, 1, 15)); // frame line 4 (11 + 4 = 15) is the third candidate row
+        const lastOutput = stripAnsi(String(writeSpy.mock.calls[writeSpy.mock.calls.length - 1][0]));
+        expect(lastOutput).toContain("3/20");
+
+        emitKey(KEY_ENTER);
+        await promise;
+      },
+      { rows: 12 },
+    );
+  });
+
+  test("a double click confirms the clicked candidate", () => {
+    return withTTYStdin(
+      async (emitKey) => {
+        const promise = selectSingle({ message: "Pick:", items: manyItems(20) });
+
+        emitKey(dsr(21));
+        emitKey(sgr(0, 1, 15));
+        emitKey(sgr(0, 1, 15));
+        const result = await promise;
+        expect(result).toBe("v3");
+      },
+      { rows: 12 },
+    );
+  });
+
+  test("selectMany: a click toggles the clicked candidate", () => {
+    return withTTYStdin(
+      async (emitKey) => {
+        const promise = selectMany({ message: "Pick:", items: manyItems(20) });
+
+        emitKey(dsr(21));
+        emitKey(sgr(0, 1, 15));
+        emitKey(KEY_ENTER);
+        const result = await promise;
+        expect(result).toEqual(["v3"]);
+      },
+      { rows: 12 },
+    );
+  });
+
+  test("right and middle clicks are ignored", () => {
+    return withTTYStdin(
+      async (emitKey) => {
+        const writeSpy = vi.spyOn(process.stdout, "write");
+        const promise = selectSingle({ message: "Pick:", items: manyItems(20) });
+
+        emitKey(dsr(21));
+        // Ignored: neither click causes a redraw.
+        emitKey(sgr(2, 1, 15)); // right click
+        emitKey(sgr(1, 1, 15)); // middle click
+        const output = stripAnsi(writeSpy.mock.calls.map((c) => String(c[0])).join(""));
+        expect(output).toContain("1/20");
+
+        emitKey(KEY_ENTER);
+        await promise;
+      },
+      { rows: 12 },
+    );
+  });
+
+  test("a click outside the candidate rows is ignored", () => {
+    return withTTYStdin(
+      async (emitKey) => {
+        const writeSpy = vi.spyOn(process.stdout, "write");
+        const promise = selectSingle({ message: "Pick:", items: manyItems(20) });
+
+        emitKey(dsr(21));
+        // Ignored: the click lands outside the candidate rows, so no redraw follows.
+        emitKey(sgr(0, 1, 12)); // frame line 1: the message line
+        const output = stripAnsi(writeSpy.mock.calls.map((c) => String(c[0])).join(""));
+        expect(output).toContain("1/20");
+
+        emitKey(KEY_ENTER);
+        await promise;
+      },
+      { rows: 12 },
+    );
+  });
+
+  test("clicking the down scroll indicator pages the viewport forward", () => {
+    return withTTYStdin(
+      async (emitKey) => {
+        const writeSpy = vi.spyOn(process.stdout, "write");
+        const promise = selectSingle({ message: "Pick:", items: manyItems(20) });
+
+        emitKey(dsr(21));
+        emitKey(sgr(0, 1, 19)); // frame line 8: the down scroll indicator
+        // scrollViewport(20, 6, 0, 0, 6) -> { offset: 6, cursor: 7 }
+        const lastOutput = stripAnsi(String(writeSpy.mock.calls[writeSpy.mock.calls.length - 1][0]));
+        expect(lastOutput).toContain("8/20");
+
+        emitKey(KEY_ENTER);
+        await promise;
+      },
+      { rows: 12 },
+    );
+  });
+
+  test("a paste-like burst of bytes in one data event is not dropped", () => {
+    return withTTYStdin(
+      async (emitKey) => {
+        const promise = selectSingle({ message: "Pick:", items: manyItems(20) });
+
+        emitKey([...KEY_DOWN, ...KEY_DOWN, ...KEY_ENTER]);
+        const result = await promise;
+        expect(result).toBe("v3");
+      },
+      { rows: 12 },
+    );
   });
 });

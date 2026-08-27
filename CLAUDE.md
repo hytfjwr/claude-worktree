@@ -231,6 +231,7 @@ src/
 
 **Environment Variables:**
 - `CLAUDE_WORKTREE_CACHE_DIR` — override the slot cache directory (default: `~/.cache/claude-worktree`)
+- `CLAUDE_WORKTREE_NO_MOUSE` — disable mouse support in the interactive selectors (any non-empty value). Mouse tracking takes over the terminal's own text selection while a selector is open.
 
 **External Tool Dependencies:** node, git, wezterm CLI or tmux (for -pane), claude CLI, gh CLI (optional)
 

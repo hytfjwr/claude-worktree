@@ -1,9 +1,19 @@
 import * as readline from "node:readline";
 
 import { padToWidth, stringWidth, truncateToWidth } from "../core/width.ts";
-import type { FilterMatch, SelectItem, Viewport } from "../types/index.ts";
+import type {
+  ClickTarget,
+  ControlKey,
+  FilterMatch,
+  FrameLayout,
+  InputAction,
+  MouseInput,
+  SelectItem,
+  Viewport,
+} from "../types/index.ts";
 import { cyan, dim, green, styles } from "./color.ts";
 import { icons } from "./icons.ts";
+import { parseInput } from "./input-parser.ts";
 import { logInfo } from "./logger.ts";
 
 export type { SelectItem } from "../types/index.ts";
@@ -45,6 +55,7 @@ type SelectState = {
 type SelectFrame = {
   lines: string[];
   viewport: Viewport;
+  layout: FrameLayout;
 };
 
 // =============================================================================
@@ -54,6 +65,17 @@ type SelectFrame = {
 const HIDE_CURSOR = "\x1b[?25l";
 const SHOW_CURSOR = "\x1b[?25h";
 const CLEAR_DOWN = "\x1b[J";
+
+// Mouse tracking: normal tracking (1000) with SGR extended coordinates (1006),
+// plus button-event tracking (1002). Disabled in the reverse order.
+const MOUSE_ENABLE = "\x1b[?1000;1006h\x1b[?1002h";
+const MOUSE_DISABLE = "\x1b[?1002l\x1b[?1000l\x1b[?1006l";
+const REQUEST_CURSOR_POSITION = "\x1b[6n";
+
+/** A cursor position report arriving later than this is treated as stale. */
+const CURSOR_POSITION_TIMEOUT_MS = 150;
+const WHEEL_STEP = 3;
+const DOUBLE_CLICK_MS = 400;
 
 function moveUp(n: number): string {
   return n > 0 ? `\x1b[${n}A` : "";
@@ -80,54 +102,36 @@ type KeyAction =
   | "ctrl_u"
   | "unknown";
 
-/** Handles control bytes and CSI sequences only. Printable text is decoded by `printableText`. */
-function parseKey(data: Buffer): KeyAction {
-  if (data.length === 1) {
-    const byte = data[0];
-    if (byte === 0x03) return "ctrl_c";
-    if (byte === 0x0d) return "enter"; // CR
-    if (byte === 0x0a) return "enter"; // LF
-    if (byte === 0x10) return "up"; // Ctrl+P
-    if (byte === 0x0e) return "down"; // Ctrl+N
-    if (byte === 0x1b) return "cancel"; // Esc
-    if (byte === 0x08) return "backspace";
-    if (byte === 0x7f) return "backspace";
-    if (byte === 0x15) return "ctrl_u"; // Ctrl+U
+/** Selector meaning of a control key. Returns null for keys the selector ignores. */
+function controlKeyAction(key: ControlKey): KeyAction | null {
+  switch (key) {
+    case "ctrl_c":
+      return "ctrl_c";
+    case "enter":
+      return "enter";
+    case "escape":
+      return "cancel";
+    case "backspace":
+      return "backspace";
+    case "ctrl_u":
+      return "ctrl_u";
+    case "ctrl_p":
+    case "up":
+      return "up";
+    case "ctrl_n":
+    case "down":
+      return "down";
+    case "page_up":
+      return "page_up";
+    case "page_down":
+      return "page_down";
+    case "home":
+      return "home";
+    case "end":
+      return "end";
+    default:
+      return null;
   }
-  // CSI sequences: ESC [ <params> <final>
-  if (data.length >= 3 && data[0] === 0x1b && data[1] === 0x5b) {
-    switch (data.toString("latin1", 2)) {
-      case "A":
-        return "up";
-      case "B":
-        return "down";
-      case "5~":
-        return "page_up";
-      case "6~":
-        return "page_down";
-      case "H":
-      case "1~":
-      case "7~":
-        return "home";
-      case "F":
-      case "4~":
-      case "8~":
-        return "end";
-    }
-  }
-  return "unknown";
-}
-
-/**
- * Decodes the buffer as filter text. Returns null unless every byte is
- * printable, so control bytes and escape sequences fall through to parseKey.
- */
-function printableText(data: Buffer): string | null {
-  if (data.length === 0) return null;
-  for (const byte of data) {
-    if (byte < 0x20 || byte === 0x7f) return null;
-  }
-  return data.toString("utf8");
 }
 
 /** Navigation meaning of a printable character outside filter input mode. */
@@ -198,6 +202,43 @@ export function computeViewport(total: number, cursor: number, height: number, c
   offset = clamp(offset, 0, maxOffset);
   const visibleEnd = Math.min(total, offset + windowSize);
   return { offset, visibleStart: offset, visibleEnd, hiddenAbove: offset, hiddenBelow: total - visibleEnd };
+}
+
+/**
+ * Scrolls the window by `delta` rows without moving the cursor, except to pull
+ * it back inside the new window. Keeping the cursor within SCROLLOFF of the
+ * edges stops computeViewport from scrolling straight back.
+ */
+export function scrollViewport(
+  total: number,
+  height: number,
+  offset: number,
+  cursor: number,
+  delta: number,
+): { offset: number; cursor: number } {
+  if (total <= 0) return { offset: 0, cursor: 0 };
+  const windowSize = Math.max(1, Math.min(height, total));
+  const maxOffset = Math.max(0, total - windowSize);
+  const nextOffset = clamp(offset + delta, 0, maxOffset);
+  const scrolloff = Math.min(SCROLLOFF, Math.floor((windowSize - 1) / 2));
+  const minCursor = nextOffset === 0 ? 0 : nextOffset + scrolloff;
+  const maxCursor = nextOffset === maxOffset ? total - 1 : nextOffset + windowSize - 1 - scrolloff;
+  return { offset: nextOffset, cursor: clamp(cursor, minCursor, maxCursor) };
+}
+
+/**
+ * Maps an absolute terminal row to what the frame drew there. `baseRow` is the
+ * terminal row of the frame's first line, or null when the terminal never
+ * answered the cursor position request — clicks are ignored in that case.
+ */
+export function locateClick(layout: FrameLayout, baseRow: number | null, y: number): ClickTarget {
+  if (baseRow === null) return { kind: "none" };
+  const line = y - baseRow;
+  const visibleIndex = layout.lineToVisible.get(line);
+  if (visibleIndex !== undefined) return { kind: "row", visibleIndex };
+  if (layout.scrollUpLine !== null && line === layout.scrollUpLine) return { kind: "scroll_up" };
+  if (layout.scrollDownLine !== null && line === layout.scrollDownLine) return { kind: "scroll_down" };
+  return { kind: "none" };
 }
 
 // =============================================================================
@@ -370,6 +411,10 @@ function buildFrame<T>(
   const viewport = computeViewport(state.visible.length, state.cursor, height, state.offset);
 
   const lines: string[] = [];
+  const lineToVisible = new Map<number, number>();
+  let scrollUpLine: number | null = null;
+  let scrollDownLine: number | null = null;
+
   lines.push("");
   lines.push(truncateToWidth(ctx.message, frameWidth));
   if (showFilter) {
@@ -379,19 +424,22 @@ function buildFrame<T>(
     lines.push(dim("  no matches"));
   } else {
     if (viewport.hiddenAbove > 0) {
+      scrollUpLine = lines.length;
       lines.push(dim(`  ${icons.scrollUp()} ${viewport.hiddenAbove} more`));
     }
     for (let i = viewport.visibleStart; i < viewport.visibleEnd; i++) {
       const match = state.visible[i];
+      lineToVisible.set(lines.length, i);
       lines.push(renderRow(ctx, state, match.index, i === state.cursor, frameWidth, match.labelMatches));
     }
     if (viewport.hiddenBelow > 0) {
+      scrollDownLine = lines.length;
       lines.push(dim(`  ${icons.scrollDown()} ${viewport.hiddenBelow} more`));
     }
   }
   lines.push(footerLine(ctx, state, frameWidth));
 
-  return { lines, viewport };
+  return { lines, viewport, layout: { lineToVisible, scrollUpLine, scrollDownLine } };
 }
 
 // =============================================================================
@@ -465,6 +513,10 @@ async function fallbackMany<T>(options: SelectOptions<T>): Promise<T[]> {
  */
 function runInteractive<T>(ctx: SelectContext<T>): Promise<SelectState | null> {
   return new Promise((resolve) => {
+    // Mouse tracking takes over the terminal's own text selection, so leave an
+    // escape hatch for users who need to copy from the list.
+    const mouseEnabled = (process.env.CLAUDE_WORKTREE_NO_MOUSE ?? "") === "";
+
     const state: SelectState = {
       visible: filterItems(ctx.items, ""),
       cursor: 0,
@@ -475,6 +527,15 @@ function runInteractive<T>(ctx: SelectContext<T>): Promise<SelectState | null> {
     };
     let renderedLines = 0;
     let resolved = false;
+    let lastLayout: FrameLayout = { lineToVisible: new Map(), scrollUpLine: null, scrollDownLine: null };
+    /** Terminal row of the frame's first line, or null while it is unknown. */
+    let baseRow: number | null = null;
+    /** Timestamp of the pending cursor position request; 0 when none is pending. */
+    let cursorRequestAt = 0;
+    let cursorRequestLines = 0;
+    let lastClickIndex = -1;
+    let lastClickAt = 0;
+    let pending: Buffer = Buffer.alloc(0);
 
     const write = (s: string) => process.stdout.write(s);
 
@@ -492,6 +553,7 @@ function runInteractive<T>(ctx: SelectContext<T>): Promise<SelectState | null> {
       state.offset = frame.viewport.offset; // persist the scrolled position
       write(`${frame.lines.join("\n")}\n`);
       renderedLines = frame.lines.length;
+      lastLayout = frame.layout;
     };
 
     const toggleCurrent = () => {
@@ -518,6 +580,35 @@ function runInteractive<T>(ctx: SelectContext<T>): Promise<SelectState | null> {
       draw();
     };
 
+    const scrollBy = (delta: number) => {
+      const next = scrollViewport(state.visible.length, viewportHeight(), state.offset, state.cursor, delta);
+      state.offset = next.offset;
+      state.cursor = next.cursor;
+      draw();
+    };
+
+    /**
+     * Asks the terminal where the cursor is so mouse rows can be mapped to
+     * candidates. Sent after drawing: the reply names the row just below the frame,
+     * so the frame's first line is that row minus the frame height. Terminals that
+     * never answer simply leave clicks disabled.
+     */
+    const requestBaseRow = () => {
+      if (!mouseEnabled) return;
+      baseRow = null;
+      cursorRequestAt = Date.now();
+      cursorRequestLines = renderedLines;
+      write(REQUEST_CURSOR_POSITION);
+    };
+
+    const handleCursorPosition = (row: number) => {
+      if (cursorRequestAt === 0) return;
+      const fresh = Date.now() - cursorRequestAt <= CURSOR_POSITION_TIMEOUT_MS;
+      cursorRequestAt = 0;
+      if (!fresh) return;
+      baseRow = row - cursorRequestLines;
+    };
+
     // Recomputes the visible matches, keeping the cursor on the same item when it survives.
     const setQuery = (query: string) => {
       const anchor = state.visible[state.cursor]?.index;
@@ -532,6 +623,8 @@ function runInteractive<T>(ctx: SelectContext<T>): Promise<SelectState | null> {
       // so draw a fresh frame instead of moving up over the old one.
       renderedLines = 0;
       draw();
+      // The frame moved on screen, so the previously known base row is stale.
+      requestBaseRow();
     };
 
     const cleanup = () => {
@@ -544,6 +637,7 @@ function runInteractive<T>(ctx: SelectContext<T>): Promise<SelectState | null> {
         process.stdin.setRawMode(false);
         process.stdin.pause();
       }
+      if (mouseEnabled) write(MOUSE_DISABLE);
       // Clear the rendered UI
       if (renderedLines > 0) {
         write(moveUp(renderedLines));
@@ -567,6 +661,8 @@ function runInteractive<T>(ctx: SelectContext<T>): Promise<SelectState | null> {
             process.stdin.setRawMode(false);
           } catch {}
         }
+        // Leaving mouse tracking enabled would make the terminal unusable.
+        if (mouseEnabled) process.stdout.write(MOUSE_DISABLE);
         process.stdout.write(SHOW_CURSOR);
       }
     };
@@ -674,32 +770,95 @@ function runInteractive<T>(ctx: SelectContext<T>): Promise<SelectState | null> {
       }
     };
 
-    let stdinHandler: ((data: Buffer) => void) | null = (data: Buffer) => {
-      const text = printableText(data);
-      if (text !== null) {
-        if (state.filtering) {
-          setQuery(state.query + text);
-          draw();
-          return;
-        }
-        for (const char of text) {
-          const action = navAction(char);
-          if (action) applyAction(action);
-        }
+    const handleMouse = (event: MouseInput) => {
+      if (event.motion || !event.pressed) return;
+      if (event.button === "wheel_up") {
+        scrollBy(-WHEEL_STEP);
         return;
       }
-      applyAction(parseKey(data));
+      if (event.button === "wheel_down") {
+        scrollBy(WHEEL_STEP);
+        return;
+      }
+      if (event.button !== "left") return;
+
+      const target = locateClick(lastLayout, baseRow, event.y);
+      if (target.kind === "scroll_up") {
+        scrollBy(-viewportHeight());
+        return;
+      }
+      if (target.kind === "scroll_down") {
+        scrollBy(viewportHeight());
+        return;
+      }
+      if (target.kind !== "row") return;
+
+      const now = Date.now();
+      const isDoubleClick = target.visibleIndex === lastClickIndex && now - lastClickAt <= DOUBLE_CLICK_MS;
+      lastClickIndex = target.visibleIndex;
+      lastClickAt = now;
+      state.cursor = target.visibleIndex;
+      if (isDoubleClick) {
+        applyAction("enter");
+        return;
+      }
+      if (ctx.mode === "multi") {
+        toggleCurrent();
+        return;
+      }
+      draw();
+    };
+
+    const handleText = (text: string) => {
+      if (state.filtering) {
+        setQuery(state.query + text);
+        draw();
+        return;
+      }
+      for (const char of text) {
+        const action = navAction(char);
+        if (action) applyAction(action);
+      }
+    };
+
+    const handleInput = (action: InputAction) => {
+      switch (action.kind) {
+        case "text":
+          handleText(action.text);
+          break;
+        case "key": {
+          const mapped = controlKeyAction(action.key);
+          if (mapped) applyAction(mapped);
+          break;
+        }
+        case "mouse":
+          handleMouse(action);
+          break;
+        case "cursor_position":
+          handleCursorPosition(action.row);
+          break;
+      }
+    };
+
+    let stdinHandler: ((data: Buffer) => void) | null = (data: Buffer) => {
+      const { actions, rest } = parseInput(pending.length > 0 ? Buffer.concat([pending, data]) : data);
+      pending = rest;
+      for (const action of actions) {
+        handleInput(action);
+      }
     };
 
     process.on("exit", exitHandler);
 
     // Start
     write(HIDE_CURSOR);
+    if (mouseEnabled) write(MOUSE_ENABLE);
     process.stdin.setRawMode(true);
     process.stdin.resume();
     process.stdin.on("data", stdinHandler);
     process.on("SIGWINCH", onResize);
     draw();
+    requestBaseRow();
   });
 }
 

@@ -319,6 +319,7 @@ Priority: hook-specific value > `hookTimeout` > default (600s)
 ### Environment Variables
 
 - `CLAUDE_WORKTREE_CACHE_DIR` — Override the slot cache directory (default: `~/.cache/claude-worktree`)
+- `CLAUDE_WORKTREE_NO_MOUSE` — Disable mouse support in the interactive selectors (any non-empty value). Mouse tracking takes over the terminal's own text selection while a selector is open, so set this if you need to copy from the list.
 - `NO_COLOR` — Disable colored output ([no-color.org](https://no-color.org/)). Colors are also automatically disabled when stdout is not a TTY (e.g., piped output).
 
 ## License
