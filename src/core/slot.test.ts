@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -18,7 +18,7 @@ import { createServer } from "node:net";
 import { saveEnv } from "../__test-utils__.ts";
 import { getCacheDir } from "./cache.ts";
 import { SlotError } from "./errors.ts";
-import { assignSlot, deleteSlot, gcSlots, isPortInUse, readSlot, saveSlot } from "./slot.ts";
+import { assignSlot, deleteSlot, gcMissingSlots, gcSlots, isPortInUse, readSlot, saveSlot } from "./slot.ts";
 
 describe("slot cache", () => {
   let tempDir: string;
@@ -178,12 +178,18 @@ describe("assignSlot", () => {
   });
 
   test("throws SlotError when all slots are assigned", async () => {
-    // Use maxSlots=2 to make it easy to exhaust
-    await saveSlot("/tmp/repo-1", 1);
-    await saveSlot("/tmp/repo-2", 2);
+    // Use maxSlots=2 to make it easy to exhaust.
+    // The slots must point at worktrees that still exist — assignSlot reclaims
+    // assignments whose directory is gone before reporting the pool as exhausted.
+    const wt1 = join(tempDir, "wt-1");
+    const wt2 = join(tempDir, "wt-2");
+    mkdirSync(wt1);
+    mkdirSync(wt2);
+    await saveSlot(wt1, 1);
+    await saveSlot(wt2, 2);
 
-    await expect(assignSlot("/tmp/repo-3", 8880, 2)).rejects.toThrow(SlotError);
-    await expect(assignSlot("/tmp/repo-3", 8880, 2)).rejects.toThrow("all 2 slots are assigned");
+    await expect(assignSlot(join(tempDir, "wt-3"), 8880, 2)).rejects.toThrow(SlotError);
+    await expect(assignSlot(join(tempDir, "wt-3"), 8880, 2)).rejects.toThrow("all 2 slots are assigned");
   });
 
   test("throws SlotError when all candidate ports are in use", async () => {
@@ -217,6 +223,43 @@ describe("assignSlot", () => {
   test("rejects invalid maxSlots", async () => {
     await expect(assignSlot("/tmp/x", 8880, 0)).rejects.toThrow(SlotError);
     await expect(assignSlot("/tmp/x", 8880, 0)).rejects.toThrow("Invalid maxSlots: 0");
+  });
+
+  test("assignSlot reclaims slots whose worktree no longer exists", async () => {
+    const cacheFile = join(tempDir, "slots.json");
+    const cache: Record<string, number> = {};
+    for (let slot = 1; slot <= 9; slot++) {
+      cache[`/tmp/does-not-exist-${slot}`] = slot;
+    }
+    writeFileSync(cacheFile, JSON.stringify(cache), "utf-8");
+
+    const slot = await assignSlot("/some/new/path");
+    expect(slot).toBeGreaterThanOrEqual(1);
+    expect(slot).toBeLessThanOrEqual(9);
+
+    const updated = JSON.parse(readFileSync(cacheFile, "utf-8"));
+    for (let s = 1; s <= 9; s++) {
+      expect(Object.keys(updated)).not.toContain(`/tmp/does-not-exist-${s}`);
+    }
+  });
+
+  test("assignSlot never reclaims a slot whose worktree still exists", async () => {
+    const liveDir = mkdtempSync(join(tmpdir(), "claude-worktree-test-assign-live-"));
+    try {
+      const cacheFile = join(tempDir, "slots.json");
+      const cache: Record<string, number> = { [liveDir]: 1 };
+      for (let slot = 2; slot <= 9; slot++) {
+        cache[`/tmp/does-not-exist-${slot}`] = slot;
+      }
+      writeFileSync(cacheFile, JSON.stringify(cache), "utf-8");
+
+      const slot = await assignSlot("/another/new/path");
+      expect(slot).toBeGreaterThanOrEqual(2);
+      expect(slot).toBeLessThanOrEqual(9);
+      expect(await readSlot(liveDir)).toBe(1);
+    } finally {
+      rmSync(liveDir, { recursive: true, force: true });
+    }
   });
 });
 
@@ -285,5 +328,51 @@ describe("gcSlots", () => {
     expect(await readSlot("/tmp/repo-valid")).toBe(1);
     expect(await readSlot("/tmp/repo-stale1")).toBeUndefined();
     expect(await readSlot("/tmp/repo-stale2")).toBeUndefined();
+  });
+});
+
+describe("gcMissingSlots", () => {
+  let tempDir: string;
+  let restoreEnv: () => void;
+  let liveDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), "claude-worktree-gc-missing-slot-test-"));
+    restoreEnv = saveEnv("CLAUDE_WORKTREE_CACHE_DIR");
+    process.env.CLAUDE_WORKTREE_CACHE_DIR = tempDir;
+    liveDir = mkdtempSync(join(tmpdir(), "claude-worktree-gc-missing-slot-live-"));
+  });
+
+  afterEach(() => {
+    restoreEnv();
+    try {
+      rmSync(tempDir, { recursive: true });
+    } catch {
+      // Ignore cleanup errors
+    }
+    try {
+      rmSync(liveDir, { recursive: true });
+    } catch {
+      // Ignore cleanup errors
+    }
+  });
+
+  test("removes only entries whose path is gone", async () => {
+    await saveSlot(liveDir, 1);
+    await saveSlot("/tmp/does-not-exist-1", 2);
+    await saveSlot("/tmp/does-not-exist-2", 3);
+
+    const removed = await gcMissingSlots();
+
+    expect(removed).toBe(2);
+    expect(await readSlot(liveDir)).toBe(1);
+  });
+
+  test("returns 0 when nothing is stale", async () => {
+    await saveSlot(liveDir, 1);
+
+    const removed = await gcMissingSlots();
+
+    expect(removed).toBe(0);
   });
 });

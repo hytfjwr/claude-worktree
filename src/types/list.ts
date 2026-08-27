@@ -40,4 +40,6 @@ export type ListDeps = {
   readAllSessions: () => Promise<Record<string, SessionInfo>>;
   listWeztermPanes: () => Promise<WeztermPane[] | null>;
   listTmuxPanes: () => Promise<TmuxPane[] | null>;
+  gcMissingSessions: () => Promise<number>;
+  gcMissingSlots: () => Promise<number>;
 };

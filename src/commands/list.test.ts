@@ -55,6 +55,8 @@ function makeListDeps(overrides: Partial<ListDeps> = {}): ListDeps {
     readAllSessions: async () => ({}),
     listWeztermPanes: async () => null,
     listTmuxPanes: async () => null,
+    gcMissingSessions: async () => 0,
+    gcMissingSlots: async () => 0,
     ...overrides,
   };
 }
@@ -654,6 +656,32 @@ describe("executeList", () => {
     await executeList({ json: false, verbose: false, noStatus: true, quiet: false, fetch: false }, deps);
 
     expect(panesCalled).toBe(false);
+  });
+
+  test("runs cache GC before listing", async () => {
+    const mainWt = makeWorktree({ isMain: true, branch: "main", path: "/repo" });
+    const mainStatus = makeStatus({ isMain: true, branch: "main", path: "/repo" });
+
+    let gcSessionsCalled = false;
+    let gcSlotsCalled = false;
+    const deps = makeListDeps({
+      listWorktrees: async () => ({ worktrees: [mainWt], mainBranch: "main" }),
+      getWorktreeStatuses: async () => [mainStatus],
+      getLastCommit: async () => makeCommitInfo(),
+      gcMissingSessions: async () => {
+        gcSessionsCalled = true;
+        return 0;
+      },
+      gcMissingSlots: async () => {
+        gcSlotsCalled = true;
+        return 0;
+      },
+    });
+
+    await executeList(defaultArgs, deps);
+
+    expect(gcSessionsCalled).toBe(true);
+    expect(gcSlotsCalled).toBe(true);
   });
 });
 

@@ -10,7 +10,14 @@ import {
   getWorktreeStatuses,
   listWorktrees,
 } from "../core/git.ts";
-import { determineSessionStatus, fetchAllPanes, formatElapsed, readAllSessions } from "../core/session.ts";
+import {
+  determineSessionStatus,
+  fetchAllPanes,
+  formatElapsed,
+  gcMissingSessions,
+  readAllSessions,
+} from "../core/session.ts";
+import { gcMissingSlots } from "../core/slot.ts";
 import { listTmuxPanes } from "../external/tmux.ts";
 import { listWeztermPanes } from "../external/wezterm.ts";
 import type {
@@ -40,6 +47,8 @@ const defaultDeps: ListDeps = {
   readAllSessions,
   listWeztermPanes,
   listTmuxPanes,
+  gcMissingSessions,
+  gcMissingSlots,
 };
 
 type StatusBadge = {
@@ -213,6 +222,13 @@ export async function executeList(args: ListArgs, deps: ListDeps = defaultDeps):
     }
 
     const { worktrees, mainBranch } = await worktreesPromise;
+
+    // Reclaim cache entries whose worktree directory no longer exists. Worktrees
+    // removed outside `clean` would otherwise keep their slot forever (slots are
+    // limited to 9) and keep showing a session in `list`. Best-effort: a GC
+    // failure must never break listing. The two caches use separate lock files,
+    // so they are safe to reclaim concurrently.
+    await Promise.allSettled([deps.gcMissingSessions(), deps.gcMissingSlots()]);
 
     if (worktrees.length > 0) {
       // All four are independent (each derives only from `worktrees`), so run them
