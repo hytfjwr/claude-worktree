@@ -1448,3 +1448,119 @@ describe("run", () => {
     expect(setQuietMode).not.toHaveBeenCalled();
   });
 });
+
+describe("help output parity", () => {
+  async function renderedHelp(command: Parameters<typeof run>[0]): Promise<string> {
+    vi.mocked(logInfo).mockClear();
+    await run(command);
+    const calls = vi.mocked(logInfo).mock.calls;
+    return calls[calls.length - 1][0];
+  }
+
+  test("global help lists every command, flag, and heading", async () => {
+    const output = await renderedHelp({ type: "help" });
+    const flags = [
+      "-p",
+      "-pane",
+      "-plan",
+      "-b",
+      "-base",
+      "-model",
+      "-d",
+      "-danger",
+      "-m",
+      "-merge",
+      "-draft",
+      "-pr",
+      "-pull",
+      "-n",
+      "-dry-run",
+      "-q",
+      "-quiet",
+      "-v",
+      "-verbose",
+      "-h",
+      "-help",
+      "--help",
+      "-version",
+      "--version",
+      "-j",
+      "-json",
+      "-no-status",
+      "-fetch",
+      "-f",
+      "-force",
+      "-discard-unsaved",
+      "-a",
+      "-all",
+    ];
+    for (const flag of flags) {
+      expect(output).toContain(flag);
+    }
+    const commands = ["resume", "list", "clean"];
+    for (const command of commands) {
+      expect(output).toContain(command);
+    }
+    const headings = [
+      "Usage:",
+      "Commands:",
+      "Arguments:",
+      "Options:",
+      "Resume options:",
+      "List options:",
+      "Clean options:",
+      "Examples:",
+    ];
+    for (const heading of headings) {
+      expect(output).toContain(heading);
+    }
+    expect(output).toContain("claude-worktree feature/auth 'Implement authentication feature'");
+  });
+
+  test("create help lists every flag", async () => {
+    const output = await renderedHelp({ type: "help", commandHelp: "create" });
+    const flags = [
+      "-pane",
+      "-plan",
+      "-base",
+      "-model",
+      "-danger",
+      "-merge",
+      "-draft",
+      "-pr",
+      "-pull",
+      "-dry-run",
+      "-quiet",
+      "-verbose",
+      "--help",
+    ];
+    for (const flag of flags) {
+      expect(output).toContain(flag);
+    }
+  });
+
+  test("list help lists every flag", async () => {
+    const output = await renderedHelp({ type: "help", commandHelp: "list" });
+    const flags = ["-json", "-no-status", "-fetch", "-quiet", "-verbose", "--help"];
+    for (const flag of flags) {
+      expect(output).toContain(flag);
+    }
+  });
+
+  test("clean help lists every flag and argument", async () => {
+    const output = await renderedHelp({ type: "help", commandHelp: "clean" });
+    const flags = ["-force", "-discard-unsaved", "-all", "-dry-run", "-quiet", "-verbose", "--help", "<branch-name>"];
+    for (const flag of flags) {
+      expect(output).toContain(flag);
+    }
+    expect(output).toContain("claude-worktree clean feature/auth -force -discard-unsaved");
+  });
+
+  test("resume help lists every flag", async () => {
+    const output = await renderedHelp({ type: "help", commandHelp: "resume" });
+    const flags = ["-pane", "-danger", "-model", "-quiet", "-verbose", "--help"];
+    for (const flag of flags) {
+      expect(output).toContain(flag);
+    }
+  });
+});
