@@ -36,7 +36,7 @@ import { icons } from "../ui/icons.ts";
 import { logInfo } from "../ui/logger.ts";
 import { startSpinner } from "../ui/spinner.ts";
 
-const defaultDeps: ListDeps = {
+export const defaultListDeps: ListDeps = {
   getRemoteTrackingBranches,
   getRemoteBranches,
   fetchAndPrune,
@@ -187,97 +187,107 @@ export function formatSummary(entries: WorktreeListEntry[]): string {
   return `Summary: ${total} worktree${total === 1 ? "" : "s"} (${parts.join(", ")})`;
 }
 
-export async function executeList(args: ListArgs, deps: ListDeps = defaultDeps): Promise<ListResult> {
-  const result: ListResult = { entries: [] };
+/** Repo root used to shorten worktree paths for display. */
+export function resolveRepoRoot(entries: WorktreeListEntry[]): string {
+  const mainEntry = entries.find((e) => e.worktree.isMain);
+  return mainEntry?.worktree.path ?? entries[0]?.worktree.path ?? ".";
+}
 
-  const spinner = args.json ? null : deps.startSpinner("Fetching worktree information...");
-  let succeeded = false;
+export async function collectListEntries(
+  args: ListArgs,
+  deps: ListDeps = defaultListDeps,
+): Promise<WorktreeListEntry[]> {
+  let entries: WorktreeListEntry[] = [];
 
+  // Kick off the local worktree scan immediately — it is independent of the remote
+  // ref lookups below, so it overlaps with the `git ls-remote` network round-trip.
+  // The no-op catch prevents an unhandled rejection from crashing the process if
+  // the scan fails while the remote lookups are still in flight; the real error
+  // still surfaces at the `await` below.
+  const worktreesPromise = deps.listWorktrees();
+  worktreesPromise.catch(() => {});
+
+  // Capture remote tracking branches BEFORE fetching/pruning
+  let trackedBranches: Set<string> | undefined;
+  let remoteBranches: Set<string> | undefined;
   try {
-    // Kick off the local worktree scan immediately — it is independent of the remote
-    // ref lookups below, so it overlaps with the `git ls-remote` network round-trip.
-    // The no-op catch prevents an unhandled rejection from crashing the process if
-    // the scan fails while the remote lookups are still in flight; the real error
-    // still surfaces at the `await` below.
-    const worktreesPromise = deps.listWorktrees();
-    worktreesPromise.catch(() => {});
+    [trackedBranches, remoteBranches] = await Promise.all([deps.getRemoteTrackingBranches(), deps.getRemoteBranches()]);
+  } catch {
+    // Continue without tracking info
+  }
 
-    // Capture remote tracking branches BEFORE fetching/pruning
-    let trackedBranches: Set<string> | undefined;
-    let remoteBranches: Set<string> | undefined;
+  // Fetch and prune only when explicitly requested
+  if (args.fetch) {
     try {
-      [trackedBranches, remoteBranches] = await Promise.all([
-        deps.getRemoteTrackingBranches(),
-        deps.getRemoteBranches(),
-      ]);
+      await deps.fetchAndPrune();
     } catch {
-      // Continue without tracking info
-    }
-
-    // Fetch and prune only when explicitly requested
-    if (args.fetch) {
-      try {
-        await deps.fetchAndPrune();
-      } catch {
-        // Silently continue
-      }
-    }
-
-    const { worktrees, mainBranch } = await worktreesPromise;
-
-    // Reclaim cache entries whose worktree directory no longer exists. Worktrees
-    // removed outside `clean` would otherwise keep their slot forever (slots are
-    // limited to 9) and keep showing a session in `list`. Best-effort: a GC
-    // failure must never break listing. The two caches use separate lock files,
-    // so they are safe to reclaim concurrently.
-    await Promise.allSettled([deps.gcMissingSessions(), deps.gcMissingSlots()]);
-
-    if (worktrees.length > 0) {
-      // All four are independent (each derives only from `worktrees`), so run them
-      // concurrently: the status computation overlaps with the external pane spawns
-      // (wezterm/tmux), the sessions file read, and the per-worktree commit lookups.
-      const [statuses, allPanes, sessions, commitInfos] = await Promise.all([
-        deps.getWorktreeStatuses(worktrees, mainBranch, trackedBranches, remoteBranches),
-        args.noStatus ? Promise.resolve({ wezterm: null, tmux: null }) : fetchAllPanes(deps),
-        args.noStatus ? Promise.resolve<Record<string, SessionInfo>>({}) : deps.readAllSessions(),
-        promiseAllLimit(
-          worktrees.map(
-            (worktree) => () =>
-              Promise.all([
-                deps.getLastCommit(worktree.path),
-                worktree.branch && !worktree.isMain
-                  ? deps.getAheadBehind(worktree.branch, mainBranch)
-                  : Promise.resolve<AheadBehind | null>(null),
-              ]),
-          ),
-        ),
-      ]);
-
-      // Both getWorktreeStatuses and promiseAllLimit preserve input order, so
-      // statuses[i] and commitInfos[i] refer to worktrees[i].
-      result.entries = statuses.map((status, i) => {
-        const [commit, aheadBehind] = commitInfos[i];
-
-        let session: SessionState | undefined;
-        if (!args.noStatus) {
-          const sessionInfo = sessions[status.worktree.path];
-          if (sessionInfo) {
-            session = determineSessionStatus(sessionInfo, allPanes);
-          }
-        }
-
-        return { worktree: status.worktree, status, commit, aheadBehind, session };
-      });
-    }
-
-    succeeded = true;
-  } finally {
-    if (succeeded) {
-      spinner?.stop();
-    } else {
-      spinner?.fail("Failed to fetch worktree information");
+      // Silently continue
     }
   }
+
+  const { worktrees, mainBranch } = await worktreesPromise;
+
+  // Reclaim cache entries whose worktree directory no longer exists. Worktrees
+  // removed outside `clean` would otherwise keep their slot forever (slots are
+  // limited to 9) and keep showing a session in `list`. Best-effort: a GC
+  // failure must never break listing. The two caches use separate lock files,
+  // so they are safe to reclaim concurrently.
+  await Promise.allSettled([deps.gcMissingSessions(), deps.gcMissingSlots()]);
+
+  if (worktrees.length > 0) {
+    // All four are independent (each derives only from `worktrees`), so run them
+    // concurrently: the status computation overlaps with the external pane spawns
+    // (wezterm/tmux), the sessions file read, and the per-worktree commit lookups.
+    const [statuses, allPanes, sessions, commitInfos] = await Promise.all([
+      deps.getWorktreeStatuses(worktrees, mainBranch, trackedBranches, remoteBranches),
+      args.noStatus ? Promise.resolve({ wezterm: null, tmux: null }) : fetchAllPanes(deps),
+      args.noStatus ? Promise.resolve<Record<string, SessionInfo>>({}) : deps.readAllSessions(),
+      promiseAllLimit(
+        worktrees.map(
+          (worktree) => () =>
+            Promise.all([
+              deps.getLastCommit(worktree.path),
+              worktree.branch && !worktree.isMain
+                ? deps.getAheadBehind(worktree.branch, mainBranch)
+                : Promise.resolve<AheadBehind | null>(null),
+            ]),
+        ),
+      ),
+    ]);
+
+    // Both getWorktreeStatuses and promiseAllLimit preserve input order, so
+    // statuses[i] and commitInfos[i] refer to worktrees[i].
+    entries = statuses.map((status, i) => {
+      const [commit, aheadBehind] = commitInfos[i];
+
+      let session: SessionState | undefined;
+      if (!args.noStatus) {
+        const sessionInfo = sessions[status.worktree.path];
+        if (sessionInfo) {
+          session = determineSessionStatus(sessionInfo, allPanes);
+        }
+      }
+
+      return { worktree: status.worktree, status, commit, aheadBehind, session };
+    });
+  }
+
+  return entries;
+}
+
+export async function executeList(args: ListArgs, deps: ListDeps = defaultListDeps): Promise<ListResult> {
+  const spinner = args.json ? null : deps.startSpinner("Fetching worktree information...");
+
+  let entries: WorktreeListEntry[];
+  try {
+    entries = await collectListEntries(args, deps);
+  } catch (error) {
+    spinner?.fail("Failed to fetch worktree information");
+    throw error;
+  }
+  spinner?.stop();
+
+  const result: ListResult = { entries };
 
   // Empty result
   if (result.entries.length === 0) {
@@ -319,8 +329,7 @@ export async function executeList(args: ListArgs, deps: ListDeps = defaultDeps):
   logInfo(`\n${bold(`Worktrees (${result.entries.length})`)}\n`);
 
   // Derive repoRoot from main worktree path or first worktree
-  const mainEntry = result.entries.find((e) => e.worktree.isMain);
-  const repoRoot = mainEntry?.worktree.path ?? result.entries[0]?.worktree.path ?? ".";
+  const repoRoot = resolveRepoRoot(result.entries);
 
   for (const entry of result.entries) {
     const lines = formatWorktreeEntry(entry, repoRoot, args.verbose);
