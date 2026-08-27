@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { afterAll, afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { makeWorktree } from "../__test-utils__.ts";
-import { DependencyError } from "../core/errors.ts";
+import { DependencyError, GitError } from "../core/errors.ts";
 import { spawnInteractive } from "../core/spawn.ts";
 import type { CreateArgs, CreateDeps, GitContext, ProjectConfig } from "../types/index.ts";
 import {
@@ -617,6 +617,35 @@ describe("runCreate", () => {
       await runCreate(defaultPaneArgs, deps);
 
       expect(deps.branchExists).not.toHaveBeenCalled();
+    });
+
+    test("treats a missing branch as skippable and continues", async () => {
+      const deps = depsWithExisting({
+        deleteLocalBranch: vi.fn(async () => {
+          throw new GitError("Failed to delete branch feat/x: error: branch 'feat/x' not found");
+        }),
+      });
+      await runCreate(defaultPaneArgs, deps);
+
+      const logs = vi.mocked(console.log).mock.calls.map((c) => c[0]);
+      expect(logs).toContainEqual(expect.stringContaining("Branch not found (skipping)"));
+      expect(deps.createWorktree).toHaveBeenCalled();
+    });
+
+    test("reports a real branch deletion failure instead of calling it not found", async () => {
+      const deps = depsWithExisting({
+        deleteLocalBranch: vi.fn(async () => {
+          throw new GitError("Failed to delete branch feat/x: error: cannot lock ref 'refs/heads/feat/x'");
+        }),
+      });
+      await runCreate(defaultPaneArgs, deps);
+
+      const warnings = vi.mocked(console.warn).mock.calls.map((c) => c[0]);
+      expect(warnings.some((w) => String(w).includes("Failed to delete branch feat/x"))).toBe(true);
+      expect(warnings.some((w) => String(w).includes("cannot lock ref"))).toBe(true);
+
+      const logs = vi.mocked(console.log).mock.calls.map((c) => c[0]);
+      expect(logs.every((l) => !String(l).includes("Branch not found"))).toBe(true);
     });
   });
 
