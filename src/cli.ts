@@ -4,7 +4,7 @@ import { executeList } from "./commands/list.ts";
 import { runResume } from "./commands/resume.ts";
 import { executeRunInPane, parseRunInPaneArgs } from "./commands/run-in-pane.ts";
 import { UsageError } from "./core/errors.ts";
-import { findClosestMatch } from "./core/suggest.ts";
+import { findClosestCommand } from "./core/suggest.ts";
 import { extractOptions } from "./options.ts";
 import type { CleanArgs, Command, CreateArgs, ListArgs, ResumeArgs } from "./types/index.ts";
 import { createQuietLogger, logInfo, setLogger } from "./ui/logger.ts";
@@ -477,7 +477,7 @@ const TOP_LEVEL_CANDIDATES = [...KNOWN_COMMANDS, "-help", "-version"];
  * mistyped command or global flag. Returns an empty string when nothing is close.
  */
 function topLevelHint(name: string): string {
-  const match = findClosestMatch(name, TOP_LEVEL_CANDIDATES);
+  const match = findClosestCommand(name, TOP_LEVEL_CANDIDATES);
   if (!match) {
     return "";
   }

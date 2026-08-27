@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { findClosestMatch, levenshteinDistance } from "./suggest.ts";
+import { damerauLevenshteinDistance, findClosestCommand, findClosestMatch, levenshteinDistance } from "./suggest.ts";
 
 describe("levenshteinDistance", () => {
   test("identical strings have distance 0", () => {
@@ -100,5 +100,73 @@ describe("findClosestMatch", () => {
     expect(findClosestMatch("feature/auht", branches)).toBe("feature/auth");
     expect(findClosestMatch("feature/aut", branches)).toBe("feature/auth");
     expect(findClosestMatch("chore/release", branches)).toBeNull();
+  });
+});
+
+describe("damerauLevenshteinDistance", () => {
+  test("identical strings have distance 0", () => {
+    expect(damerauLevenshteinDistance("list", "list")).toBe(0);
+  });
+
+  test("an adjacent transposition costs 1", () => {
+    expect(damerauLevenshteinDistance("resmue", "resume")).toBe(1);
+    expect(damerauLevenshteinDistance("claen", "clean")).toBe(1);
+  });
+
+  test("insertion, deletion and substitution cost 1", () => {
+    expect(damerauLevenshteinDistance("lists", "list")).toBe(1);
+    expect(damerauLevenshteinDistance("lst", "list")).toBe(1);
+    expect(damerauLevenshteinDistance("lost", "list")).toBe(1);
+  });
+
+  test("unrelated words stay far apart", () => {
+    expect(damerauLevenshteinDistance("test", "list")).toBe(2);
+    expect(damerauLevenshteinDistance("abc", "xyz")).toBe(3);
+  });
+
+  test("empty strings", () => {
+    expect(damerauLevenshteinDistance("", "list")).toBe(4);
+    expect(damerauLevenshteinDistance("list", "")).toBe(4);
+    expect(damerauLevenshteinDistance("", "")).toBe(0);
+  });
+});
+
+describe("findClosestCommand", () => {
+  const commands = ["list", "clean", "resume", "-help", "-version"];
+
+  test("suggests a genuine misspelling", () => {
+    expect(findClosestCommand("lst", commands)).toBe("list");
+    expect(findClosestCommand("clen", commands)).toBe("clean");
+    expect(findClosestCommand("resum", commands)).toBe("resume");
+  });
+
+  test("suggests a transposition", () => {
+    expect(findClosestCommand("claen", commands)).toBe("clean");
+    expect(findClosestCommand("resmue", commands)).toBe("resume");
+  });
+
+  test("does not fire on plausible branch names", () => {
+    expect(findClosestCommand("test", commands)).toBeNull();
+    expect(findClosestCommand("cleanup", commands)).toBeNull();
+    expect(findClosestCommand("resumed", commands)).toBeNull();
+    expect(findClosestCommand("lists", commands)).toBeNull();
+    expect(findClosestCommand("feature/test", commands)).toBeNull();
+  });
+
+  test("ignores leading dashes and letter case", () => {
+    expect(findClosestCommand("-list", commands)).toBe("list");
+    expect(findClosestCommand("help", commands)).toBe("-help");
+    expect(findClosestCommand("version", commands)).toBe("-version");
+    expect(findClosestCommand("List", commands)).toBe("list");
+  });
+
+  test("returns null for empty input and empty candidates", () => {
+    expect(findClosestCommand("", commands)).toBeNull();
+    expect(findClosestCommand("--", commands)).toBeNull();
+    expect(findClosestCommand("list", [])).toBeNull();
+  });
+
+  test("prefers the closest candidate", () => {
+    expect(findClosestCommand("clen", ["cleanx", "clean"])).toBe("clean");
   });
 });

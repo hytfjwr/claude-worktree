@@ -180,9 +180,10 @@ describe("parseArgs", () => {
   describe("command typo hint", () => {
     test.each([
       ["lst", "list"],
-      ["lists", "list"],
       ["clen", "clean"],
+      ["claen", "clean"],
       ["resum", "resume"],
+      ["resmue", "resume"],
     ])('"%s" suggests the "%s" command', (input, expected) => {
       expect(() => parseArgs([input])).toThrow(`Did you mean the "${expected}" command?`);
     });
@@ -210,6 +211,16 @@ describe("parseArgs", () => {
     test("no hint for a plain branch name", () => {
       expect(() => parseArgs(["feature/test"])).toThrow('Missing prompt for branch "feature/test"');
       expect(() => parseArgs(["feature/test"])).not.toThrow("Did you mean");
+    });
+
+    test.each([
+      "test",
+      "cleanup",
+      "resumed",
+      "lists",
+    ])('plausible branch name "%s" gets no command suggestion', (input) => {
+      expect(() => parseArgs([input])).toThrow(`Missing prompt for branch "${input}"`);
+      expect(() => parseArgs([input])).not.toThrow("Did you mean");
     });
   });
 });
