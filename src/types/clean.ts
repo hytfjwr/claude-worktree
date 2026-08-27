@@ -6,6 +6,7 @@ import type { Spinner } from "./spinner.ts";
 
 export type CleanArgs = {
   force: boolean;
+  discardUnsaved: boolean;
   all: boolean;
   dryRun: boolean;
   verbose: boolean;
