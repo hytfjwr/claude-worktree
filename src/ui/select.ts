@@ -1,11 +1,10 @@
 import * as readline from "node:readline";
 
-import { padToWidth, stringWidth } from "../core/width.ts";
-import type { SelectItem } from "../types/index.ts";
+import { padToWidth, stringWidth, truncateToWidth } from "../core/width.ts";
+import type { SelectItem, Viewport } from "../types/index.ts";
 import { cyan, dim, green } from "./color.ts";
 import { icons } from "./icons.ts";
 import { logInfo } from "./logger.ts";
-import { countVisualLines } from "./spinner.ts";
 
 export type { SelectItem } from "../types/index.ts";
 
@@ -13,9 +12,35 @@ export type { SelectItem } from "../types/index.ts";
 // Types
 // =============================================================================
 
+type SelectMode = "single" | "multi";
+
 type SelectOptions<T> = {
   message: string;
   items: SelectItem<T>[];
+};
+
+/** Immutable per-run context. */
+type SelectContext<T> = {
+  message: string;
+  items: SelectItem<T>[];
+  mode: SelectMode;
+  labelWidth: number;
+};
+
+/** Mutable state driven by key input. */
+type SelectState = {
+  /** Item indices currently on display, in original order. */
+  visible: number[];
+  /** Index into `visible`, not into `items`. */
+  cursor: number;
+  offset: number;
+  /** Original `items` indices, never display indices. */
+  selected: Set<number>;
+};
+
+type SelectFrame = {
+  lines: string[];
+  viewport: Viewport;
 };
 
 // =============================================================================
@@ -34,11 +59,19 @@ function moveUp(n: number): string {
 // Key codes
 // =============================================================================
 
-// Arrow key escape sequences: ESC [ A/B
-const KEY_UP_SEQ = [0x1b, 0x5b, 0x41];
-const KEY_DOWN_SEQ = [0x1b, 0x5b, 0x42];
-
-type KeyAction = "up" | "down" | "enter" | "space" | "toggle_all" | "cancel" | "ctrl_c" | "unknown";
+type KeyAction =
+  | "up"
+  | "down"
+  | "page_up"
+  | "page_down"
+  | "home"
+  | "end"
+  | "enter"
+  | "space"
+  | "toggle_all"
+  | "cancel"
+  | "ctrl_c"
+  | "unknown";
 
 function parseKey(data: Buffer): KeyAction {
   if (data.length === 1) {
@@ -46,20 +79,85 @@ function parseKey(data: Buffer): KeyAction {
     if (byte === 0x03) return "ctrl_c";
     if (byte === 0x0d) return "enter"; // CR
     if (byte === 0x0a) return "enter"; // LF
+    if (byte === 0x10) return "up"; // Ctrl+P
+    if (byte === 0x0e) return "down"; // Ctrl+N
     if (byte === 0x20) return "space";
     if (byte === 0x1b) return "cancel"; // Esc
     if (byte === 0x6b) return "up"; // k
     if (byte === 0x6a) return "down"; // j
+    if (byte === 0x67) return "home"; // g
+    if (byte === 0x47) return "end"; // G
     if (byte === 0x71) return "cancel"; // q
     if (byte === 0x61) return "toggle_all"; // a
   }
-  if (data.length === 3 && data[0] === KEY_UP_SEQ[0] && data[1] === KEY_UP_SEQ[1] && data[2] === KEY_UP_SEQ[2]) {
-    return "up";
-  }
-  if (data.length === 3 && data[0] === KEY_DOWN_SEQ[0] && data[1] === KEY_DOWN_SEQ[1] && data[2] === KEY_DOWN_SEQ[2]) {
-    return "down";
+  // CSI sequences: ESC [ <params> <final>
+  if (data.length >= 3 && data[0] === 0x1b && data[1] === 0x5b) {
+    switch (data.toString("latin1", 2)) {
+      case "A":
+        return "up";
+      case "B":
+        return "down";
+      case "5~":
+        return "page_up";
+      case "6~":
+        return "page_down";
+      case "H":
+      case "1~":
+      case "7~":
+        return "home";
+      case "F":
+      case "4~":
+      case "8~":
+        return "end";
+    }
   }
   return "unknown";
+}
+
+// =============================================================================
+// Viewport
+// =============================================================================
+
+// Lines the frame spends outside the candidate window: a blank line and the
+// message, the footer, two scroll indicators, and one spare line so the frame
+// never fills the terminal exactly.
+const CHROME_LINES = 6;
+const MIN_VIEWPORT_HEIGHT = 3;
+const SCROLLOFF = 1;
+const DEFAULT_ROWS = 24;
+const DEFAULT_COLUMNS = 80;
+const MIN_FRAME_WIDTH = 20;
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+/** Number of candidate rows that fit in the terminal. */
+export function computeViewportHeight(rows: number | undefined, extraChrome = 0): number {
+  return Math.max(MIN_VIEWPORT_HEIGHT, (rows || DEFAULT_ROWS) - CHROME_LINES - extraChrome);
+}
+
+/**
+ * Scrolls the window so the cursor stays visible with SCROLLOFF rows of
+ * context above and below, except at the ends of the list.
+ */
+export function computeViewport(total: number, cursor: number, height: number, currentOffset: number): Viewport {
+  if (total <= 0) {
+    return { offset: 0, visibleStart: 0, visibleEnd: 0, hiddenAbove: 0, hiddenBelow: 0 };
+  }
+  const windowSize = Math.max(1, height);
+  if (total <= windowSize) {
+    return { offset: 0, visibleStart: 0, visibleEnd: total, hiddenAbove: 0, hiddenBelow: 0 };
+  }
+  const maxOffset = total - windowSize;
+  const scrolloff = Math.min(SCROLLOFF, Math.floor((windowSize - 1) / 2));
+  const safeCursor = clamp(cursor, 0, total - 1);
+  let offset = clamp(currentOffset, 0, maxOffset);
+  if (safeCursor - scrolloff < offset) offset = safeCursor - scrolloff;
+  if (safeCursor + scrolloff > offset + windowSize - 1) offset = safeCursor + scrolloff - windowSize + 1;
+  offset = clamp(offset, 0, maxOffset);
+  const visibleEnd = Math.min(total, offset + windowSize);
+  return { offset, visibleStart: offset, visibleEnd, hiddenAbove: offset, hiddenBelow: total - visibleEnd };
 }
 
 // =============================================================================
@@ -75,39 +173,88 @@ function computeLabelWidth<T>(items: SelectItem<T>[]): number {
   return max;
 }
 
-function renderSingle<T>(items: SelectItem<T>[], cursor: number, labelWidth: number): string {
-  let out = "";
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i];
-    const isCurrent = i === cursor;
-    const pointer = isCurrent ? cyan(icons.cursor()) : " ";
-    const label = isCurrent ? cyan(item.label) : item.label;
-    const desc = item.description ? dim(`  ${item.description}`) : "";
-    out += `  ${pointer} ${padToWidth(label, labelWidth)}${desc}\n`;
+/** Plain (uncolored) metadata text shown after the label. Includes a leading two-space gap. */
+function metaText<T>(mode: SelectMode, item: SelectItem<T>): string {
+  if (mode === "single") {
+    return item.description ? `  ${item.description}` : "";
   }
-  return out;
+  if (item.description && item.hint) return `  ${item.description} – ${item.hint}`;
+  if (item.description) return `  ${item.description}`;
+  if (item.hint) return `  ${item.hint}`;
+  return "";
 }
 
-function renderMulti<T>(items: SelectItem<T>[], cursor: number, selected: Set<number>, labelWidth: number): string {
-  let out = "";
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i];
-    const isCurrent = i === cursor;
-    const isSelected = selected.has(i);
-    const pointer = isCurrent ? cyan(icons.cursor()) : " ";
+/** Checkbox glyphs differ in width between color (`◼`, width 1) and plain (`[x]`, width 3) modes. */
+function checkboxWidth(): number {
+  return Math.max(stringWidth(icons.checked()), stringWidth(icons.unchecked()));
+}
+
+function renderRow<T>(
+  ctx: SelectContext<T>,
+  state: SelectState,
+  itemIndex: number,
+  isCurrent: boolean,
+  frameWidth: number,
+): string {
+  const item = ctx.items[itemIndex];
+  const pointer = isCurrent ? cyan(icons.cursor()) : " ";
+
+  let checkboxCell = "";
+  if (ctx.mode === "multi") {
+    const isSelected = state.selected.has(itemIndex);
     const check = isSelected ? green(icons.checked()) : dim(icons.unchecked());
-    const label = isCurrent ? cyan(item.label) : item.label;
-    let meta = "";
-    if (item.description && item.hint) {
-      meta = dim(`  ${item.description} – ${item.hint}`);
-    } else if (item.description) {
-      meta = dim(`  ${item.description}`);
-    } else if (item.hint) {
-      meta = dim(`  ${item.hint}`);
-    }
-    out += `  ${pointer} ${check} ${padToWidth(label, labelWidth)}${meta}\n`;
+    checkboxCell = `${padToWidth(check, checkboxWidth())} `;
   }
-  return out;
+
+  const prefixWidth = 2 + 1 + 1 + (ctx.mode === "multi" ? checkboxWidth() + 1 : 0);
+  const available = Math.max(1, frameWidth - prefixWidth);
+  const labelCell = Math.min(ctx.labelWidth, available);
+
+  const labelPlain = padToWidth(truncateToWidth(item.label, labelCell), labelCell);
+  const label = isCurrent ? cyan(labelPlain) : labelPlain;
+
+  const metaRoom = available - labelCell;
+  const metaPlain = metaText(ctx.mode, item);
+  const meta = metaPlain && metaRoom > 2 ? dim(truncateToWidth(metaPlain, metaRoom)) : "";
+
+  return `  ${pointer} ${checkboxCell}${label}${meta}`;
+}
+
+function footerLine<T>(ctx: SelectContext<T>, state: SelectState, frameWidth: number): string {
+  const total = state.visible.length;
+  const position = total > 0 ? `${state.cursor + 1}/${total}` : "0/0";
+  const plain =
+    ctx.mode === "single"
+      ? `  ↑/↓ navigate  Enter confirm  q cancel  ${position}`
+      : `  ↑/↓ navigate  Space toggle  a all  Enter confirm  q cancel  ${position}`;
+  return dim(truncateToWidth(plain, frameWidth));
+}
+
+function buildFrame<T>(
+  ctx: SelectContext<T>,
+  state: SelectState,
+  dims: { columns: number | undefined; rows: number | undefined },
+): SelectFrame {
+  const frameWidth = Math.max(MIN_FRAME_WIDTH, (dims.columns || DEFAULT_COLUMNS) - 1);
+  const height = computeViewportHeight(dims.rows);
+  const viewport = computeViewport(state.visible.length, state.cursor, height, state.offset);
+
+  const lines: string[] = [];
+  lines.push("");
+  lines.push(truncateToWidth(ctx.message, frameWidth));
+  if (viewport.hiddenAbove > 0) {
+    lines.push(dim(`  ${icons.scrollUp()} ${viewport.hiddenAbove} more`));
+  }
+  for (let i = viewport.visibleStart; i < viewport.visibleEnd; i++) {
+    const itemIndex = state.visible[i];
+    lines.push(renderRow(ctx, state, itemIndex, i === state.cursor, frameWidth));
+  }
+  if (viewport.hiddenBelow > 0) {
+    lines.push(dim(`  ${icons.scrollDown()} ${viewport.hiddenBelow} more`));
+  }
+  lines.push(footerLine(ctx, state, frameWidth));
+
+  return { lines, viewport };
 }
 
 // =============================================================================
@@ -175,22 +322,24 @@ async function fallbackMany<T>(options: SelectOptions<T>): Promise<T[]> {
 // TTY select (raw mode)
 // =============================================================================
 
-type RenderFn = (cursor: number) => string;
-
-function runTTYSelect<R>(
-  items: { length: number },
-  headerLine: string,
-  footerLine: string,
-  renderBody: RenderFn,
-  resolveResult: () => R,
-  onKey?: (action: KeyAction) => boolean, // return true to re-render
-): Promise<R | null> {
+/**
+ * Runs the interactive selector in raw mode. Resolves with the final state, or
+ * null when the user cancels.
+ */
+function runInteractive<T>(ctx: SelectContext<T>): Promise<SelectState | null> {
   return new Promise((resolve) => {
-    let cursor = 0;
+    const state: SelectState = {
+      visible: ctx.items.map((_, i) => i),
+      cursor: 0,
+      offset: 0,
+      selected: new Set(),
+    };
     let renderedLines = 0;
     let resolved = false;
 
     const write = (s: string) => process.stdout.write(s);
+
+    const viewportHeight = () => computeViewportHeight(process.stdout.rows);
 
     const draw = () => {
       // Move up to overwrite previous render
@@ -199,12 +348,38 @@ function runTTYSelect<R>(
       }
       write(`\r${CLEAR_DOWN}`);
 
-      const body = renderBody(cursor);
-      const output = `${headerLine}\n${body}${footerLine}\n`;
-      write(output);
+      const frame = buildFrame(ctx, state, { columns: process.stdout.columns, rows: process.stdout.rows });
+      state.offset = frame.viewport.offset; // persist the scrolled position
+      write(`${frame.lines.join("\n")}\n`);
+      renderedLines = frame.lines.length;
+    };
 
-      // Count visual lines rendered (accounts for line wrapping in narrow terminals)
-      renderedLines = countVisualLines(output);
+    const toggleCurrent = () => {
+      if (ctx.mode !== "multi") return;
+      const itemIndex = state.visible[state.cursor];
+      if (state.selected.has(itemIndex)) {
+        state.selected.delete(itemIndex);
+      } else {
+        state.selected.add(itemIndex);
+      }
+      draw();
+    };
+
+    const toggleAll = () => {
+      if (ctx.mode !== "multi") return;
+      if (state.selected.size === ctx.items.length) {
+        state.selected.clear();
+      } else {
+        for (let i = 0; i < ctx.items.length; i++) state.selected.add(i);
+      }
+      draw();
+    };
+
+    const onResize = () => {
+      // The previously rendered height is no longer trustworthy after a resize,
+      // so draw a fresh frame instead of moving up over the old one.
+      renderedLines = 0;
+      draw();
     };
 
     const cleanup = () => {
@@ -212,6 +387,7 @@ function runTTYSelect<R>(
         process.stdin.removeListener("data", stdinHandler);
         stdinHandler = null;
       }
+      process.removeListener("SIGWINCH", onResize);
       if (process.stdin.isTTY) {
         process.stdin.setRawMode(false);
         process.stdin.pause();
@@ -223,7 +399,7 @@ function runTTYSelect<R>(
       write(`\r${CLEAR_DOWN}${SHOW_CURSOR}`);
     };
 
-    const finish = (result: R | null) => {
+    const finish = (result: SelectState | null) => {
       if (resolved) return;
       resolved = true;
       cleanup();
@@ -243,41 +419,59 @@ function runTTYSelect<R>(
       }
     };
 
-    let stdinHandler: ((data: Buffer) => void) | null = (data: Buffer) => {
-      const action = parseKey(data);
-
+    const applyAction = (action: KeyAction) => {
       if (action === "ctrl_c") {
         cleanup();
         process.removeListener("exit", exitHandler);
         process.exit(130);
       }
 
-      if (action === "cancel") {
-        finish(null);
-        return;
-      }
+      const total = state.visible.length;
 
-      if (action === "enter") {
-        finish(resolveResult());
-        return;
+      switch (action) {
+        case "cancel":
+          finish(null);
+          break;
+        case "enter":
+          finish(state);
+          break;
+        case "up":
+          state.cursor = state.cursor <= 0 ? total - 1 : state.cursor - 1;
+          draw();
+          break;
+        case "down":
+          state.cursor = state.cursor >= total - 1 ? 0 : state.cursor + 1;
+          draw();
+          break;
+        case "page_up":
+          state.cursor = clamp(state.cursor - viewportHeight(), 0, total - 1);
+          draw();
+          break;
+        case "page_down":
+          state.cursor = clamp(state.cursor + viewportHeight(), 0, total - 1);
+          draw();
+          break;
+        case "home":
+          state.cursor = 0;
+          draw();
+          break;
+        case "end":
+          state.cursor = total - 1;
+          draw();
+          break;
+        case "space":
+          toggleCurrent();
+          break;
+        case "toggle_all":
+          toggleAll();
+          break;
+        default:
+          break;
       }
+    };
 
-      if (action === "up") {
-        cursor = cursor <= 0 ? items.length - 1 : cursor - 1;
-        draw();
-        return;
-      }
-
-      if (action === "down") {
-        cursor = cursor >= items.length - 1 ? 0 : cursor + 1;
-        draw();
-        return;
-      }
-
-      // Delegate extra keys (space, toggle_all, etc.)
-      if (onKey?.(action)) {
-        draw();
-      }
+    let stdinHandler: ((data: Buffer) => void) | null = (data: Buffer) => {
+      applyAction(parseKey(data));
     };
 
     process.on("exit", exitHandler);
@@ -287,6 +481,7 @@ function runTTYSelect<R>(
     process.stdin.setRawMode(true);
     process.stdin.resume();
     process.stdin.on("data", stdinHandler);
+    process.on("SIGWINCH", onResize);
     draw();
   });
 }
@@ -298,81 +493,29 @@ function runTTYSelect<R>(
 export async function selectSingle<T>(options: SelectOptions<T>): Promise<T | null> {
   const { items, message } = options;
   if (items.length === 0) return null;
+  if (!process.stdin.isTTY) return fallbackSingle(options);
 
-  if (!process.stdin.isTTY) {
-    return fallbackSingle(options);
-  }
-
-  const labelWidth = computeLabelWidth(items);
-
-  const headerLine = `\n${message}`;
-  const footerLine = dim("  ↑/↓ navigate  Enter confirm  q cancel");
-
-  let currentCursor = 0;
-
-  return runTTYSelect(
+  const state = await runInteractive<T>({
+    message,
     items,
-    headerLine,
-    footerLine,
-    (cursor) => {
-      currentCursor = cursor;
-      return renderSingle(items, cursor, labelWidth);
-    },
-    () => items[currentCursor].value,
-  );
+    mode: "single",
+    labelWidth: computeLabelWidth(items),
+  });
+  if (!state) return null;
+  return items[state.visible[state.cursor]].value;
 }
 
 export async function selectMany<T>(options: SelectOptions<T>): Promise<T[]> {
   const { items, message } = options;
   if (items.length === 0) return [];
+  if (!process.stdin.isTTY) return fallbackMany(options);
 
-  if (!process.stdin.isTTY) {
-    return fallbackMany(options);
-  }
-
-  const labelWidth = computeLabelWidth(items);
-  const selected = new Set<number>();
-
-  const headerLine = `\n${message}`;
-  const footerLine = dim("  ↑/↓ navigate  Space toggle  a all  Enter confirm  q cancel");
-
-  let currentCursor = 0;
-
-  const result = await runTTYSelect<T[]>(
+  const state = await runInteractive<T>({
+    message,
     items,
-    headerLine,
-    footerLine,
-    (cursor) => {
-      currentCursor = cursor;
-      return renderMulti(items, cursor, selected, labelWidth);
-    },
-    () => {
-      const out: T[] = [];
-      for (let i = 0; i < items.length; i++) {
-        if (selected.has(i)) out.push(items[i].value);
-      }
-      return out;
-    },
-    (action) => {
-      if (action === "space") {
-        if (selected.has(currentCursor)) {
-          selected.delete(currentCursor);
-        } else {
-          selected.add(currentCursor);
-        }
-        return true;
-      }
-      if (action === "toggle_all") {
-        if (selected.size === items.length) {
-          selected.clear();
-        } else {
-          for (let i = 0; i < items.length; i++) selected.add(i);
-        }
-        return true;
-      }
-      return false;
-    },
-  );
-
-  return result ?? [];
+    mode: "multi",
+    labelWidth: computeLabelWidth(items),
+  });
+  if (!state) return [];
+  return items.filter((_, i) => state.selected.has(i)).map((item) => item.value);
 }

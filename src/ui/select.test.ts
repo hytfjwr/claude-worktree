@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { saveEnv } from "../__test-utils__.ts";
+import { stringWidth } from "../core/width.ts";
 import { _resetColorCache } from "./color.ts";
-import { selectMany, selectSingle } from "./select.ts";
+import { computeViewport, computeViewportHeight, selectMany, selectSingle } from "./select.ts";
 
 // Mock readline for non-TTY fallback tests.
 // TTY tests bypass this because they enter the raw-mode path.
@@ -28,13 +29,17 @@ type StdinMock = {
 
 /**
  * withTTYStdin sets up stdin/stdout as TTY, captures the "data" handler,
- * and returns an emitKey helper to simulate key presses.
+ * and returns an emitKey helper to simulate key presses. `dims` overrides
+ * process.stdout.rows/columns for the duration of the callback (defaults to
+ * 24x100 so tests are not sensitive to the real terminal size).
  */
-function withTTYStdin<T>(fn: (emitKey: (bytes: number[]) => void) => T): T {
+function withTTYStdin<T>(fn: (emitKey: (bytes: number[]) => void) => T, dims?: { rows?: number; columns?: number }): T {
   const stdin = process.stdin as typeof process.stdin & StdinMock;
   const saved = {
     stdinIsTTY: Object.getOwnPropertyDescriptor(process.stdin, "isTTY"),
     stdoutIsTTY: Object.getOwnPropertyDescriptor(process.stdout, "isTTY"),
+    stdoutRows: Object.getOwnPropertyDescriptor(process.stdout, "rows"),
+    stdoutColumns: Object.getOwnPropertyDescriptor(process.stdout, "columns"),
     setRawMode: stdin.setRawMode,
     resume: stdin.resume,
     pause: stdin.pause,
@@ -46,6 +51,12 @@ function withTTYStdin<T>(fn: (emitKey: (bytes: number[]) => void) => T): T {
 
   Object.defineProperty(process.stdin, "isTTY", { value: true, configurable: true, writable: true });
   Object.defineProperty(process.stdout, "isTTY", { value: true, configurable: true, writable: true });
+  Object.defineProperty(process.stdout, "rows", { value: dims?.rows ?? 24, configurable: true, writable: true });
+  Object.defineProperty(process.stdout, "columns", {
+    value: dims?.columns ?? 100,
+    configurable: true,
+    writable: true,
+  });
   stdin.setRawMode = () => process.stdin;
   stdin.resume = () => process.stdin;
   stdin.pause = () => process.stdin;
@@ -65,6 +76,16 @@ function withTTYStdin<T>(fn: (emitKey: (bytes: number[]) => void) => T): T {
       Object.defineProperty(process.stdout, "isTTY", saved.stdoutIsTTY);
     } else {
       delete (process.stdout as unknown as Record<string, unknown>).isTTY;
+    }
+    if (saved.stdoutRows) {
+      Object.defineProperty(process.stdout, "rows", saved.stdoutRows);
+    } else {
+      delete (process.stdout as unknown as Record<string, unknown>).rows;
+    }
+    if (saved.stdoutColumns) {
+      Object.defineProperty(process.stdout, "columns", saved.stdoutColumns);
+    } else {
+      delete (process.stdout as unknown as Record<string, unknown>).columns;
     }
     stdin.setRawMode = saved.setRawMode;
     stdin.resume = saved.resume;
@@ -121,6 +142,14 @@ const KEY_ESC = [0x1b];
 const KEY_J = [0x6a];
 const KEY_K = [0x6b];
 const KEY_A = [0x61];
+const KEY_PAGE_DOWN = [0x1b, 0x5b, 0x36, 0x7e];
+const KEY_PAGE_UP = [0x1b, 0x5b, 0x35, 0x7e];
+const KEY_HOME_CSI = [0x1b, 0x5b, 0x48];
+const KEY_END_CSI = [0x1b, 0x5b, 0x46];
+const KEY_G_LOWER = [0x67];
+const KEY_G_UPPER = [0x47];
+const KEY_CTRL_P = [0x10];
+const KEY_CTRL_N = [0x0e];
 
 const sampleItems = [
   { value: "a", label: "Alpha", description: "/path/alpha" },
@@ -529,5 +558,284 @@ describe("non-TTY fallback", () => {
       return selectMany({ message: "Pick:", items });
     });
     expect(result).toEqual([]);
+  });
+});
+
+// =============================================================================
+// Viewport helpers
+// =============================================================================
+
+function manyItems(count: number) {
+  return Array.from({ length: count }, (_, i) => ({
+    value: `v${i + 1}`,
+    label: `Item ${String(i + 1).padStart(2, "0")}`,
+    description: `/path/item-${i + 1}`,
+  }));
+}
+
+describe("computeViewportHeight", () => {
+  test("subtracts chrome lines from the terminal height", () => {
+    expect(computeViewportHeight(24)).toBe(18);
+  });
+
+  test("falls back to 24 rows when rows is undefined", () => {
+    expect(computeViewportHeight(undefined)).toBe(18);
+  });
+
+  test("falls back to 24 rows when rows is 0", () => {
+    expect(computeViewportHeight(0)).toBe(18);
+  });
+
+  test("never returns less than MIN_VIEWPORT_HEIGHT", () => {
+    expect(computeViewportHeight(8)).toBe(3);
+  });
+
+  test("subtracts extraChrome on top of the fixed chrome lines", () => {
+    expect(computeViewportHeight(30, 1)).toBe(23);
+  });
+});
+
+describe("computeViewport", () => {
+  test("returns all-zero fields for an empty list", () => {
+    expect(computeViewport(0, 0, 5, 0)).toEqual({
+      offset: 0,
+      visibleStart: 0,
+      visibleEnd: 0,
+      hiddenAbove: 0,
+      hiddenBelow: 0,
+    });
+  });
+
+  test("does not scroll when total is smaller than the viewport height", () => {
+    expect(computeViewport(3, 0, 10, 0)).toEqual({
+      offset: 0,
+      visibleStart: 0,
+      visibleEnd: 3,
+      hiddenAbove: 0,
+      hiddenBelow: 0,
+    });
+  });
+
+  test("does not scroll when total equals the viewport height", () => {
+    expect(computeViewport(5, 0, 5, 0)).toEqual({
+      offset: 0,
+      visibleStart: 0,
+      visibleEnd: 5,
+      hiddenAbove: 0,
+      hiddenBelow: 0,
+    });
+  });
+
+  test("shows the first window when the cursor is at the top", () => {
+    const viewport = computeViewport(20, 0, 5, 0);
+    expect(viewport).toEqual({ offset: 0, visibleStart: 0, visibleEnd: 5, hiddenAbove: 0, hiddenBelow: 15 });
+  });
+
+  test("shows the last window when the cursor is at the bottom", () => {
+    const viewport = computeViewport(20, 19, 5, 0);
+    expect(viewport).toEqual({ offset: 15, visibleStart: 15, visibleEnd: 20, hiddenAbove: 15, hiddenBelow: 0 });
+  });
+
+  test("downward scrolloff: does not scroll until the cursor enters the scrolloff band", () => {
+    expect(computeViewport(20, 3, 5, 0).offset).toBe(0);
+    expect(computeViewport(20, 4, 5, 0).offset).toBe(1);
+  });
+
+  test("upward scrolloff: does not scroll until the cursor enters the scrolloff band", () => {
+    expect(computeViewport(20, 11, 5, 10).offset).toBe(10);
+    expect(computeViewport(20, 10, 5, 10).offset).toBe(9);
+  });
+
+  test("clamps an out-of-range currentOffset", () => {
+    expect(computeViewport(20, 0, 5, 100).offset).toBe(0);
+  });
+
+  test("does not throw with a height of 1", () => {
+    const viewport = computeViewport(20, 5, 1, 0);
+    expect(viewport.visibleEnd).toBe(viewport.offset + 1);
+  });
+});
+
+describe("viewport rendering", () => {
+  test("initial render shows only the first page with a downward scroll indicator", () => {
+    return withTTYStdin(
+      async (emitKey) => {
+        const writeSpy = vi.spyOn(process.stdout, "write");
+        const promise = selectSingle({ message: "Pick:", items: manyItems(20) });
+
+        const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+        expect(output).toContain("Item 01");
+        expect(output).toContain("Item 06");
+        expect(output).not.toContain("Item 07");
+        expect(output).toContain("14 more");
+        expect(output.match(/more/g)?.length).toBe(1);
+
+        emitKey(KEY_ENTER);
+        await promise;
+      },
+      { rows: 12 },
+    );
+  });
+
+  test("End key jumps to the last page", () => {
+    return withTTYStdin(
+      async (emitKey) => {
+        const writeSpy = vi.spyOn(process.stdout, "write");
+        const promise = selectSingle({ message: "Pick:", items: manyItems(20) });
+
+        emitKey(KEY_G_UPPER);
+        const lastOutput = String(writeSpy.mock.calls[writeSpy.mock.calls.length - 1][0]);
+        expect(lastOutput).toContain("14 more");
+        expect(lastOutput).toContain("Item 20");
+        expect(lastOutput).toContain("20/20");
+
+        emitKey(KEY_ENTER);
+        await promise;
+      },
+      { rows: 12 },
+    );
+  });
+
+  test("Home key returns to the first page", () => {
+    return withTTYStdin(
+      async (emitKey) => {
+        const writeSpy = vi.spyOn(process.stdout, "write");
+        const promise = selectSingle({ message: "Pick:", items: manyItems(20) });
+
+        emitKey(KEY_G_UPPER); // jump to the end first
+        emitKey(KEY_G_LOWER); // then back to the start
+        const lastOutput = String(writeSpy.mock.calls[writeSpy.mock.calls.length - 1][0]);
+        expect(lastOutput).toContain("Item 01");
+        expect(lastOutput).toContain("1/20");
+
+        emitKey(KEY_ENTER);
+        await promise;
+      },
+      { rows: 12 },
+    );
+  });
+
+  test("PageDown moves the cursor by a full page", () => {
+    return withTTYStdin(
+      async (emitKey) => {
+        const writeSpy = vi.spyOn(process.stdout, "write");
+        const promise = selectSingle({ message: "Pick:", items: manyItems(20) });
+
+        emitKey(KEY_PAGE_DOWN);
+        const lastOutput = String(writeSpy.mock.calls[writeSpy.mock.calls.length - 1][0]);
+        expect(lastOutput).toContain("7/20");
+
+        emitKey(KEY_ENTER);
+        await promise;
+      },
+      { rows: 12 },
+    );
+  });
+
+  test("PageUp does not wrap past the first page", () => {
+    return withTTYStdin(
+      async (emitKey) => {
+        const writeSpy = vi.spyOn(process.stdout, "write");
+        const promise = selectSingle({ message: "Pick:", items: manyItems(20) });
+
+        emitKey(KEY_PAGE_UP);
+        const lastOutput = String(writeSpy.mock.calls[writeSpy.mock.calls.length - 1][0]);
+        expect(lastOutput).toContain("1/20");
+
+        emitKey(KEY_ENTER);
+        await promise;
+      },
+      { rows: 12 },
+    );
+  });
+
+  test("CSI Home and End sequences move to the first/last item", () => {
+    return withTTYStdin(
+      async (emitKey) => {
+        const writeSpy = vi.spyOn(process.stdout, "write");
+        const promise = selectSingle({ message: "Pick:", items: manyItems(20) });
+
+        emitKey(KEY_END_CSI);
+        let lastOutput = String(writeSpy.mock.calls[writeSpy.mock.calls.length - 1][0]);
+        expect(lastOutput).toContain("20/20");
+
+        emitKey(KEY_HOME_CSI);
+        lastOutput = String(writeSpy.mock.calls[writeSpy.mock.calls.length - 1][0]);
+        expect(lastOutput).toContain("1/20");
+
+        emitKey(KEY_ENTER);
+        await promise;
+      },
+      { rows: 12 },
+    );
+  });
+
+  test("Ctrl+P/Ctrl+N move the cursor like arrow keys", () => {
+    return withTTYStdin(async (emitKey) => {
+      const promise = selectSingle({ message: "Pick:", items: sampleItems });
+      emitKey(KEY_CTRL_N); // down to Beta
+      emitKey(KEY_CTRL_N); // down to Gamma
+      emitKey(KEY_CTRL_P); // up to Beta
+      emitKey(KEY_ENTER);
+      const result = await promise;
+      expect(result).toBe("b");
+    });
+  });
+
+  test("footer shows the cursor position", () => {
+    return withTTYStdin(
+      async (emitKey) => {
+        const writeSpy = vi.spyOn(process.stdout, "write");
+        const promise = selectSingle({ message: "Pick:", items: manyItems(20) });
+
+        const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+        expect(output).toContain("1/20");
+
+        emitKey(KEY_ENTER);
+        await promise;
+      },
+      { rows: 12 },
+    );
+  });
+
+  test("no rendered line exceeds the terminal width", () => {
+    return withTTYStdin(
+      async (emitKey) => {
+        const writeSpy = vi.spyOn(process.stdout, "write");
+        const promise = selectMany({
+          message: "Pick a candidate from the very long list of options below:",
+          items: manyItems(20),
+        });
+
+        const lastOutput = String(writeSpy.mock.calls[writeSpy.mock.calls.length - 1][0]);
+        const lines = lastOutput.split("\n").filter((line) => line.length > 0);
+        expect(lines.length).toBeGreaterThan(0);
+        for (const line of lines) {
+          expect(stringWidth(line)).toBeLessThanOrEqual(29);
+        }
+
+        emitKey(KEY_ENTER);
+        await promise;
+      },
+      { rows: 12, columns: 30 },
+    );
+  });
+
+  test("SIGWINCH triggers a redraw", () => {
+    return withTTYStdin(
+      async (emitKey) => {
+        const writeSpy = vi.spyOn(process.stdout, "write");
+        const promise = selectSingle({ message: "Pick:", items: manyItems(20) });
+
+        const callsBefore = writeSpy.mock.calls.length;
+        process.emit("SIGWINCH");
+        const callsAfter = writeSpy.mock.calls.length;
+        expect(callsAfter).toBeGreaterThan(callsBefore);
+
+        emitKey(KEY_ENTER);
+        await promise;
+      },
+      { rows: 12 },
+    );
   });
 });
