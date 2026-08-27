@@ -16,6 +16,7 @@ async function writePayload(obj: unknown): Promise<string> {
 const validArgs: RunInPaneArgs = {
   worktreePath: "/tmp/worktree",
   repoRoot: "/tmp/repo",
+  branchName: "feature/auth",
   claudeCommand: 'claude --prompt "hello"',
   postCreateCommand: "docker-compose up -d",
   postCreateTimeout: 300,
@@ -40,6 +41,7 @@ describe("parseRunInPaneArgs", () => {
     const minimal = {
       worktreePath: "/tmp/worktree",
       repoRoot: "/tmp/repo",
+      branchName: "feature/auth",
       claudeCommand: "claude",
       postCreateTimeout: 600,
       preCleanTimeout: 600,
@@ -89,6 +91,12 @@ describe("parseRunInPaneArgs", () => {
     const { repoRoot: _, ...rest } = validArgs;
     const path = await writePayload(rest);
     await expect(parseRunInPaneArgs(path)).rejects.toThrow("missing required field 'repoRoot'");
+  });
+
+  test("error: missing branchName", async () => {
+    const { branchName: _, ...rest } = validArgs;
+    const path = await writePayload(rest);
+    await expect(parseRunInPaneArgs(path)).rejects.toThrow("missing required field 'branchName'");
   });
 
   test("error: missing claudeCommand", async () => {
@@ -190,6 +198,7 @@ describe("executeRunInPane", () => {
     expect(mockPerformRollback).toHaveBeenCalledWith({
       worktreePath: validArgs.worktreePath,
       repoRoot: validArgs.repoRoot,
+      branchName: validArgs.branchName,
       preCleanCommand: validArgs.preCleanCommand,
       preCleanTimeout: validArgs.preCleanTimeout,
       postCleanCommand: validArgs.postCleanCommand,

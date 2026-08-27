@@ -31,6 +31,8 @@ export type ResumeArgs = {
 export type RunInPaneArgs = {
   worktreePath: string;
   repoRoot: string;
+  /** Branch name created by `git worktree add -b`, deleted on rollback */
+  branchName: string;
   claudeCommand: string;
   postCreateCommand?: string;
   postCreateTimeout: number;
