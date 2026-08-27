@@ -112,8 +112,19 @@ Did you mean "feature/auth"?
 ### List Options
 
 - `-j, -json` - Output as JSON
-- `-s, -status` - Show Claude session status (Running/Done)
+- `-no-status` - Hide Claude session status (shown by default)
+- `-fetch` - Fetch from remote before listing (default: local only; with `-watch`, only the first refresh fetches)
+- `-w, -watch` - Redraw the list on an interval until you quit (requires a TTY; cannot be used with `-json`)
+- `-interval <seconds>` - Refresh interval for `-watch` (default: 2, min: 1, max: 60)
+- `-q, -quiet` - Suppress informational output (errors only)
 - `-v, -verbose` - Show full paths and details
+
+In `-watch` mode the list is redrawn in the terminal's alternate screen buffer, so it never pollutes the scrollback:
+
+- **r** — refresh immediately
+- **q** / **Esc** / **Ctrl+C** — quit
+
+`-fetch` is applied only to the first refresh, so a long watch session does not keep hitting the remote.
 
 When `resume` or `clean -all` is run without a branch name, an interactive TUI selector is displayed:
 
@@ -192,8 +203,14 @@ claude-worktree resume
 # List worktrees with status
 claude-worktree list
 
-# Show Claude session status (Running/Done)
-claude-worktree list -status
+# Hide Claude session status
+claude-worktree list -no-status
+
+# Live view: redraw the list every 2 seconds until you quit
+claude-worktree list -watch
+
+# Live view with a 5 second interval
+claude-worktree list -watch -interval 5
 
 # List worktrees as JSON
 claude-worktree list -json

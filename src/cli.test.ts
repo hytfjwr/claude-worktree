@@ -9,6 +9,28 @@ import {
   validateBranchName,
 } from "./cli.ts";
 
+/** Stubs both stdin/stdout TTY-ness, which `-watch` requires. */
+function withTty(isTty: boolean, fn: () => void): void {
+  const descriptors = [
+    [process.stdin, Object.getOwnPropertyDescriptor(process.stdin, "isTTY")] as const,
+    [process.stdout, Object.getOwnPropertyDescriptor(process.stdout, "isTTY")] as const,
+  ];
+  for (const [stream] of descriptors) {
+    Object.defineProperty(stream, "isTTY", { value: isTty, configurable: true, writable: true });
+  }
+  try {
+    fn();
+  } finally {
+    for (const [stream, descriptor] of descriptors) {
+      if (descriptor) {
+        Object.defineProperty(stream, "isTTY", descriptor);
+      } else {
+        delete (stream as unknown as Record<string, unknown>).isTTY;
+      }
+    }
+  }
+}
+
 describe("parseArgs", () => {
   describe("help", () => {
     test("empty args - returns help", () => {
@@ -55,7 +77,15 @@ describe("parseArgs", () => {
       const result = parseArgs(["list"]);
       expect(result).toEqual({
         type: "list",
-        args: { json: false, quiet: false, verbose: false, noStatus: false, fetch: false },
+        args: {
+          json: false,
+          quiet: false,
+          verbose: false,
+          noStatus: false,
+          fetch: false,
+          watch: false,
+          intervalSeconds: 2,
+        },
       });
     });
 
@@ -63,7 +93,15 @@ describe("parseArgs", () => {
       const result = parseArgs(["list", "-json"]);
       expect(result).toEqual({
         type: "list",
-        args: { json: true, quiet: false, verbose: false, noStatus: false, fetch: false },
+        args: {
+          json: true,
+          quiet: false,
+          verbose: false,
+          noStatus: false,
+          fetch: false,
+          watch: false,
+          intervalSeconds: 2,
+        },
       });
     });
 
@@ -71,7 +109,15 @@ describe("parseArgs", () => {
       const result = parseArgs(["list", "-verbose"]);
       expect(result).toEqual({
         type: "list",
-        args: { json: false, quiet: false, verbose: true, noStatus: false, fetch: false },
+        args: {
+          json: false,
+          quiet: false,
+          verbose: true,
+          noStatus: false,
+          fetch: false,
+          watch: false,
+          intervalSeconds: 2,
+        },
       });
     });
 
@@ -79,7 +125,15 @@ describe("parseArgs", () => {
       const result = parseArgs(["list", "-v"]);
       expect(result).toEqual({
         type: "list",
-        args: { json: false, quiet: false, verbose: true, noStatus: false, fetch: false },
+        args: {
+          json: false,
+          quiet: false,
+          verbose: true,
+          noStatus: false,
+          fetch: false,
+          watch: false,
+          intervalSeconds: 2,
+        },
       });
     });
 
@@ -87,12 +141,43 @@ describe("parseArgs", () => {
       const result = parseArgs(["list", "-json", "-verbose"]);
       expect(result).toEqual({
         type: "list",
-        args: { json: true, quiet: false, verbose: true, noStatus: false, fetch: false },
+        args: {
+          json: true,
+          quiet: false,
+          verbose: true,
+          noStatus: false,
+          fetch: false,
+          watch: false,
+          intervalSeconds: 2,
+        },
       });
     });
 
     test("list with a positional argument throws", () => {
       expect(() => parseArgs(["list", "some prompt"])).toThrow("Unexpected argument for list command");
+    });
+
+    test("list -watch on a TTY", () => {
+      withTty(true, () => {
+        expect(parseArgs(["list", "-watch"])).toEqual({
+          type: "list",
+          args: {
+            json: false,
+            quiet: false,
+            verbose: false,
+            noStatus: false,
+            fetch: false,
+            watch: true,
+            intervalSeconds: 2,
+          },
+        });
+      });
+    });
+
+    test("list -watch without a TTY throws", () => {
+      withTty(false, () => {
+        expect(() => parseArgs(["list", "-watch"])).toThrow("-watch requires an interactive terminal");
+      });
     });
   });
 
@@ -805,7 +890,15 @@ describe("parseCleanArgs", () => {
 describe("parseListArgs", () => {
   test("no options", () => {
     const result = parseListArgs([]);
-    expect(result).toEqual({ json: false, quiet: false, verbose: false, noStatus: false, fetch: false });
+    expect(result).toEqual({
+      json: false,
+      quiet: false,
+      verbose: false,
+      noStatus: false,
+      fetch: false,
+      watch: false,
+      intervalSeconds: 2,
+    });
   });
 
   test("-json flag", () => {
@@ -858,22 +951,54 @@ describe("parseListArgs", () => {
 
   test("-json + -verbose", () => {
     const result = parseListArgs(["-json", "-verbose"]);
-    expect(result).toEqual({ json: true, quiet: false, verbose: true, noStatus: false, fetch: false });
+    expect(result).toEqual({
+      json: true,
+      quiet: false,
+      verbose: true,
+      noStatus: false,
+      fetch: false,
+      watch: false,
+      intervalSeconds: 2,
+    });
   });
 
   test("-no-status + -json", () => {
     const result = parseListArgs(["-no-status", "-json"]);
-    expect(result).toEqual({ json: true, quiet: false, verbose: false, noStatus: true, fetch: false });
+    expect(result).toEqual({
+      json: true,
+      quiet: false,
+      verbose: false,
+      noStatus: true,
+      fetch: false,
+      watch: false,
+      intervalSeconds: 2,
+    });
   });
 
   test("-no-status + -v", () => {
     const result = parseListArgs(["-no-status", "-v"]);
-    expect(result).toEqual({ json: false, quiet: false, verbose: true, noStatus: true, fetch: false });
+    expect(result).toEqual({
+      json: false,
+      quiet: false,
+      verbose: true,
+      noStatus: true,
+      fetch: false,
+      watch: false,
+      intervalSeconds: 2,
+    });
   });
 
   test("-h/-help is ignored (does not throw)", () => {
     const result = parseListArgs(["-h"]);
-    expect(result).toEqual({ json: false, quiet: false, verbose: false, noStatus: false, fetch: false });
+    expect(result).toEqual({
+      json: false,
+      quiet: false,
+      verbose: false,
+      noStatus: false,
+      fetch: false,
+      watch: false,
+      intervalSeconds: 2,
+    });
   });
 
   test("unknown option throws", () => {
@@ -900,6 +1025,74 @@ describe("parseListArgs", () => {
 
   test("options mixed with a positional still throw", () => {
     expect(() => parseListArgs(["-json", "foo"])).toThrow("Unexpected argument for list command");
+  });
+
+  test("-watch flag", () => {
+    const result = parseListArgs(["-watch"], () => true);
+    expect(result.watch).toBe(true);
+    expect(result.intervalSeconds).toBe(2);
+  });
+
+  test("-w flag (alias for -watch)", () => {
+    const result = parseListArgs(["-w"], () => true);
+    expect(result.watch).toBe(true);
+  });
+
+  test("-interval sets the refresh interval", () => {
+    const result = parseListArgs(["-watch", "-interval", "5"], () => true);
+    expect(result.intervalSeconds).toBe(5);
+  });
+
+  test("-interval accepts the lower bound", () => {
+    const result = parseListArgs(["-watch", "-interval", "1"], () => true);
+    expect(result.intervalSeconds).toBe(1);
+  });
+
+  test("-interval accepts the upper bound", () => {
+    const result = parseListArgs(["-watch", "-interval", "60"], () => true);
+    expect(result.intervalSeconds).toBe(60);
+  });
+
+  test("-interval below the lower bound throws", () => {
+    expect(() => parseListArgs(["-watch", "-interval", "0"], () => true)).toThrow(
+      "-interval must be between 1 and 60 seconds",
+    );
+  });
+
+  test("-interval above the upper bound throws", () => {
+    expect(() => parseListArgs(["-watch", "-interval", "61"], () => true)).toThrow(
+      "-interval must be between 1 and 60 seconds",
+    );
+  });
+
+  test("-interval with a non-numeric value throws", () => {
+    expect(() => parseListArgs(["-watch", "-interval", "abc"], () => true)).toThrow(
+      "-interval requires a whole number of seconds",
+    );
+  });
+
+  test("-interval with a decimal value throws", () => {
+    expect(() => parseListArgs(["-watch", "-interval", "1.5"], () => true)).toThrow(
+      "-interval requires a whole number of seconds",
+    );
+  });
+
+  test("-interval without a value throws", () => {
+    expect(() => parseListArgs(["-watch", "-interval"], () => true)).toThrow(
+      "-interval requires a number of seconds argument",
+    );
+  });
+
+  test("-interval is validated even without -watch", () => {
+    expect(() => parseListArgs(["-interval", "0"])).toThrow("-interval must be between 1 and 60 seconds");
+  });
+
+  test("-watch with -json throws", () => {
+    expect(() => parseListArgs(["-watch", "-json"], () => true)).toThrow("Cannot use both -watch and -json");
+  });
+
+  test("-watch without a TTY throws", () => {
+    expect(() => parseListArgs(["-watch"], () => false)).toThrow("-watch requires an interactive terminal");
   });
 });
 
@@ -1114,6 +1307,8 @@ describe("parseArgs - per-command help", () => {
       verbose: false,
       noStatus: false,
       fetch: false,
+      watch: false,
+      intervalSeconds: 2,
     });
     expect(parseCleanArgs(["--help"]).branches).toEqual([]);
   });

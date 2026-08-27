@@ -75,6 +75,8 @@ claude-worktree list -fetch
 claude-worktree list -json
 claude-worktree list -no-status
 claude-worktree list -v
+claude-worktree list -watch
+claude-worktree list -watch -interval 5
 claude-worktree clean
 claude-worktree clean -dry-run
 ```
@@ -103,7 +105,10 @@ claude-worktree clean -dry-run
 
 - `-j, -json` - Output as JSON
 - `-no-status` - Hide Claude session status (shown by default)
-- `-fetch` - Fetch from remote before listing (default: local only)
+- `-fetch` - Fetch from remote before listing (default: local only; with `-watch`, only the first refresh fetches)
+- `-w, -watch` - Redraw the list on an interval until you quit (requires a TTY; cannot be used with `-json`)
+- `-interval <seconds>` - Refresh interval for `-watch` (default: 2, min: 1, max: 60)
+- `-q, -quiet` - Suppress informational output (errors only)
 - `-v, -verbose` - Show full paths and details
 
 ### Clean Options
@@ -149,6 +154,8 @@ src/
     hooks.test.ts
     list.ts            # Worktree listing with rich display
     list.test.ts
+    list-watch.ts      # list -watch live view (alternate screen redraw loop)
+    list-watch.test.ts
     resume.ts          # Resume command orchestration
     resume.test.ts
     rollback.ts        # Worktree rollback logic
