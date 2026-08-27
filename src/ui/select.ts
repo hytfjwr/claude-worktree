@@ -1,8 +1,8 @@
 import * as readline from "node:readline";
 
 import { padToWidth, stringWidth, truncateToWidth } from "../core/width.ts";
-import type { SelectItem, Viewport } from "../types/index.ts";
-import { cyan, dim, green } from "./color.ts";
+import type { FilterMatch, SelectItem, Viewport } from "../types/index.ts";
+import { cyan, dim, green, styles } from "./color.ts";
 import { icons } from "./icons.ts";
 import { logInfo } from "./logger.ts";
 
@@ -29,13 +29,17 @@ type SelectContext<T> = {
 
 /** Mutable state driven by key input. */
 type SelectState = {
-  /** Item indices currently on display, in original order. */
-  visible: number[];
+  /** Matches currently on display, in original item order. */
+  visible: FilterMatch[];
   /** Index into `visible`, not into `items`. */
   cursor: number;
   offset: number;
   /** Original `items` indices, never display indices. */
   selected: Set<number>;
+  /** Current filter query. Kept when filter input mode is left with Enter. */
+  query: string;
+  /** True while typing into the filter query. */
+  filtering: boolean;
 };
 
 type SelectFrame = {
@@ -71,8 +75,12 @@ type KeyAction =
   | "toggle_all"
   | "cancel"
   | "ctrl_c"
+  | "filter"
+  | "backspace"
+  | "ctrl_u"
   | "unknown";
 
+/** Handles control bytes and CSI sequences only. Printable text is decoded by `printableText`. */
 function parseKey(data: Buffer): KeyAction {
   if (data.length === 1) {
     const byte = data[0];
@@ -81,14 +89,10 @@ function parseKey(data: Buffer): KeyAction {
     if (byte === 0x0a) return "enter"; // LF
     if (byte === 0x10) return "up"; // Ctrl+P
     if (byte === 0x0e) return "down"; // Ctrl+N
-    if (byte === 0x20) return "space";
     if (byte === 0x1b) return "cancel"; // Esc
-    if (byte === 0x6b) return "up"; // k
-    if (byte === 0x6a) return "down"; // j
-    if (byte === 0x67) return "home"; // g
-    if (byte === 0x47) return "end"; // G
-    if (byte === 0x71) return "cancel"; // q
-    if (byte === 0x61) return "toggle_all"; // a
+    if (byte === 0x08) return "backspace";
+    if (byte === 0x7f) return "backspace";
+    if (byte === 0x15) return "ctrl_u"; // Ctrl+U
   }
   // CSI sequences: ESC [ <params> <final>
   if (data.length >= 3 && data[0] === 0x1b && data[1] === 0x5b) {
@@ -112,6 +116,42 @@ function parseKey(data: Buffer): KeyAction {
     }
   }
   return "unknown";
+}
+
+/**
+ * Decodes the buffer as filter text. Returns null unless every byte is
+ * printable, so control bytes and escape sequences fall through to parseKey.
+ */
+function printableText(data: Buffer): string | null {
+  if (data.length === 0) return null;
+  for (const byte of data) {
+    if (byte < 0x20 || byte === 0x7f) return null;
+  }
+  return data.toString("utf8");
+}
+
+/** Navigation meaning of a printable character outside filter input mode. */
+function navAction(char: string): KeyAction | null {
+  switch (char) {
+    case " ":
+      return "space";
+    case "j":
+      return "down";
+    case "k":
+      return "up";
+    case "g":
+      return "home";
+    case "G":
+      return "end";
+    case "q":
+      return "cancel";
+    case "a":
+      return "toggle_all";
+    case "/":
+      return "filter";
+    default:
+      return null;
+  }
 }
 
 // =============================================================================
@@ -161,6 +201,51 @@ export function computeViewport(total: number, cursor: number, height: number, c
 }
 
 // =============================================================================
+// Filtering
+// =============================================================================
+
+/**
+ * Case-insensitive subsequence match. Returns the code point indices of `text`
+ * that the query consumed, or null when `query` is not a subsequence of `text`.
+ * An empty query matches everything with no positions.
+ */
+export function fuzzyMatch(text: string, query: string): number[] | null {
+  if (query === "") return [];
+  const chars = [...text];
+  const needle = [...query.toLowerCase()];
+  const positions: number[] = [];
+  let qi = 0;
+  for (let i = 0; i < chars.length && qi < needle.length; i++) {
+    if (chars[i].toLowerCase() === needle[qi]) {
+      positions.push(i);
+      qi++;
+    }
+  }
+  return qi === needle.length ? positions : null;
+}
+
+/**
+ * Items whose label, description or hint contains the query as a subsequence,
+ * in original order. Order is never rescored, so the display stays predictable.
+ */
+export function filterItems<T>(items: SelectItem<T>[], query: string): FilterMatch[] {
+  if (query === "") return items.map((_, index) => ({ index, labelMatches: [] }));
+  const matches: FilterMatch[] = [];
+  for (let index = 0; index < items.length; index++) {
+    const item = items[index];
+    const labelMatches = fuzzyMatch(item.label, query);
+    if (labelMatches !== null) {
+      matches.push({ index, labelMatches });
+      continue;
+    }
+    if (fuzzyMatch(item.description ?? "", query) !== null || fuzzyMatch(item.hint ?? "", query) !== null) {
+      matches.push({ index, labelMatches: [] });
+    }
+  }
+  return matches;
+}
+
+// =============================================================================
 // Rendering
 // =============================================================================
 
@@ -189,12 +274,40 @@ function checkboxWidth(): number {
   return Math.max(stringWidth(icons.checked()), stringWidth(icons.unchecked()));
 }
 
+/**
+ * Colors the label one run at a time: matched code points get the highlight
+ * style, the rest gets the cursor color. Runs are wrapped separately because
+ * nesting color wrappers would reset the outer color mid-string.
+ */
+function styleLabel(labelPlain: string, matches: readonly number[], isCurrent: boolean): string {
+  if (matches.length === 0) return isCurrent ? cyan(labelPlain) : labelPlain;
+  const matched = new Set(matches);
+  const chars = [...labelPlain];
+  let out = "";
+  let runStart = 0;
+  const flush = (end: number, isMatch: boolean) => {
+    if (end <= runStart) return;
+    const run = chars.slice(runStart, end).join("");
+    if (isMatch) out += styles(run, "cyan", "bold");
+    else out += isCurrent ? cyan(run) : run;
+    runStart = end;
+  };
+  for (let i = 1; i <= chars.length; i++) {
+    const prevIsMatch = matched.has(i - 1);
+    if (i === chars.length || matched.has(i) !== prevIsMatch) {
+      flush(i, prevIsMatch);
+    }
+  }
+  return out;
+}
+
 function renderRow<T>(
   ctx: SelectContext<T>,
   state: SelectState,
   itemIndex: number,
   isCurrent: boolean,
   frameWidth: number,
+  matches: readonly number[],
 ): string {
   const item = ctx.items[itemIndex];
   const pointer = isCurrent ? cyan(icons.cursor()) : " ";
@@ -211,7 +324,7 @@ function renderRow<T>(
   const labelCell = Math.min(ctx.labelWidth, available);
 
   const labelPlain = padToWidth(truncateToWidth(item.label, labelCell), labelCell);
-  const label = isCurrent ? cyan(labelPlain) : labelPlain;
+  const label = styleLabel(labelPlain, matches, isCurrent);
 
   const metaRoom = available - labelCell;
   const metaPlain = metaText(ctx.mode, item);
@@ -220,13 +333,29 @@ function renderRow<T>(
   return `  ${pointer} ${checkboxCell}${label}${meta}`;
 }
 
+/** Query and match count, shown above the candidates while a filter is active. */
+function filterLine<T>(ctx: SelectContext<T>, state: SelectState, frameWidth: number): string {
+  const prefix = "  Filter: ";
+  const counts = `(${state.visible.length}/${ctx.items.length})`;
+  const caret = state.filtering ? icons.caret() : "";
+  const room = Math.max(1, frameWidth - stringWidth(prefix) - stringWidth(counts) - 2);
+  const shown = truncateToWidth(`${state.query}${caret}`, room);
+  return `${dim(prefix)}${cyan(shown)}  ${dim(counts)}`;
+}
+
 function footerLine<T>(ctx: SelectContext<T>, state: SelectState, frameWidth: number): string {
   const total = state.visible.length;
   const position = total > 0 ? `${state.cursor + 1}/${total}` : "0/0";
-  const plain =
-    ctx.mode === "single"
-      ? `  ↑/↓ navigate  Enter confirm  q cancel  ${position}`
-      : `  ↑/↓ navigate  Space toggle  a all  Enter confirm  q cancel  ${position}`;
+  let plain: string;
+  if (state.filtering) {
+    plain = `  Type to filter  Enter accept  Esc discard  Ctrl+U clear  ↑/↓ navigate  ${position}`;
+  } else if (ctx.mode === "single") {
+    plain = `  ↑/↓ navigate  Enter confirm  / filter${state.query ? "  Esc clear" : ""}  q cancel  ${position}`;
+  } else {
+    const allLabel = state.query ? "all matches" : "all";
+    const clearHint = state.query ? "  Esc clear" : "";
+    plain = `  ↑/↓ navigate  Space toggle  a ${allLabel}  / filter${clearHint}  Enter confirm  q cancel  ${position}`;
+  }
   return dim(truncateToWidth(plain, frameWidth));
 }
 
@@ -236,21 +365,29 @@ function buildFrame<T>(
   dims: { columns: number | undefined; rows: number | undefined },
 ): SelectFrame {
   const frameWidth = Math.max(MIN_FRAME_WIDTH, (dims.columns || DEFAULT_COLUMNS) - 1);
-  const height = computeViewportHeight(dims.rows);
+  const showFilter = state.filtering || state.query !== "";
+  const height = computeViewportHeight(dims.rows, showFilter ? 1 : 0);
   const viewport = computeViewport(state.visible.length, state.cursor, height, state.offset);
 
   const lines: string[] = [];
   lines.push("");
   lines.push(truncateToWidth(ctx.message, frameWidth));
-  if (viewport.hiddenAbove > 0) {
-    lines.push(dim(`  ${icons.scrollUp()} ${viewport.hiddenAbove} more`));
+  if (showFilter) {
+    lines.push(filterLine(ctx, state, frameWidth));
   }
-  for (let i = viewport.visibleStart; i < viewport.visibleEnd; i++) {
-    const itemIndex = state.visible[i];
-    lines.push(renderRow(ctx, state, itemIndex, i === state.cursor, frameWidth));
-  }
-  if (viewport.hiddenBelow > 0) {
-    lines.push(dim(`  ${icons.scrollDown()} ${viewport.hiddenBelow} more`));
+  if (state.visible.length === 0) {
+    lines.push(dim("  no matches"));
+  } else {
+    if (viewport.hiddenAbove > 0) {
+      lines.push(dim(`  ${icons.scrollUp()} ${viewport.hiddenAbove} more`));
+    }
+    for (let i = viewport.visibleStart; i < viewport.visibleEnd; i++) {
+      const match = state.visible[i];
+      lines.push(renderRow(ctx, state, match.index, i === state.cursor, frameWidth, match.labelMatches));
+    }
+    if (viewport.hiddenBelow > 0) {
+      lines.push(dim(`  ${icons.scrollDown()} ${viewport.hiddenBelow} more`));
+    }
   }
   lines.push(footerLine(ctx, state, frameWidth));
 
@@ -329,17 +466,20 @@ async function fallbackMany<T>(options: SelectOptions<T>): Promise<T[]> {
 function runInteractive<T>(ctx: SelectContext<T>): Promise<SelectState | null> {
   return new Promise((resolve) => {
     const state: SelectState = {
-      visible: ctx.items.map((_, i) => i),
+      visible: filterItems(ctx.items, ""),
       cursor: 0,
       offset: 0,
       selected: new Set(),
+      query: "",
+      filtering: false,
     };
     let renderedLines = 0;
     let resolved = false;
 
     const write = (s: string) => process.stdout.write(s);
 
-    const viewportHeight = () => computeViewportHeight(process.stdout.rows);
+    const viewportHeight = () =>
+      computeViewportHeight(process.stdout.rows, state.filtering || state.query !== "" ? 1 : 0);
 
     const draw = () => {
       // Move up to overwrite previous render
@@ -355,8 +495,8 @@ function runInteractive<T>(ctx: SelectContext<T>): Promise<SelectState | null> {
     };
 
     const toggleCurrent = () => {
-      if (ctx.mode !== "multi") return;
-      const itemIndex = state.visible[state.cursor];
+      if (ctx.mode !== "multi" || state.visible.length === 0) return;
+      const itemIndex = state.visible[state.cursor].index;
       if (state.selected.has(itemIndex)) {
         state.selected.delete(itemIndex);
       } else {
@@ -365,14 +505,26 @@ function runInteractive<T>(ctx: SelectContext<T>): Promise<SelectState | null> {
       draw();
     };
 
+    // Toggles only the matches currently on display, so a filtered "select all"
+    // never touches items hidden by the filter.
     const toggleAll = () => {
       if (ctx.mode !== "multi") return;
-      if (state.selected.size === ctx.items.length) {
-        state.selected.clear();
-      } else {
-        for (let i = 0; i < ctx.items.length; i++) state.selected.add(i);
+      const indices = state.visible.map((m) => m.index);
+      const allSelected = indices.length > 0 && indices.every((i) => state.selected.has(i));
+      for (const i of indices) {
+        if (allSelected) state.selected.delete(i);
+        else state.selected.add(i);
       }
       draw();
+    };
+
+    // Recomputes the visible matches, keeping the cursor on the same item when it survives.
+    const setQuery = (query: string) => {
+      const anchor = state.visible[state.cursor]?.index;
+      state.query = query;
+      state.visible = filterItems(ctx.items, query);
+      const next = anchor === undefined ? -1 : state.visible.findIndex((m) => m.index === anchor);
+      state.cursor = next >= 0 ? next : clamp(state.cursor, 0, Math.max(0, state.visible.length - 1));
     };
 
     const onResize = () => {
@@ -419,6 +571,42 @@ function runInteractive<T>(ctx: SelectContext<T>): Promise<SelectState | null> {
       }
     };
 
+    // Enter leaves filter input mode (keeping the query) instead of confirming,
+    // and never confirms an empty match list.
+    const acceptEnter = () => {
+      if (state.filtering) {
+        state.filtering = false;
+        draw();
+        return;
+      }
+      if (state.visible.length === 0) return;
+      finish(state);
+    };
+
+    // Esc steps back to the unfiltered list while a filter is showing (typing or a kept
+    // query), and only cancels the whole prompt once there is nothing left to discard.
+    const applyCancel = () => {
+      if (state.filtering || state.query !== "") {
+        state.filtering = false;
+        setQuery("");
+        draw();
+        return;
+      }
+      finish(null);
+    };
+
+    const eraseFilterChar = () => {
+      if (!state.filtering || state.query === "") return;
+      setQuery([...state.query].slice(0, -1).join(""));
+      draw();
+    };
+
+    const clearFilter = () => {
+      if (state.query === "") return;
+      setQuery("");
+      draw();
+    };
+
     const applyAction = (action: KeyAction) => {
       if (action === "ctrl_c") {
         cleanup();
@@ -430,32 +618,48 @@ function runInteractive<T>(ctx: SelectContext<T>): Promise<SelectState | null> {
 
       switch (action) {
         case "cancel":
-          finish(null);
+          applyCancel();
           break;
         case "enter":
-          finish(state);
+          acceptEnter();
+          break;
+        case "filter":
+          state.filtering = true;
+          draw();
+          break;
+        case "backspace":
+          eraseFilterChar();
+          break;
+        case "ctrl_u":
+          clearFilter();
           break;
         case "up":
+          if (total === 0) break;
           state.cursor = state.cursor <= 0 ? total - 1 : state.cursor - 1;
           draw();
           break;
         case "down":
+          if (total === 0) break;
           state.cursor = state.cursor >= total - 1 ? 0 : state.cursor + 1;
           draw();
           break;
         case "page_up":
+          if (total === 0) break;
           state.cursor = clamp(state.cursor - viewportHeight(), 0, total - 1);
           draw();
           break;
         case "page_down":
+          if (total === 0) break;
           state.cursor = clamp(state.cursor + viewportHeight(), 0, total - 1);
           draw();
           break;
         case "home":
+          if (total === 0) break;
           state.cursor = 0;
           draw();
           break;
         case "end":
+          if (total === 0) break;
           state.cursor = total - 1;
           draw();
           break;
@@ -471,6 +675,19 @@ function runInteractive<T>(ctx: SelectContext<T>): Promise<SelectState | null> {
     };
 
     let stdinHandler: ((data: Buffer) => void) | null = (data: Buffer) => {
+      const text = printableText(data);
+      if (text !== null) {
+        if (state.filtering) {
+          setQuery(state.query + text);
+          draw();
+          return;
+        }
+        for (const char of text) {
+          const action = navAction(char);
+          if (action) applyAction(action);
+        }
+        return;
+      }
       applyAction(parseKey(data));
     };
 
@@ -502,7 +719,7 @@ export async function selectSingle<T>(options: SelectOptions<T>): Promise<T | nu
     labelWidth: computeLabelWidth(items),
   });
   if (!state) return null;
-  return items[state.visible[state.cursor]].value;
+  return items[state.visible[state.cursor].index].value;
 }
 
 export async function selectMany<T>(options: SelectOptions<T>): Promise<T[]> {

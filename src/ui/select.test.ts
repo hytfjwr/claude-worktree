@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { saveEnv } from "../__test-utils__.ts";
-import { stringWidth } from "../core/width.ts";
-import { _resetColorCache } from "./color.ts";
-import { computeViewport, computeViewportHeight, selectMany, selectSingle } from "./select.ts";
+import { stringWidth, stripAnsi } from "../core/width.ts";
+import { _resetColorCache, styles } from "./color.ts";
+import { computeViewport, computeViewportHeight, filterItems, fuzzyMatch, selectMany, selectSingle } from "./select.ts";
 
 // Mock readline for non-TTY fallback tests.
 // TTY tests bypass this because they enter the raw-mode path.
@@ -150,6 +150,14 @@ const KEY_G_LOWER = [0x67];
 const KEY_G_UPPER = [0x47];
 const KEY_CTRL_P = [0x10];
 const KEY_CTRL_N = [0x0e];
+const KEY_SLASH = [0x2f];
+const KEY_BACKSPACE = [0x7f];
+const KEY_CTRL_U = [0x15];
+
+/** Emits one key event per byte of `text`, simulating a paste-free keystroke sequence. */
+function typeText(emitKey: (bytes: number[]) => void, text: string) {
+  for (const byte of Buffer.from(text, "utf8")) emitKey([byte]);
+}
 
 const sampleItems = [
   { value: "a", label: "Alpha", description: "/path/alpha" },
@@ -837,5 +845,347 @@ describe("viewport rendering", () => {
       },
       { rows: 12 },
     );
+  });
+});
+
+// =============================================================================
+// Filtering
+// =============================================================================
+
+describe("fuzzyMatch", () => {
+  test("empty query matches everything with no positions", () => {
+    expect(fuzzyMatch("Alpha", "")).toEqual([]);
+  });
+
+  test("matches a case-insensitive prefix", () => {
+    expect(fuzzyMatch("Alpha", "al")).toEqual([0, 1]);
+  });
+
+  test("matches a contiguous substring elsewhere in the text", () => {
+    expect(fuzzyMatch("Gamma", "am")).toEqual([1, 2]);
+  });
+
+  test("matches a non-contiguous subsequence in ascending order", () => {
+    const positions = fuzzyMatch("feature/auth", "fauth");
+    expect(positions).not.toBeNull();
+    const sorted = [...(positions as number[])].sort((a, b) => a - b);
+    expect(positions).toEqual(sorted);
+  });
+
+  test("matches a subsequence at the end of the text", () => {
+    expect(fuzzyMatch("Alpha", "ph")).toEqual([2, 3]);
+  });
+
+  test("returns null when a character is missing", () => {
+    expect(fuzzyMatch("Alpha", "z")).toBeNull();
+  });
+
+  test("returns null when the characters are out of order", () => {
+    expect(fuzzyMatch("Alpha", "ahp")).toBeNull();
+  });
+
+  test("returns null for a non-empty query against empty text", () => {
+    expect(fuzzyMatch("", "a")).toBeNull();
+  });
+
+  test("is case-insensitive on both text and query", () => {
+    expect(fuzzyMatch("ALPHA", "alpha")).toEqual([0, 1, 2, 3, 4]);
+  });
+});
+
+describe("filterItems", () => {
+  test("empty query returns every item with no label matches", () => {
+    expect(filterItems(sampleItems, "")).toEqual([
+      { index: 0, labelMatches: [] },
+      { index: 1, labelMatches: [] },
+      { index: 2, labelMatches: [] },
+    ]);
+  });
+
+  test("matches only the label that contains the query as a subsequence", () => {
+    expect(filterItems(sampleItems, "am")).toEqual([{ index: 2, labelMatches: [1, 2] }]);
+  });
+
+  test("matches on description when the label does not match", () => {
+    const items = [{ value: "a", label: "Alpha", description: "worktree-path" }];
+    expect(filterItems(items, "tree")).toEqual([{ index: 0, labelMatches: [] }]);
+  });
+
+  test("matches on hint when neither the label nor description matches", () => {
+    const items = [{ value: "a", label: "Alpha", hint: "merged" }];
+    expect(filterItems(items, "mrg")).toEqual([{ index: 0, labelMatches: [] }]);
+  });
+
+  test("excludes items that match nowhere", () => {
+    expect(filterItems(sampleItems, "xyz123")).toEqual([]);
+  });
+
+  test("keeps the original item order", () => {
+    const result = filterItems(sampleItems, "a");
+    expect(result.map((m) => m.index)).toEqual([0, 1, 2]);
+  });
+});
+
+describe("filtering (TTY)", () => {
+  test("/ enters filter mode: footer shows filter hints and header shows the query", () => {
+    return withTTYStdin(async (emitKey) => {
+      const writeSpy = vi.spyOn(process.stdout, "write");
+      const promise = selectSingle({ message: "Pick:", items: sampleItems });
+
+      writeSpy.mockClear();
+      emitKey(KEY_SLASH);
+      const output = stripAnsi(writeSpy.mock.calls.map((c) => String(c[0])).join(""));
+      expect(output).toContain("Type to filter");
+      expect(output).toContain("Filter:");
+
+      emitKey(KEY_ENTER); // leave filter input mode, query kept ("")
+      emitKey(KEY_ENTER); // confirm
+      await promise;
+    });
+  });
+
+  test("query narrows visible items and shows the match count", () => {
+    return withTTYStdin(async (emitKey) => {
+      const writeSpy = vi.spyOn(process.stdout, "write");
+      const promise = selectSingle({ message: "Pick:", items: sampleItems });
+
+      emitKey(KEY_SLASH);
+      typeText(emitKey, "a");
+      writeSpy.mockClear();
+      typeText(emitKey, "m"); // only inspect the render that follows the final keystroke
+      const raw = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+      const output = stripAnsi(raw);
+      expect(output).toContain("Filter: am");
+      expect(output).toContain("(1/3)");
+      expect(output).toContain("Gamma");
+      expect(output).not.toContain("Alpha");
+      expect(output).not.toContain("Beta");
+      // The matched "am" run is highlighted; the label is otherwise split across
+      // separately-colored runs, so this check must use the raw (non-stripped) output.
+      expect(raw).toContain(styles("am", "cyan", "bold"));
+
+      emitKey(KEY_ENTER);
+      emitKey(KEY_ENTER);
+      await promise;
+    });
+  });
+
+  test("Enter leaves filter input mode but keeps the query, then confirms the filtered match", () => {
+    return withTTYStdin(async (emitKey) => {
+      const writeSpy = vi.spyOn(process.stdout, "write");
+      const promise = selectSingle({ message: "Pick:", items: sampleItems });
+
+      emitKey(KEY_SLASH);
+      typeText(emitKey, "am");
+      writeSpy.mockClear();
+      emitKey(KEY_ENTER);
+      const output = stripAnsi(writeSpy.mock.calls.map((c) => String(c[0])).join(""));
+      expect(output).toContain("navigate");
+      expect(output).toContain("Filter: am");
+
+      emitKey(KEY_ENTER);
+      const result = await promise;
+      expect(result).toBe("c");
+    });
+  });
+
+  test("Esc while filtering discards the query without canceling the prompt", () => {
+    return withTTYStdin(async (emitKey) => {
+      const writeSpy = vi.spyOn(process.stdout, "write");
+      const promise = selectSingle({ message: "Pick:", items: sampleItems });
+
+      emitKey(KEY_SLASH);
+      typeText(emitKey, "am");
+      writeSpy.mockClear();
+      emitKey(KEY_ESC);
+      const output = stripAnsi(writeSpy.mock.calls.map((c) => String(c[0])).join(""));
+      expect(output).toContain("Alpha");
+      expect(output).toContain("Beta");
+      expect(output).toContain("Gamma");
+
+      emitKey(KEY_ENTER);
+      const result = await promise;
+      // setQuery keeps the cursor anchored to the item it was on (Gamma), it does not
+      // reset to the top of the unfiltered list.
+      expect(result).toBe("c");
+    });
+  });
+
+  test("Backspace removes the last filter character", () => {
+    return withTTYStdin(async (emitKey) => {
+      const writeSpy = vi.spyOn(process.stdout, "write");
+      const promise = selectSingle({ message: "Pick:", items: sampleItems });
+
+      emitKey(KEY_SLASH);
+      typeText(emitKey, "am");
+      writeSpy.mockClear();
+      emitKey(KEY_BACKSPACE);
+      const output = stripAnsi(writeSpy.mock.calls.map((c) => String(c[0])).join(""));
+      // fuzzyMatch("Beta", "a") also matches (the trailing "a"), so all three survive.
+      expect(output).toContain("Filter: a");
+      expect(output).toContain("(3/3)");
+
+      emitKey(KEY_ENTER);
+      emitKey(KEY_ENTER);
+      await promise;
+    });
+  });
+
+  test("Ctrl+U clears the filter query while staying in filter mode", () => {
+    return withTTYStdin(async (emitKey) => {
+      const writeSpy = vi.spyOn(process.stdout, "write");
+      const promise = selectSingle({ message: "Pick:", items: sampleItems });
+
+      emitKey(KEY_SLASH);
+      typeText(emitKey, "am");
+      writeSpy.mockClear();
+      emitKey(KEY_CTRL_U);
+      const output = stripAnsi(writeSpy.mock.calls.map((c) => String(c[0])).join(""));
+      expect(output).toContain("Filter:");
+      expect(output).toContain("Alpha");
+      expect(output).toContain("Beta");
+      expect(output).toContain("Gamma");
+
+      emitKey(KEY_ENTER);
+      emitKey(KEY_ENTER);
+      await promise;
+    });
+  });
+
+  test("Enter does not confirm when the filtered list has no matches", () => {
+    return withTTYStdin(async (emitKey) => {
+      const writeSpy = vi.spyOn(process.stdout, "write");
+      const promise = selectSingle({ message: "Pick:", items: sampleItems });
+
+      emitKey(KEY_SLASH);
+      typeText(emitKey, "zzz");
+      const output = stripAnsi(writeSpy.mock.calls.map((c) => String(c[0])).join(""));
+      expect(output).toContain("no matches");
+
+      emitKey(KEY_ENTER); // leaves filter input mode; still zero matches
+      let settled = false;
+      promise.then(() => {
+        settled = true;
+      });
+      emitKey(KEY_ENTER); // nothing to confirm
+      await new Promise((r) => setImmediate(r));
+      expect(settled).toBe(false);
+
+      emitKey(KEY_ESC); // clears the query, does not cancel the prompt
+      emitKey(KEY_ENTER);
+      const result = await promise;
+      expect(result).toBe("a");
+    });
+  });
+
+  test("arrow keys and Ctrl+P/Ctrl+N move the cursor while filtering", () => {
+    return withTTYStdin(async (emitKey) => {
+      const writeSpy = vi.spyOn(process.stdout, "write");
+      const promise = selectSingle({ message: "Pick:", items: sampleItems });
+
+      emitKey(KEY_SLASH);
+      typeText(emitKey, "a"); // matches all three items
+      writeSpy.mockClear();
+      emitKey(KEY_DOWN);
+      let output = stripAnsi(writeSpy.mock.calls.map((c) => String(c[0])).join(""));
+      expect(output).toContain("2/3");
+
+      writeSpy.mockClear();
+      emitKey(KEY_CTRL_N);
+      output = stripAnsi(writeSpy.mock.calls.map((c) => String(c[0])).join(""));
+      expect(output).toContain("3/3");
+
+      writeSpy.mockClear();
+      emitKey(KEY_CTRL_P);
+      output = stripAnsi(writeSpy.mock.calls.map((c) => String(c[0])).join(""));
+      expect(output).toContain("2/3");
+
+      emitKey(KEY_ENTER);
+      emitKey(KEY_ENTER);
+      await promise;
+    });
+  });
+
+  test("j/k/q/a are typed into the query while filtering instead of navigating", () => {
+    return withTTYStdin(async (emitKey) => {
+      const writeSpy = vi.spyOn(process.stdout, "write");
+      const promise = selectSingle({ message: "Pick:", items: sampleItems });
+
+      emitKey(KEY_SLASH);
+      writeSpy.mockClear();
+      emitKey(KEY_Q);
+      let output = stripAnsi(writeSpy.mock.calls.map((c) => String(c[0])).join(""));
+      expect(output).toContain("Filter: q");
+
+      let settled = false;
+      promise.then(() => {
+        settled = true;
+      });
+      emitKey(KEY_J);
+      emitKey(KEY_K);
+      emitKey(KEY_A);
+      output = stripAnsi(writeSpy.mock.calls.map((c) => String(c[0])).join(""));
+      expect(output).toContain("Filter: qjka");
+      await new Promise((r) => setImmediate(r));
+      expect(settled).toBe(false);
+
+      emitKey(KEY_CTRL_U); // back to a non-empty match list so the prompt can be closed
+      emitKey(KEY_ENTER);
+      emitKey(KEY_ENTER);
+      await promise;
+    });
+  });
+});
+
+describe("filtering with selectMany", () => {
+  const indexItems = [
+    { value: "x", label: "Xray" },
+    { value: "y", label: "Yankee" },
+    { value: "z", label: "Zulu" },
+  ];
+
+  test("toggling a filtered match selects the original item, surviving a discarded filter", () => {
+    return withTTYStdin(async (emitKey) => {
+      const promise = selectMany({ message: "Pick:", items: indexItems });
+      emitKey(KEY_SLASH);
+      typeText(emitKey, "zu"); // matches only Zulu
+      emitKey(KEY_ENTER); // leave filter input mode, query kept
+      emitKey(KEY_SPACE); // toggle the (filtered) current item: Zulu
+      emitKey(KEY_ESC); // discard the query, back to the full list; selection survives
+      emitKey(KEY_ENTER); // confirm
+      const result = await promise;
+      expect(result).toEqual(["z"]);
+    });
+  });
+
+  test("toggle-all while a query is active affects only the visible matches", () => {
+    return withTTYStdin(async (emitKey) => {
+      const promise = selectMany({ message: "Pick:", items: indexItems });
+      emitKey(KEY_SLASH);
+      typeText(emitKey, "y"); // matches Xray and Yankee
+      emitKey(KEY_ENTER); // leave filter input mode, query kept
+      emitKey(KEY_A); // toggle all visible matches
+      emitKey(KEY_ENTER); // confirm
+      const result = await promise;
+      expect(result).toEqual(["x", "y"]);
+    });
+  });
+
+  test("footer shows 'all matches' and 'Esc clear' once a query narrows the results", () => {
+    return withTTYStdin(async (emitKey) => {
+      const writeSpy = vi.spyOn(process.stdout, "write");
+      const promise = selectMany({ message: "Pick:", items: indexItems });
+
+      emitKey(KEY_SLASH);
+      typeText(emitKey, "y");
+      writeSpy.mockClear();
+      emitKey(KEY_ENTER); // leave filter input mode, query kept
+      const output = stripAnsi(writeSpy.mock.calls.map((c) => String(c[0])).join(""));
+      expect(output).toContain("all matches");
+      expect(output).toContain("Esc clear");
+
+      emitKey(KEY_ENTER); // confirm
+      await promise;
+    });
   });
 });

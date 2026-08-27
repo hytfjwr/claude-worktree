@@ -33,4 +33,5 @@ export const icons = {
 
   scrollUp: icon("\u2191", "^"),
   scrollDown: icon("\u2193", "v"),
+  caret: icon("\u258c", "_"),
 };

@@ -13,3 +13,13 @@ export type Viewport = {
   hiddenAbove: number;
   hiddenBelow: number;
 };
+
+/**
+ * One item that survived the filter. `labelMatches` holds the code point
+ * indices matched inside the label, and is empty when the query only matched
+ * the description or the hint.
+ */
+export type FilterMatch = {
+  index: number;
+  labelMatches: number[];
+};

@@ -40,7 +40,7 @@ export type { BooleanOptionDef, ExtractResult, OptionDef, OptionSchema, StringOp
 export type { ConfirmOptions } from "./prompt.ts";
 export type { ResumeDeps } from "./resume.ts";
 export type { RollbackOptions } from "./rollback.ts";
-export type { SelectItem, Viewport } from "./select.ts";
+export type { FilterMatch, SelectItem, Viewport } from "./select.ts";
 export type { AllPanes, SessionInfo, SessionMode, SessionState } from "./session.ts";
 export type { SpawnInteractiveOptions } from "./spawn.ts";
 export type { ColorTheme, Spinner } from "./spinner.ts";
