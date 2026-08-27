@@ -5,7 +5,7 @@ import { getGitContext, listWorktrees } from "../core/git.ts";
 import { completeSession, determineSessionStatus, readSession, saveSession } from "../core/session.ts";
 import { spawnInteractive } from "../core/spawn.ts";
 import { findClosestMatch } from "../core/suggest.ts";
-import { buildResumeCommand } from "../external/claude.ts";
+import { buildResumeCommand, shellEscape } from "../external/claude.ts";
 import { ensurePaneBackendAvailable } from "../external/terminal-backend.ts";
 import { getSessionForPane, isRunningInsideTmux, listTmuxPanes } from "../external/tmux.ts";
 import { listWeztermPanes } from "../external/wezterm.ts";
@@ -38,6 +38,17 @@ const defaultDeps: ResumeDeps = {
 // =============================================================================
 
 /**
+ * Build the shell line typed into a new pane.
+ *
+ * The worktree path is shell-escaped rather than interpolated: git allows `"`, `$`,
+ * `` ` ``, `;` and `'` in branch names and `getWorktreePath` passes them through, so a
+ * raw interpolation would let a branch name inject extra commands into the pane's shell.
+ */
+export function buildPaneResumeCommand(worktreePath: string, claudeCommand: string): string {
+  return `cd ${shellEscape(worktreePath)} && ${claudeCommand}`;
+}
+
+/**
  * Launch Claude Code --continue in a new pane (WezTerm or tmux).
  */
 async function launchResumeInPane(
@@ -51,7 +62,7 @@ async function launchResumeInPane(
     paneIdStr = await backend.createPane({ keepFocus: true });
     logInfo(`${icons.window()} Created pane: ${paneIdStr}`);
 
-    await backend.sendCommand(paneIdStr, `cd "${worktree.path}" && ${claudeCommand}`);
+    await backend.sendCommand(paneIdStr, buildPaneResumeCommand(worktree.path, claudeCommand));
 
     const paneId = backend.name === "wezterm" ? Number.parseInt(paneIdStr, 10) : paneIdStr;
     await deps.saveSession(worktree.path, {
