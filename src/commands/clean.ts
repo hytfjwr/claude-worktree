@@ -356,6 +356,24 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
     toDelete = autoCleanable;
   }
 
+  // -force means "skip the confirmation prompt", not "destroy unsaved work". Drop
+  // targets with uncommitted changes or unpushed commits unless -discard-unsaved
+  // explicitly opts in. Interactive runs are unaffected: the confirmation prompt
+  // already spells the risk out before anything is deleted.
+  if (args.force && !args.discardUnsaved) {
+    const risky = toDelete.filter((s) => isRisky(s, unpushedMap));
+    if (risky.length > 0) {
+      toDelete = toDelete.filter((s) => !isRisky(s, unpushedMap));
+      logInfo("");
+      for (const status of risky) {
+        const label = status.worktree.branch || status.worktree.path;
+        logWarn(`${icons.warning()} Skipping ${label}: it has uncommitted changes or unpushed commits.`);
+        result.skipped.push(status.worktree.path);
+      }
+      logWarn("  Add -discard-unsaved to delete them anyway, or run without -force to confirm interactively.");
+    }
+  }
+
   if (toDelete.length === 0) {
     logInfo("\nNo targets to delete.");
     return result;
