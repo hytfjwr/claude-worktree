@@ -6,6 +6,7 @@ import type { Spinner } from "./spinner.ts";
 
 export type CleanArgs = {
   force: boolean;
+  discardUnsaved: boolean;
   all: boolean;
   dryRun: boolean;
   verbose: boolean;
@@ -17,6 +18,8 @@ export type CleanResult = {
   deleted: string[];
   skipped: string[];
   errors: Array<{ path: string; error: string }>;
+  /** Worktrees whose directory was removed but whose local branch could not be deleted. */
+  branchDeletionFailures: Array<{ path: string; branch: string; error: string }>;
 };
 
 export type CleanDeps = {

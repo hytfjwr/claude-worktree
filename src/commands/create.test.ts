@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { afterAll, afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { makeWorktree } from "../__test-utils__.ts";
-import { DependencyError } from "../core/errors.ts";
+import { DependencyError, GitError } from "../core/errors.ts";
 import { spawnInteractive } from "../core/spawn.ts";
 import { getSessionForPane } from "../external/tmux.ts";
 import type { CreateArgs, CreateDeps, GitContext, ProjectConfig } from "../types/index.ts";
@@ -304,6 +304,8 @@ function makeDeps(overrides: Partial<CreateDeps> = {}): CreateDeps {
     createWorktree: vi.fn(async () => {}),
     removeWorktree: vi.fn(async () => {}),
     deleteLocalBranch: vi.fn(async () => {}),
+    getBranchCommitSha: vi.fn(async () => "abc1234"),
+    restoreLocalBranch: vi.fn(async () => {}),
     buildHookCommand: vi.fn((template: string, vars: { path: string; slot?: number }) =>
       template.replace("{path}", vars.path).replace("{slot}", String(vars.slot ?? "")),
     ),
@@ -737,6 +739,35 @@ describe("runCreate", () => {
 
       expect(deps.branchExists).not.toHaveBeenCalled();
     });
+
+    test("treats a missing branch as skippable and continues", async () => {
+      const deps = depsWithExisting({
+        deleteLocalBranch: vi.fn(async () => {
+          throw new GitError("Failed to delete branch feat/x: error: branch 'feat/x' not found");
+        }),
+      });
+      await runCreate(defaultPaneArgs, deps);
+
+      const logs = vi.mocked(console.log).mock.calls.map((c) => c[0]);
+      expect(logs).toContainEqual(expect.stringContaining("Branch not found (skipping)"));
+      expect(deps.createWorktree).toHaveBeenCalled();
+    });
+
+    test("reports a real branch deletion failure instead of calling it not found", async () => {
+      const deps = depsWithExisting({
+        deleteLocalBranch: vi.fn(async () => {
+          throw new GitError("Failed to delete branch feat/x: error: cannot lock ref 'refs/heads/feat/x'");
+        }),
+      });
+      await runCreate(defaultPaneArgs, deps);
+
+      const warnings = vi.mocked(console.warn).mock.calls.map((c) => c[0]);
+      expect(warnings.some((w) => String(w).includes("Failed to delete branch feat/x"))).toBe(true);
+      expect(warnings.some((w) => String(w).includes("cannot lock ref"))).toBe(true);
+
+      const logs = vi.mocked(console.log).mock.calls.map((c) => c[0]);
+      expect(logs.every((l) => !String(l).includes("Branch not found"))).toBe(true);
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -786,6 +817,106 @@ describe("runCreate", () => {
       // confirm should not be called for branch handling
       expect(deps.confirm).not.toHaveBeenCalled();
       expect(deps.createWorktree).toHaveBeenCalled();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // createWorktree failure after a destructive replacement
+  // ---------------------------------------------------------------------------
+
+  describe("createWorktree failure after replacement", () => {
+    const existingWorktree = makeWorktree({
+      path: "/repo/.worktrees/feat-x",
+      branch: "feat/x",
+    });
+
+    function depsFailingCreate(overrides: Partial<CreateDeps> = {}) {
+      return makeDeps({
+        createWorktree: vi.fn(async () => {
+          throw new Error("Failed to create worktree: No space left on device");
+        }),
+        ...overrides,
+      });
+    }
+
+    test("restores the deleted branch when the existing worktree was replaced", async () => {
+      const deps = depsFailingCreate({
+        listWorktrees: vi.fn(async () => ({
+          worktrees: [makeWorktree({ path: "/repo", branch: "main", isMain: true }), existingWorktree],
+          mainBranch: "main",
+        })),
+        getBranchCommitSha: vi.fn(async () => "deadbee"),
+      });
+
+      await expect(runCreate(defaultPaneArgs, deps)).rejects.toThrow(/No space left on device/);
+      expect(deps.restoreLocalBranch).toHaveBeenCalledWith("feat/x", "deadbee");
+    });
+
+    test("names the removed worktree and the worktree that was not created", async () => {
+      const deps = depsFailingCreate({
+        listWorktrees: vi.fn(async () => ({
+          worktrees: [makeWorktree({ path: "/repo", branch: "main", isMain: true }), existingWorktree],
+          mainBranch: "main",
+        })),
+        getBranchCommitSha: vi.fn(async () => "deadbee"),
+      });
+
+      const error = (await runCreate(defaultPaneArgs, deps).catch((e: unknown) => e)) as Error;
+
+      expect(error.message).toContain("No space left on device");
+      expect(error.message).toContain("The new worktree was NOT created: /repo/.worktrees/feat-x");
+      expect(error.message).toContain("Worktree removed: /repo/.worktrees/feat-x");
+      expect(error.message).toContain("uncommitted changes cannot be recovered");
+      expect(error.message).toContain("Branch deleted: feat/x — restored to deadbee");
+    });
+
+    test("restores the deleted branch when an existing branch was replaced", async () => {
+      const deps = depsFailingCreate({
+        branchExists: vi.fn(async () => true),
+        getBranchCommitSha: vi.fn(async () => "cafe123"),
+      });
+
+      const error = (await runCreate(defaultPaneArgs, deps).catch((e: unknown) => e)) as Error;
+
+      expect(deps.restoreLocalBranch).toHaveBeenCalledWith("feat/x", "cafe123");
+      expect(error.message).toContain("Branch deleted: feat/x — restored to cafe123");
+      expect(error.message).not.toContain("Worktree removed:");
+    });
+
+    test("reports a manual recovery command when the restore fails", async () => {
+      const deps = depsFailingCreate({
+        branchExists: vi.fn(async () => true),
+        getBranchCommitSha: vi.fn(async () => "cafe123"),
+        restoreLocalBranch: vi.fn(async () => {
+          throw new Error("ref lock failed");
+        }),
+      });
+
+      const error = (await runCreate(defaultPaneArgs, deps).catch((e: unknown) => e)) as Error;
+
+      expect(error.message).toContain("Restore failed: ref lock failed");
+      expect(error.message).toContain("git branch feat/x cafe123");
+    });
+
+    test("says the branch cannot be restored when its commit was not resolvable", async () => {
+      const deps = depsFailingCreate({
+        branchExists: vi.fn(async () => true),
+        getBranchCommitSha: vi.fn(async () => null),
+      });
+
+      const error = (await runCreate(defaultPaneArgs, deps).catch((e: unknown) => e)) as Error;
+
+      expect(deps.restoreLocalBranch).not.toHaveBeenCalled();
+      expect(error.message).toContain("cannot be restored");
+    });
+
+    test("rethrows the original error untouched when nothing was replaced", async () => {
+      const deps = depsFailingCreate();
+
+      const error = (await runCreate(defaultPaneArgs, deps).catch((e: unknown) => e)) as Error;
+
+      expect(error.message).toBe("Failed to create worktree: No space left on device");
+      expect(deps.restoreLocalBranch).not.toHaveBeenCalled();
     });
   });
 

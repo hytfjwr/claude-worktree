@@ -1721,6 +1721,91 @@ describe("deleteLocalBranch (integration)", () => {
   });
 });
 
+describe("getBranchCommitSha (integration)", () => {
+  let cleanup: () => Promise<void>;
+  let repoDir: string;
+  let originalCwd: string;
+  function git(args: string[]) {
+    return exec("git", args).cwd(repoDir);
+  }
+
+  beforeEach(async () => {
+    originalCwd = process.cwd();
+    const setup = await setupTestRepo();
+    cleanup = setup.cleanup;
+    repoDir = setup.repoDir;
+    process.chdir(repoDir);
+    vi.resetModules();
+    mockExecImpl.current = null;
+  });
+
+  afterEach(async () => {
+    process.chdir(originalCwd);
+    mockExecImpl.current = null;
+    await cleanup();
+  });
+
+  test("returns the commit sha for an existing branch", async () => {
+    await git(["branch", "feature/sha"]).quiet();
+    const expected = (await git(["rev-parse", "refs/heads/feature/sha"]).text()).trim();
+
+    const { getBranchCommitSha } = await import("./git.ts");
+    expect(await getBranchCommitSha("feature/sha")).toBe(expected);
+  });
+
+  test("returns null for a branch that does not exist", async () => {
+    const { getBranchCommitSha } = await import("./git.ts");
+    expect(await getBranchCommitSha("feature/nope")).toBeNull();
+  });
+});
+
+describe("restoreLocalBranch (integration)", () => {
+  let cleanup: () => Promise<void>;
+  let repoDir: string;
+  let originalCwd: string;
+  function git(args: string[]) {
+    return exec("git", args).cwd(repoDir);
+  }
+
+  beforeEach(async () => {
+    originalCwd = process.cwd();
+    const setup = await setupTestRepo();
+    cleanup = setup.cleanup;
+    repoDir = setup.repoDir;
+    process.chdir(repoDir);
+    vi.resetModules();
+    mockExecImpl.current = null;
+  });
+
+  afterEach(async () => {
+    process.chdir(originalCwd);
+    mockExecImpl.current = null;
+    await cleanup();
+  });
+
+  test("recreates a deleted branch at its previous commit", async () => {
+    await git(["checkout", "-b", "feature/restore"]).quiet();
+    await git(["commit", "--allow-empty", "-m", "work"]).quiet();
+    const sha = (await git(["rev-parse", "refs/heads/feature/restore"]).text()).trim();
+    await git(["checkout", "main"]).quiet();
+    await git(["branch", "-D", "feature/restore"]).quiet();
+
+    const { restoreLocalBranch } = await import("./git.ts");
+    await restoreLocalBranch("feature/restore", sha);
+
+    expect((await git(["rev-parse", "refs/heads/feature/restore"]).text()).trim()).toBe(sha);
+  });
+
+  test("throws when the commit does not exist", async () => {
+    // A well-formed but nonexistent SHA — unlike the all-zeros SHA (which git treats as a
+    // no-op deletion target rather than an error), this makes `update-ref` fail as intended.
+    const { restoreLocalBranch } = await import("./git.ts");
+    await expect(restoreLocalBranch("feature/bad", "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef")).rejects.toThrow(
+      "Failed to restore branch",
+    );
+  });
+});
+
 describe("fetchAndPrune (integration)", () => {
   let cleanup: () => Promise<void>;
   let repoDir: string;

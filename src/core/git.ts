@@ -357,6 +357,35 @@ export async function deleteLocalBranch(branchName: string, force = false): Prom
 }
 
 /**
+ * Resolve the commit SHA a local branch points at.
+ * Returns null when the branch does not exist or cannot be resolved.
+ */
+export async function getBranchCommitSha(branchName: string): Promise<string | null> {
+  const result = await exec("git", ["rev-parse", "--verify", "--quiet", `refs/heads/${branchName}`])
+    .nothrow()
+    .quiet();
+  if (result.exitCode !== 0) {
+    return null;
+  }
+  const sha = result.text().trim();
+  return sha || null;
+}
+
+/**
+ * Recreate a local branch ref at the given commit.
+ * Used to undo a branch deletion when the follow-up worktree creation fails.
+ */
+export async function restoreLocalBranch(branchName: string, commitSha: string): Promise<void> {
+  const result = await exec("git", ["update-ref", `refs/heads/${branchName}`, commitSha])
+    .nothrow()
+    .quiet();
+  if (result.exitCode !== 0) {
+    const stderr = result.stderr.toString().trim();
+    throw new GitError(`Failed to restore branch ${branchName}: ${stderr}`);
+  }
+}
+
+/**
  * Pure function to parse `git log -1 --format=%H%x00%s%x00%aI` output.
  */
 export function parseCommitLog(output: string): CommitInfo | null {

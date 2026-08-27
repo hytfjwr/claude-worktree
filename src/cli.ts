@@ -4,7 +4,7 @@ import { executeList } from "./commands/list.ts";
 import { runResume } from "./commands/resume.ts";
 import { executeRunInPane, parseRunInPaneArgs } from "./commands/run-in-pane.ts";
 import { UsageError } from "./core/errors.ts";
-import { findClosestMatch } from "./core/suggest.ts";
+import { findClosestCommand } from "./core/suggest.ts";
 import { extractOptions } from "./options.ts";
 import type { CleanArgs, Command, CreateArgs, ListArgs, ResumeArgs } from "./types/index.ts";
 import { createQuietLogger, logInfo, setLogger } from "./ui/logger.ts";
@@ -44,7 +44,7 @@ Options:
   -n, -dry-run    Preview what would be created without executing
   -q, -quiet      Suppress informational output (errors only)
   -v, -verbose    Show hook execution logs
-  -h, -help       Show this help
+  -h, -help, --help    Show this help
   -version, --version  Show version number
 
 Resume options:
@@ -62,12 +62,15 @@ List options:
   -v, -verbose     Show full paths and details
 
 Clean options:
-  <branch-name>  Specific branch(es) to clean (can specify multiple)
-  -f, -force     Skip confirmation prompt
-  -a, -all       Show all worktrees for manual selection
-  -n, -dry-run   Preview targets without deleting
-  -q, -quiet     Suppress informational output (errors only)
-  -v, -verbose   Show hook execution logs
+  <branch-name>     Specific branch(es) to clean (can specify multiple)
+  -f, -force        Skip confirmation prompt (worktrees with uncommitted changes
+                    or unpushed commits are skipped unless -discard-unsaved is given)
+  -discard-unsaved  Let -force delete worktrees with uncommitted changes or
+                    unpushed commits (destructive)
+  -a, -all          Show all worktrees for manual selection
+  -n, -dry-run      Preview targets without deleting
+  -q, -quiet        Suppress informational output (errors only)
+  -v, -verbose      Show hook execution logs
 
 Examples:
   claude-worktree feature/auth 'Implement authentication feature'
@@ -89,6 +92,7 @@ Examples:
   claude-worktree clean
   claude-worktree clean feature/auth
   claude-worktree clean feature/auth fix/bug-123
+  claude-worktree clean feature/auth -force -discard-unsaved
   claude-worktree clean -dry-run`);
 }
 
@@ -119,7 +123,7 @@ Options:
   -n, -dry-run         Preview what would be created without executing
   -q, -quiet           Suppress informational output (errors only)
   -v, -verbose         Show hook execution logs
-  -h, -help            Show this help
+  -h, -help, --help    Show this help
 
 Examples:
   claude-worktree feature/auth 'Implement authentication feature'
@@ -147,7 +151,7 @@ Options:
   -fetch           Fetch from remote before listing (default: local only)
   -q, -quiet       Suppress informational output (errors only)
   -v, -verbose     Show full paths and details
-  -h, -help        Show this help
+  -h, -help, --help  Show this help
 
 Examples:
   claude-worktree list
@@ -171,18 +175,22 @@ Arguments:
   <branch-name>  Specific branch(es) to clean (can specify multiple)
 
 Options:
-  -f, -force     Skip confirmation prompt
-  -a, -all       Show all worktrees for manual selection
-  -n, -dry-run   Preview targets without deleting
-  -q, -quiet     Suppress informational output (errors only)
-  -v, -verbose   Show hook execution logs
-  -h, -help      Show this help
+  -f, -force        Skip confirmation prompt (worktrees with uncommitted changes
+                    or unpushed commits are skipped unless -discard-unsaved is given)
+  -discard-unsaved  Let -force delete worktrees with uncommitted changes or
+                    unpushed commits (destructive)
+  -a, -all          Show all worktrees for manual selection
+  -n, -dry-run      Preview targets without deleting
+  -q, -quiet        Suppress informational output (errors only)
+  -v, -verbose      Show hook execution logs
+  -h, -help, --help Show this help
 
 Examples:
   claude-worktree clean
   claude-worktree clean feature/auth
   claude-worktree clean feature/auth fix/bug-123
   claude-worktree clean feature/auth -force
+  claude-worktree clean feature/auth -force -discard-unsaved
   claude-worktree clean -dry-run
   claude-worktree clean -all`);
 }
@@ -206,7 +214,7 @@ Options:
   -model <name>  Language model to use (passed to claude --model)
   -q, -quiet     Suppress informational output (errors only)
   -v, -verbose   Show verbose output
-  -h, -help      Show this help
+  -h, -help, --help  Show this help
 
 Examples:
   claude-worktree resume feature/auth
@@ -312,7 +320,7 @@ export function parseCreateArgs(args: string[]): CreateArgs {
       model: { type: "string", flag: "-model", errorMessage: "-model requires a model name argument" },
     },
     unknownHandling: "error",
-    ignoredFlags: ["-h", "-help"],
+    ignoredFlags: ["-h", "-help", "--help"],
     unknownErrorPrefix: "Unknown option",
   });
 
@@ -376,7 +384,7 @@ export function parseResumeArgs(args: string[]): ResumeArgs {
       model: { type: "string", flag: "-model", errorMessage: "-model requires a model name argument" },
     },
     unknownHandling: "error",
-    ignoredFlags: ["-h", "-help"],
+    ignoredFlags: ["-h", "-help", "--help"],
     unknownErrorPrefix: "Unknown option for resume command",
   });
 
@@ -405,13 +413,14 @@ export function parseCleanArgs(args: string[]): CleanArgs {
   const { booleans, remaining } = extractOptions(args, {
     options: {
       force: { type: "boolean", flag: "-force", alias: "-f" },
+      discardUnsaved: { type: "boolean", flag: "-discard-unsaved" },
       all: { type: "boolean", flag: "-all", alias: "-a" },
       dryRun: { type: "boolean", flag: "-dry-run", alias: "-n" },
       quiet: { type: "boolean", flag: "-quiet", alias: "-q" },
       verbose: { type: "boolean", flag: "-verbose", alias: "-v" },
     },
     unknownHandling: "error",
-    ignoredFlags: ["-h", "-help"],
+    ignoredFlags: ["-h", "-help", "--help"],
     unknownErrorPrefix: "Unknown option for clean command",
   });
 
@@ -423,6 +432,7 @@ export function parseCleanArgs(args: string[]): CleanArgs {
 
   return {
     force: booleans.force,
+    discardUnsaved: booleans.discardUnsaved,
     all: booleans.all,
     dryRun: booleans.dryRun,
     quiet: booleans.quiet,
@@ -432,7 +442,7 @@ export function parseCleanArgs(args: string[]): CleanArgs {
 }
 
 export function parseListArgs(args: string[]): ListArgs {
-  const { booleans } = extractOptions(args, {
+  const { booleans, remaining } = extractOptions(args, {
     options: {
       json: { type: "boolean", flag: "-json", alias: "-j" },
       noStatus: { type: "boolean", flag: "-no-status" },
@@ -441,9 +451,22 @@ export function parseListArgs(args: string[]): ListArgs {
       verbose: { type: "boolean", flag: "-verbose", alias: "-v" },
     },
     unknownHandling: "error",
-    ignoredFlags: ["-h", "-help"],
+    ignoredFlags: ["-h", "-help", "--help"],
     unknownErrorPrefix: "Unknown option for list command",
   });
+
+  // "list" is a reserved sub-command name, so a stray positional is most likely a
+  // create command whose branch name collided with it — say so instead of ignoring it.
+  if (remaining.length > 0) {
+    const label = remaining.length === 1 ? "argument" : "arguments";
+    const quoted = remaining.map((arg) => `"${arg}"`).join(", ");
+    throw new UsageError(
+      `Unexpected ${label} for list command: ${quoted}\n\n` +
+        "The list command takes no positional arguments.\n\n" +
+        "Usage:\n  claude-worktree list [options]\n\n" +
+        'Note: "list" is a reserved sub-command name and cannot be used as a branch name.',
+    );
+  }
 
   return {
     json: booleans.json,
@@ -464,15 +487,22 @@ const TOP_LEVEL_CANDIDATES = [...KNOWN_COMMANDS, "-help", "-version"];
  * mistyped command or global flag. Returns an empty string when nothing is close.
  */
 function topLevelHint(name: string): string {
-  const match = findClosestMatch(name, TOP_LEVEL_CANDIDATES);
+  const match = findClosestCommand(name, TOP_LEVEL_CANDIDATES);
   if (!match) {
     return "";
   }
   return match.startsWith("-") ? `\n\nDid you mean "${match}"?` : `\n\nDid you mean the "${match}" command?`;
 }
 
+/**
+ * Help flags accepted everywhere `-help` is accepted. `--help` is one of the two
+ * conventional double-dash exceptions (the other, `--version`, is handled in
+ * parseArgs); other options keep their single-dash-only spelling.
+ */
+const HELP_FLAGS = new Set(["-h", "-help", "--help"]);
+
 function hasHelpFlag(subArgs: string[]): boolean {
-  return subArgs.includes("-h") || subArgs.includes("-help");
+  return subArgs.some((arg) => HELP_FLAGS.has(arg));
 }
 
 function parseSubCommand(commandName: string, subArgs: string[]): Command | null {

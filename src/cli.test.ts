@@ -37,7 +37,15 @@ describe("parseArgs", () => {
       const result = parseArgs(["clean"]);
       expect(result).toEqual({
         type: "clean",
-        args: { force: false, all: false, dryRun: false, quiet: false, verbose: false, branches: [] },
+        args: {
+          force: false,
+          discardUnsaved: false,
+          all: false,
+          dryRun: false,
+          quiet: false,
+          verbose: false,
+          branches: [],
+        },
       });
     });
   });
@@ -81,6 +89,10 @@ describe("parseArgs", () => {
         type: "list",
         args: { json: true, quiet: false, verbose: true, noStatus: false, fetch: false },
       });
+    });
+
+    test("list with a positional argument throws", () => {
+      expect(() => parseArgs(["list", "some prompt"])).toThrow("Unexpected argument for list command");
     });
   });
 
@@ -176,9 +188,10 @@ describe("parseArgs", () => {
   describe("command typo hint", () => {
     test.each([
       ["lst", "list"],
-      ["lists", "list"],
       ["clen", "clean"],
+      ["claen", "clean"],
       ["resum", "resume"],
+      ["resmue", "resume"],
     ])('"%s" suggests the "%s" command', (input, expected) => {
       expect(() => parseArgs([input])).toThrow(`Did you mean the "${expected}" command?`);
     });
@@ -206,6 +219,16 @@ describe("parseArgs", () => {
     test("no hint for a plain branch name", () => {
       expect(() => parseArgs(["feature/test"])).toThrow('Missing prompt for branch "feature/test"');
       expect(() => parseArgs(["feature/test"])).not.toThrow("Did you mean");
+    });
+
+    test.each([
+      "test",
+      "cleanup",
+      "resumed",
+      "lists",
+    ])('plausible branch name "%s" gets no command suggestion', (input) => {
+      expect(() => parseArgs([input])).toThrow(`Missing prompt for branch "${input}"`);
+      expect(() => parseArgs([input])).not.toThrow("Did you mean");
     });
   });
 });
@@ -592,12 +615,40 @@ describe("parseCreateArgs", () => {
       'Unknown option: "-mode" (did you mean "-model"?)',
     );
   });
+
+  test("-plan swallowing the next flag throws", () => {
+    expect(() => parseCreateArgs(["foo", "-plan", "-pull"])).toThrow("-plan requires a file path argument");
+  });
+
+  test("-model swallowing the next flag throws", () => {
+    expect(() => parseCreateArgs(["foo", "p", "-model", "-danger"])).toThrow("-model requires a model name argument");
+  });
+
+  test("-base swallowing the next flag throws", () => {
+    expect(() => parseCreateArgs(["foo", "p", "-base", "-pull"])).toThrow("-base requires a branch name argument");
+  });
+
+  test("-base given twice throws instead of taking the last value", () => {
+    expect(() => parseCreateArgs(["foo", "p", "-base", "a", "-base", "b"])).toThrow("Duplicate option: -base");
+  });
+
+  test("-b and -base are the same option for duplicate detection", () => {
+    expect(() => parseCreateArgs(["foo", "p", "-b", "a", "-base", "b"])).toThrow("Duplicate option: -base");
+  });
 });
 
 describe("parseCleanArgs", () => {
   test("no options", () => {
     const result = parseCleanArgs([]);
-    expect(result).toEqual({ force: false, all: false, dryRun: false, quiet: false, verbose: false, branches: [] });
+    expect(result).toEqual({
+      force: false,
+      discardUnsaved: false,
+      all: false,
+      dryRun: false,
+      quiet: false,
+      verbose: false,
+      branches: [],
+    });
   });
 
   test("-force flag", () => {
@@ -632,17 +683,41 @@ describe("parseCleanArgs", () => {
 
   test("combined flags -force -all -dry-run -verbose", () => {
     const result = parseCleanArgs(["-force", "-all", "-dry-run", "-verbose"]);
-    expect(result).toEqual({ force: true, all: true, dryRun: true, quiet: false, verbose: true, branches: [] });
+    expect(result).toEqual({
+      force: true,
+      discardUnsaved: false,
+      all: true,
+      dryRun: true,
+      quiet: false,
+      verbose: true,
+      branches: [],
+    });
   });
 
   test("combined short flags -f -a -n -v", () => {
     const result = parseCleanArgs(["-f", "-a", "-n", "-v"]);
-    expect(result).toEqual({ force: true, all: true, dryRun: true, quiet: false, verbose: true, branches: [] });
+    expect(result).toEqual({
+      force: true,
+      discardUnsaved: false,
+      all: true,
+      dryRun: true,
+      quiet: false,
+      verbose: true,
+      branches: [],
+    });
   });
 
   test("-h/-help is ignored (does not throw)", () => {
     const result = parseCleanArgs(["-h"]);
-    expect(result).toEqual({ force: false, all: false, dryRun: false, quiet: false, verbose: false, branches: [] });
+    expect(result).toEqual({
+      force: false,
+      discardUnsaved: false,
+      all: false,
+      dryRun: false,
+      quiet: false,
+      verbose: false,
+      branches: [],
+    });
   });
 
   test("-verbose flag", () => {
@@ -679,6 +754,7 @@ describe("parseCleanArgs", () => {
     const result = parseCleanArgs(["feature/auth"]);
     expect(result).toEqual({
       force: false,
+      discardUnsaved: false,
       all: false,
       dryRun: false,
       quiet: false,
@@ -706,6 +782,23 @@ describe("parseCleanArgs", () => {
 
   test("branch names + -all throws", () => {
     expect(() => parseCleanArgs(["feature/auth", "-all"])).toThrow("Cannot use both branch names and -all option");
+  });
+
+  test("parses -discard-unsaved", () => {
+    const result = parseCleanArgs(["-discard-unsaved"]);
+    expect(result.discardUnsaved).toBe(true);
+  });
+
+  test("defaults discardUnsaved to false", () => {
+    const result = parseCleanArgs([]);
+    expect(result.discardUnsaved).toBe(false);
+  });
+
+  test("parses -force with -discard-unsaved", () => {
+    const result = parseCleanArgs(["feature/auth", "-force", "-discard-unsaved"]);
+    expect(result.force).toBe(true);
+    expect(result.discardUnsaved).toBe(true);
+    expect(result.branches).toEqual(["feature/auth"]);
   });
 });
 
@@ -791,6 +884,22 @@ describe("parseListArgs", () => {
     expect(() => parseListArgs(["--json"])).toThrow(
       'Unknown option for list command: "--json" (did you mean "-json"?)',
     );
+  });
+
+  test("unexpected positional argument throws", () => {
+    expect(() => parseListArgs(["some prompt"])).toThrow('Unexpected argument for list command: "some prompt"');
+  });
+
+  test("unexpected positional argument mentions the reserved name", () => {
+    expect(() => parseListArgs(["foo"])).toThrow("reserved sub-command name");
+  });
+
+  test("multiple unexpected positional arguments are all reported", () => {
+    expect(() => parseListArgs(["foo", "bar"])).toThrow('Unexpected arguments for list command: "foo", "bar"');
+  });
+
+  test("options mixed with a positional still throw", () => {
+    expect(() => parseListArgs(["-json", "foo"])).toThrow("Unexpected argument for list command");
   });
 });
 
@@ -976,6 +1085,42 @@ describe("parseArgs - per-command help", () => {
   test("resume -help returns resume help", () => {
     const result = parseArgs(["resume", "-help"]);
     expect(result).toEqual({ type: "help", commandHelp: "resume" });
+  });
+
+  test("--help returns global help", () => {
+    expect(parseArgs(["--help"])).toEqual({ type: "help" });
+  });
+
+  test("list --help returns list help", () => {
+    expect(parseArgs(["list", "--help"])).toEqual({ type: "help", commandHelp: "list" });
+  });
+
+  test("clean --help returns clean help", () => {
+    expect(parseArgs(["clean", "--help"])).toEqual({ type: "help", commandHelp: "clean" });
+  });
+
+  test("resume --help returns resume help", () => {
+    expect(parseArgs(["resume", "--help"])).toEqual({ type: "help", commandHelp: "resume" });
+  });
+
+  test("branch --help returns create help", () => {
+    expect(parseArgs(["feature/test", "--help"])).toEqual({ type: "help", commandHelp: "create" });
+  });
+
+  test("--help is accepted by the per-command parsers too", () => {
+    expect(parseListArgs(["--help"])).toEqual({
+      json: false,
+      quiet: false,
+      verbose: false,
+      noStatus: false,
+      fetch: false,
+    });
+    expect(parseCleanArgs(["--help"]).branches).toEqual([]);
+  });
+
+  test("other double-dash flags still error", () => {
+    expect(() => parseListArgs(["--json"])).toThrow("Unknown option for list command");
+    expect(() => parseCreateArgs(["feature/test", "prompt", "--pane"])).toThrow("Unknown option");
   });
 });
 

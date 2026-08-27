@@ -1,4 +1,5 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
@@ -8,7 +9,7 @@ import { DependencyError } from "../core/errors.ts";
 import { determineSessionStatus } from "../core/session.ts";
 import { spawnInteractive } from "../core/spawn.ts";
 import type { ResumeDeps, SessionInfo, WorktreeInfo } from "../types/index.ts";
-import { runResume } from "./resume.ts";
+import { buildPaneResumeCommand, runResume } from "./resume.ts";
 
 // Mock spawnInteractive to avoid spawning real processes in terminal mode
 vi.mock("../core/spawn.ts", () => ({
@@ -179,6 +180,33 @@ describe("runResume", () => {
 
       exitSpy.mockRestore();
       onSpy.mockRestore();
+    });
+
+    test("reports a completeSession failure instead of swallowing it", async () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const deps = makeDeps({
+        completeSession: vi.fn(async () => {
+          throw new Error("cache write failed");
+        }),
+      });
+
+      await runResume({ branchName: "feature/test" }, deps);
+
+      const warned = warnSpy.mock.calls.flat().join("\n");
+      expect(warned).toContain("Failed to mark the session as completed");
+      expect(warned).toContain("cache write failed");
+      warnSpy.mockRestore();
+    });
+
+    test("a completeSession failure does not fail the resume", async () => {
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      const deps = makeDeps({
+        completeSession: vi.fn(async () => {
+          throw new Error("cache write failed");
+        }),
+      });
+
+      await expect(runResume({ branchName: "feature/test" }, deps)).resolves.toBeUndefined();
     });
   });
 
@@ -381,6 +409,54 @@ describe("runResume", () => {
       expect(deps.listTmuxPanes).toHaveBeenCalled();
       expect(deps.listWeztermPanes).not.toHaveBeenCalled();
     });
+
+    test("confirms before resuming when the pane list is unavailable", async () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const deps = makeDeps({
+        readSession: vi.fn(async () => runningSession),
+        listWeztermPanes: vi.fn(async () => null),
+        confirm: vi.fn(async () => false),
+      });
+
+      await runResume({ branchName: "feature/test", pane: true }, deps);
+
+      expect(deps.confirm).toHaveBeenCalledWith("Continue anyway?");
+      expect(deps.saveSession).not.toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+
+    test("proceeds when the user confirms despite an unknown session status", async () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const deps = makeDeps({
+        readSession: vi.fn(async () => runningSession),
+        listWeztermPanes: vi.fn(async () => null),
+        confirm: vi.fn(async () => true),
+      });
+
+      await runResume({ branchName: "feature/test", pane: true }, deps);
+
+      expect(deps.saveSession).toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+
+    test("reports why the pane list could not be read", async () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const deps = makeDeps({
+        readSession: vi.fn(async () => runningSession),
+        listWeztermPanes: vi.fn(async () => {
+          throw new Error("wezterm cli exploded");
+        }),
+        confirm: vi.fn(async () => false),
+      });
+
+      await runResume({ branchName: "feature/test", pane: true }, deps);
+
+      const warned = warnSpy.mock.calls.flat().join("\n");
+      expect(warned).toContain("Could not determine whether a Claude session is still running");
+      expect(warned).toContain("wezterm cli exploded");
+      expect(deps.confirm).toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
   });
 
   describe("pane mode", () => {
@@ -419,5 +495,62 @@ describe("runResume", () => {
       await runResume({}, deps);
       expect(deps.ensurePaneBackend).not.toHaveBeenCalled();
     });
+
+    test("shell-escapes the worktree path sent to the pane", async () => {
+      const hostileDir = join(tempDir, 'pane"$x;`y`');
+      await mkdir(hostileDir, { recursive: true });
+
+      const sendCommand = vi.fn(async (_paneId: string, _command: string) => {});
+      const deps = makeDeps({
+        ensurePaneBackend: vi.fn(async () => ({
+          name: "wezterm" as const,
+          createPane: vi.fn(async () => "42"),
+          sendCommand,
+          closePane: vi.fn(async () => {}),
+        })),
+        listWorktrees: async () => ({
+          worktrees: [
+            makeWorktree({ path: "/repo", branch: "main", isMain: true }),
+            makeWorktree({ path: hostileDir, branch: "feature/hostile" }),
+          ],
+          mainBranch: "main",
+        }),
+      });
+
+      await runResume({ branchName: "feature/hostile", pane: true }, deps);
+
+      const sentCommand = sendCommand.mock.calls[0][1] as string;
+      expect(sentCommand).toBe(`cd '${hostileDir}' && claude --continue`);
+      expect(sentCommand.startsWith('cd "')).toBe(false);
+    });
+  });
+});
+
+// ============================================================================
+// buildPaneResumeCommand (shell injection regression)
+// ============================================================================
+
+describe("buildPaneResumeCommand", () => {
+  // A branch name may legally contain these characters, and getWorktreePath passes
+  // them straight through into the worktree path.
+  const hostilePath = "/w/a\"b$c;d'e`f";
+
+  test("wraps the worktree path in single quotes and escapes embedded quotes", () => {
+    expect(buildPaneResumeCommand(hostilePath, "claude --continue")).toBe(
+      "cd '/w/a\"b$c;d'\\''e`f' && claude --continue",
+    );
+  });
+
+  test("the shell reads the hostile path as a single cd argument", async () => {
+    const dirName = "a\"b$c;d'e`f";
+    const hostileDir = join(tempDir, dirName);
+    await mkdir(hostileDir, { recursive: true });
+
+    // `pwd` stands in for the claude command: if the path escaped its quoting, the
+    // shell would run something else or fail instead of printing the directory.
+    const command = buildPaneResumeCommand(hostileDir, "pwd");
+    const output = execFileSync("sh", ["-c", command], { encoding: "utf-8" }).trim();
+
+    expect(output).toBe(hostileDir);
   });
 });
