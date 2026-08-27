@@ -30,4 +30,8 @@ export const icons = {
   cursor: icon("\u276f", ">"),
   checked: icon("\u25fc", "[x]"),
   unchecked: icon("\u25fb", "[ ]"),
+
+  scrollUp: icon("\u2191", "^"),
+  scrollDown: icon("\u2193", "v"),
+  caret: icon("\u258c", "_"),
 };

@@ -34,13 +34,14 @@ export type {
 } from "./git.ts";
 export type { PullRequestInfo } from "./github.ts";
 export type { HelpEntry, HelpSection, HelpSectionKind, HelpSpec } from "./help.ts";
+export type { ControlKey, InputAction, MouseButton, MouseInput, ParseInputResult } from "./input-parser.ts";
 export type { ListArgs, ListDeps, ListResult, ListWatchIo, WorktreeListEntry } from "./list.ts";
 export type { Logger } from "./logger.ts";
 export type { BooleanOptionDef, ExtractResult, OptionDef, OptionSchema, StringOptionDef } from "./options.ts";
 export type { ConfirmOptions } from "./prompt.ts";
 export type { ResumeDeps } from "./resume.ts";
 export type { RollbackOptions } from "./rollback.ts";
-export type { SelectItem } from "./select.ts";
+export type { ClickTarget, FilterMatch, FrameLayout, SelectItem, Viewport } from "./select.ts";
 export type { AllPanes, SessionInfo, SessionMode, SessionState } from "./session.ts";
 export type { SpawnInteractiveOptions } from "./spawn.ts";
 export type { ColorTheme, Spinner } from "./spinner.ts";

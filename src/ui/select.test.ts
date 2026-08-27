@@ -1,8 +1,18 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { saveEnv } from "../__test-utils__.ts";
-import { _resetColorCache } from "./color.ts";
-import { selectMany, selectSingle } from "./select.ts";
+import { stringWidth, stripAnsi } from "../core/width.ts";
+import { _resetColorCache, styles } from "./color.ts";
+import {
+  computeViewport,
+  computeViewportHeight,
+  filterItems,
+  fuzzyMatch,
+  locateClick,
+  scrollViewport,
+  selectMany,
+  selectSingle,
+} from "./select.ts";
 
 // Mock readline for non-TTY fallback tests.
 // TTY tests bypass this because they enter the raw-mode path.
@@ -28,13 +38,17 @@ type StdinMock = {
 
 /**
  * withTTYStdin sets up stdin/stdout as TTY, captures the "data" handler,
- * and returns an emitKey helper to simulate key presses.
+ * and returns an emitKey helper to simulate key presses. `dims` overrides
+ * process.stdout.rows/columns for the duration of the callback (defaults to
+ * 24x100 so tests are not sensitive to the real terminal size).
  */
-function withTTYStdin<T>(fn: (emitKey: (bytes: number[]) => void) => T): T {
+function withTTYStdin<T>(fn: (emitKey: (bytes: number[]) => void) => T, dims?: { rows?: number; columns?: number }): T {
   const stdin = process.stdin as typeof process.stdin & StdinMock;
   const saved = {
     stdinIsTTY: Object.getOwnPropertyDescriptor(process.stdin, "isTTY"),
     stdoutIsTTY: Object.getOwnPropertyDescriptor(process.stdout, "isTTY"),
+    stdoutRows: Object.getOwnPropertyDescriptor(process.stdout, "rows"),
+    stdoutColumns: Object.getOwnPropertyDescriptor(process.stdout, "columns"),
     setRawMode: stdin.setRawMode,
     resume: stdin.resume,
     pause: stdin.pause,
@@ -46,6 +60,12 @@ function withTTYStdin<T>(fn: (emitKey: (bytes: number[]) => void) => T): T {
 
   Object.defineProperty(process.stdin, "isTTY", { value: true, configurable: true, writable: true });
   Object.defineProperty(process.stdout, "isTTY", { value: true, configurable: true, writable: true });
+  Object.defineProperty(process.stdout, "rows", { value: dims?.rows ?? 24, configurable: true, writable: true });
+  Object.defineProperty(process.stdout, "columns", {
+    value: dims?.columns ?? 100,
+    configurable: true,
+    writable: true,
+  });
   stdin.setRawMode = () => process.stdin;
   stdin.resume = () => process.stdin;
   stdin.pause = () => process.stdin;
@@ -65,6 +85,16 @@ function withTTYStdin<T>(fn: (emitKey: (bytes: number[]) => void) => T): T {
       Object.defineProperty(process.stdout, "isTTY", saved.stdoutIsTTY);
     } else {
       delete (process.stdout as unknown as Record<string, unknown>).isTTY;
+    }
+    if (saved.stdoutRows) {
+      Object.defineProperty(process.stdout, "rows", saved.stdoutRows);
+    } else {
+      delete (process.stdout as unknown as Record<string, unknown>).rows;
+    }
+    if (saved.stdoutColumns) {
+      Object.defineProperty(process.stdout, "columns", saved.stdoutColumns);
+    } else {
+      delete (process.stdout as unknown as Record<string, unknown>).columns;
     }
     stdin.setRawMode = saved.setRawMode;
     stdin.resume = saved.resume;
@@ -121,6 +151,22 @@ const KEY_ESC = [0x1b];
 const KEY_J = [0x6a];
 const KEY_K = [0x6b];
 const KEY_A = [0x61];
+const KEY_PAGE_DOWN = [0x1b, 0x5b, 0x36, 0x7e];
+const KEY_PAGE_UP = [0x1b, 0x5b, 0x35, 0x7e];
+const KEY_HOME_CSI = [0x1b, 0x5b, 0x48];
+const KEY_END_CSI = [0x1b, 0x5b, 0x46];
+const KEY_G_LOWER = [0x67];
+const KEY_G_UPPER = [0x47];
+const KEY_CTRL_P = [0x10];
+const KEY_CTRL_N = [0x0e];
+const KEY_SLASH = [0x2f];
+const KEY_BACKSPACE = [0x7f];
+const KEY_CTRL_U = [0x15];
+
+/** Emits one key event per byte of `text`, simulating a paste-free keystroke sequence. */
+function typeText(emitKey: (bytes: number[]) => void, text: string) {
+  for (const byte of Buffer.from(text, "utf8")) emitKey([byte]);
+}
 
 const sampleItems = [
   { value: "a", label: "Alpha", description: "/path/alpha" },
@@ -135,7 +181,8 @@ const sampleItems = [
 let restoreEnv: () => void;
 
 beforeEach(() => {
-  restoreEnv = saveEnv("NO_COLOR");
+  restoreEnv = saveEnv("NO_COLOR", "CLAUDE_WORKTREE_NO_MOUSE");
+  delete process.env.CLAUDE_WORKTREE_NO_MOUSE;
   _resetColorCache();
 });
 
@@ -529,5 +576,913 @@ describe("non-TTY fallback", () => {
       return selectMany({ message: "Pick:", items });
     });
     expect(result).toEqual([]);
+  });
+});
+
+// =============================================================================
+// Viewport helpers
+// =============================================================================
+
+function manyItems(count: number) {
+  return Array.from({ length: count }, (_, i) => ({
+    value: `v${i + 1}`,
+    label: `Item ${String(i + 1).padStart(2, "0")}`,
+    description: `/path/item-${i + 1}`,
+  }));
+}
+
+describe("computeViewportHeight", () => {
+  test("subtracts chrome lines from the terminal height", () => {
+    expect(computeViewportHeight(24)).toBe(18);
+  });
+
+  test("falls back to 24 rows when rows is undefined", () => {
+    expect(computeViewportHeight(undefined)).toBe(18);
+  });
+
+  test("falls back to 24 rows when rows is 0", () => {
+    expect(computeViewportHeight(0)).toBe(18);
+  });
+
+  test("never returns less than MIN_VIEWPORT_HEIGHT", () => {
+    expect(computeViewportHeight(8)).toBe(3);
+  });
+
+  test("subtracts extraChrome on top of the fixed chrome lines", () => {
+    expect(computeViewportHeight(30, 1)).toBe(23);
+  });
+});
+
+describe("computeViewport", () => {
+  test("returns all-zero fields for an empty list", () => {
+    expect(computeViewport(0, 0, 5, 0)).toEqual({
+      offset: 0,
+      visibleStart: 0,
+      visibleEnd: 0,
+      hiddenAbove: 0,
+      hiddenBelow: 0,
+    });
+  });
+
+  test("does not scroll when total is smaller than the viewport height", () => {
+    expect(computeViewport(3, 0, 10, 0)).toEqual({
+      offset: 0,
+      visibleStart: 0,
+      visibleEnd: 3,
+      hiddenAbove: 0,
+      hiddenBelow: 0,
+    });
+  });
+
+  test("does not scroll when total equals the viewport height", () => {
+    expect(computeViewport(5, 0, 5, 0)).toEqual({
+      offset: 0,
+      visibleStart: 0,
+      visibleEnd: 5,
+      hiddenAbove: 0,
+      hiddenBelow: 0,
+    });
+  });
+
+  test("shows the first window when the cursor is at the top", () => {
+    const viewport = computeViewport(20, 0, 5, 0);
+    expect(viewport).toEqual({ offset: 0, visibleStart: 0, visibleEnd: 5, hiddenAbove: 0, hiddenBelow: 15 });
+  });
+
+  test("shows the last window when the cursor is at the bottom", () => {
+    const viewport = computeViewport(20, 19, 5, 0);
+    expect(viewport).toEqual({ offset: 15, visibleStart: 15, visibleEnd: 20, hiddenAbove: 15, hiddenBelow: 0 });
+  });
+
+  test("downward scrolloff: does not scroll until the cursor enters the scrolloff band", () => {
+    expect(computeViewport(20, 3, 5, 0).offset).toBe(0);
+    expect(computeViewport(20, 4, 5, 0).offset).toBe(1);
+  });
+
+  test("upward scrolloff: does not scroll until the cursor enters the scrolloff band", () => {
+    expect(computeViewport(20, 11, 5, 10).offset).toBe(10);
+    expect(computeViewport(20, 10, 5, 10).offset).toBe(9);
+  });
+
+  test("clamps an out-of-range currentOffset", () => {
+    expect(computeViewport(20, 0, 5, 100).offset).toBe(0);
+  });
+
+  test("does not throw with a height of 1", () => {
+    const viewport = computeViewport(20, 5, 1, 0);
+    expect(viewport.visibleEnd).toBe(viewport.offset + 1);
+  });
+});
+
+describe("viewport rendering", () => {
+  test("initial render shows only the first page with a downward scroll indicator", () => {
+    return withTTYStdin(
+      async (emitKey) => {
+        const writeSpy = vi.spyOn(process.stdout, "write");
+        const promise = selectSingle({ message: "Pick:", items: manyItems(20) });
+
+        const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+        expect(output).toContain("Item 01");
+        expect(output).toContain("Item 06");
+        expect(output).not.toContain("Item 07");
+        expect(output).toContain("14 more");
+        expect(output.match(/more/g)?.length).toBe(1);
+
+        emitKey(KEY_ENTER);
+        await promise;
+      },
+      { rows: 12 },
+    );
+  });
+
+  test("End key jumps to the last page", () => {
+    return withTTYStdin(
+      async (emitKey) => {
+        const writeSpy = vi.spyOn(process.stdout, "write");
+        const promise = selectSingle({ message: "Pick:", items: manyItems(20) });
+
+        emitKey(KEY_G_UPPER);
+        const lastOutput = String(writeSpy.mock.calls[writeSpy.mock.calls.length - 1][0]);
+        expect(lastOutput).toContain("14 more");
+        expect(lastOutput).toContain("Item 20");
+        expect(lastOutput).toContain("20/20");
+
+        emitKey(KEY_ENTER);
+        await promise;
+      },
+      { rows: 12 },
+    );
+  });
+
+  test("Home key returns to the first page", () => {
+    return withTTYStdin(
+      async (emitKey) => {
+        const writeSpy = vi.spyOn(process.stdout, "write");
+        const promise = selectSingle({ message: "Pick:", items: manyItems(20) });
+
+        emitKey(KEY_G_UPPER); // jump to the end first
+        emitKey(KEY_G_LOWER); // then back to the start
+        const lastOutput = String(writeSpy.mock.calls[writeSpy.mock.calls.length - 1][0]);
+        expect(lastOutput).toContain("Item 01");
+        expect(lastOutput).toContain("1/20");
+
+        emitKey(KEY_ENTER);
+        await promise;
+      },
+      { rows: 12 },
+    );
+  });
+
+  test("PageDown moves the cursor by a full page", () => {
+    return withTTYStdin(
+      async (emitKey) => {
+        const writeSpy = vi.spyOn(process.stdout, "write");
+        const promise = selectSingle({ message: "Pick:", items: manyItems(20) });
+
+        emitKey(KEY_PAGE_DOWN);
+        const lastOutput = String(writeSpy.mock.calls[writeSpy.mock.calls.length - 1][0]);
+        expect(lastOutput).toContain("7/20");
+
+        emitKey(KEY_ENTER);
+        await promise;
+      },
+      { rows: 12 },
+    );
+  });
+
+  test("PageUp does not wrap past the first page", () => {
+    return withTTYStdin(
+      async (emitKey) => {
+        const writeSpy = vi.spyOn(process.stdout, "write");
+        const promise = selectSingle({ message: "Pick:", items: manyItems(20) });
+
+        emitKey(KEY_PAGE_UP);
+        const lastOutput = String(writeSpy.mock.calls[writeSpy.mock.calls.length - 1][0]);
+        expect(lastOutput).toContain("1/20");
+
+        emitKey(KEY_ENTER);
+        await promise;
+      },
+      { rows: 12 },
+    );
+  });
+
+  test("CSI Home and End sequences move to the first/last item", () => {
+    return withTTYStdin(
+      async (emitKey) => {
+        const writeSpy = vi.spyOn(process.stdout, "write");
+        const promise = selectSingle({ message: "Pick:", items: manyItems(20) });
+
+        emitKey(KEY_END_CSI);
+        let lastOutput = String(writeSpy.mock.calls[writeSpy.mock.calls.length - 1][0]);
+        expect(lastOutput).toContain("20/20");
+
+        emitKey(KEY_HOME_CSI);
+        lastOutput = String(writeSpy.mock.calls[writeSpy.mock.calls.length - 1][0]);
+        expect(lastOutput).toContain("1/20");
+
+        emitKey(KEY_ENTER);
+        await promise;
+      },
+      { rows: 12 },
+    );
+  });
+
+  test("Ctrl+P/Ctrl+N move the cursor like arrow keys", () => {
+    return withTTYStdin(async (emitKey) => {
+      const promise = selectSingle({ message: "Pick:", items: sampleItems });
+      emitKey(KEY_CTRL_N); // down to Beta
+      emitKey(KEY_CTRL_N); // down to Gamma
+      emitKey(KEY_CTRL_P); // up to Beta
+      emitKey(KEY_ENTER);
+      const result = await promise;
+      expect(result).toBe("b");
+    });
+  });
+
+  test("footer shows the cursor position", () => {
+    return withTTYStdin(
+      async (emitKey) => {
+        const writeSpy = vi.spyOn(process.stdout, "write");
+        const promise = selectSingle({ message: "Pick:", items: manyItems(20) });
+
+        const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+        expect(output).toContain("1/20");
+
+        emitKey(KEY_ENTER);
+        await promise;
+      },
+      { rows: 12 },
+    );
+  });
+
+  test("no rendered line exceeds the terminal width", () => {
+    return withTTYStdin(
+      async (emitKey) => {
+        const writeSpy = vi.spyOn(process.stdout, "write");
+        const promise = selectMany({
+          message: "Pick a candidate from the very long list of options below:",
+          items: manyItems(20),
+        });
+
+        const lastOutput = String(writeSpy.mock.calls[writeSpy.mock.calls.length - 1][0]);
+        const lines = lastOutput.split("\n").filter((line) => line.length > 0);
+        expect(lines.length).toBeGreaterThan(0);
+        for (const line of lines) {
+          expect(stringWidth(line)).toBeLessThanOrEqual(29);
+        }
+
+        emitKey(KEY_ENTER);
+        await promise;
+      },
+      { rows: 12, columns: 30 },
+    );
+  });
+
+  test("SIGWINCH triggers a redraw", () => {
+    return withTTYStdin(
+      async (emitKey) => {
+        const writeSpy = vi.spyOn(process.stdout, "write");
+        const promise = selectSingle({ message: "Pick:", items: manyItems(20) });
+
+        const callsBefore = writeSpy.mock.calls.length;
+        process.emit("SIGWINCH");
+        const callsAfter = writeSpy.mock.calls.length;
+        expect(callsAfter).toBeGreaterThan(callsBefore);
+
+        emitKey(KEY_ENTER);
+        await promise;
+      },
+      { rows: 12 },
+    );
+  });
+});
+
+describe("scrollViewport", () => {
+  test("a list shorter than the viewport never scrolls", () => {
+    expect(scrollViewport(3, 10, 0, 1, 5)).toEqual({ offset: 0, cursor: 1 });
+    expect(scrollViewport(3, 10, 0, 1, -5)).toEqual({ offset: 0, cursor: 1 });
+  });
+
+  test("scrolling down pulls the cursor back inside the new window", () => {
+    expect(scrollViewport(20, 6, 0, 0, 3)).toEqual({ offset: 3, cursor: 4 });
+  });
+
+  test("a cursor still inside the new window is left where it is, clamped to maxCursor", () => {
+    // offset 3, windowSize 6, maxOffset 14, scrolloff 1 -> maxCursor = 3 + 6 - 1 - 1 = 7
+    expect(scrollViewport(20, 6, 0, 10, 3)).toEqual({ offset: 3, cursor: 7 });
+  });
+
+  test("scrolling up does not go past the top", () => {
+    expect(scrollViewport(20, 6, 0, 0, -3)).toEqual({ offset: 0, cursor: 0 });
+  });
+
+  test("scrolling down does not go past the bottom", () => {
+    expect(scrollViewport(20, 6, 14, 19, 3)).toEqual({ offset: 14, cursor: 19 });
+  });
+
+  test("an empty list returns all zeros", () => {
+    expect(scrollViewport(0, 6, 5, 3, 2)).toEqual({ offset: 0, cursor: 0 });
+  });
+});
+
+describe("locateClick", () => {
+  const layout = {
+    lineToVisible: new Map([[4, 2]]),
+    scrollUpLine: 2,
+    scrollDownLine: 8,
+  };
+
+  test("baseRow null (no cursor position report yet) ignores every click", () => {
+    expect(locateClick(layout, null, 15)).toEqual({ kind: "none" });
+  });
+
+  test("a row within lineToVisible resolves to that candidate", () => {
+    expect(locateClick(layout, 11, 15)).toEqual({ kind: "row", visibleIndex: 2 });
+  });
+
+  test("the scroll-up indicator line resolves to scroll_up", () => {
+    expect(locateClick(layout, 11, 13)).toEqual({ kind: "scroll_up" });
+  });
+
+  test("the scroll-down indicator line resolves to scroll_down", () => {
+    expect(locateClick(layout, 11, 19)).toEqual({ kind: "scroll_down" });
+  });
+
+  test("a row that maps to nothing resolves to none", () => {
+    expect(locateClick(layout, 11, 100)).toEqual({ kind: "none" });
+  });
+});
+
+// =============================================================================
+// Filtering
+// =============================================================================
+
+describe("fuzzyMatch", () => {
+  test("empty query matches everything with no positions", () => {
+    expect(fuzzyMatch("Alpha", "")).toEqual([]);
+  });
+
+  test("matches a case-insensitive prefix", () => {
+    expect(fuzzyMatch("Alpha", "al")).toEqual([0, 1]);
+  });
+
+  test("matches a contiguous substring elsewhere in the text", () => {
+    expect(fuzzyMatch("Gamma", "am")).toEqual([1, 2]);
+  });
+
+  test("matches a non-contiguous subsequence in ascending order", () => {
+    const positions = fuzzyMatch("feature/auth", "fauth");
+    expect(positions).not.toBeNull();
+    const sorted = [...(positions as number[])].sort((a, b) => a - b);
+    expect(positions).toEqual(sorted);
+  });
+
+  test("matches a subsequence at the end of the text", () => {
+    expect(fuzzyMatch("Alpha", "ph")).toEqual([2, 3]);
+  });
+
+  test("returns null when a character is missing", () => {
+    expect(fuzzyMatch("Alpha", "z")).toBeNull();
+  });
+
+  test("returns null when the characters are out of order", () => {
+    expect(fuzzyMatch("Alpha", "ahp")).toBeNull();
+  });
+
+  test("returns null for a non-empty query against empty text", () => {
+    expect(fuzzyMatch("", "a")).toBeNull();
+  });
+
+  test("is case-insensitive on both text and query", () => {
+    expect(fuzzyMatch("ALPHA", "alpha")).toEqual([0, 1, 2, 3, 4]);
+  });
+});
+
+describe("filterItems", () => {
+  test("empty query returns every item with no label matches", () => {
+    expect(filterItems(sampleItems, "")).toEqual([
+      { index: 0, labelMatches: [] },
+      { index: 1, labelMatches: [] },
+      { index: 2, labelMatches: [] },
+    ]);
+  });
+
+  test("matches only the label that contains the query as a subsequence", () => {
+    expect(filterItems(sampleItems, "am")).toEqual([{ index: 2, labelMatches: [1, 2] }]);
+  });
+
+  test("matches on description when the label does not match", () => {
+    const items = [{ value: "a", label: "Alpha", description: "worktree-path" }];
+    expect(filterItems(items, "tree")).toEqual([{ index: 0, labelMatches: [] }]);
+  });
+
+  test("matches on hint when neither the label nor description matches", () => {
+    const items = [{ value: "a", label: "Alpha", hint: "merged" }];
+    expect(filterItems(items, "mrg")).toEqual([{ index: 0, labelMatches: [] }]);
+  });
+
+  test("excludes items that match nowhere", () => {
+    expect(filterItems(sampleItems, "xyz123")).toEqual([]);
+  });
+
+  test("keeps the original item order", () => {
+    const result = filterItems(sampleItems, "a");
+    expect(result.map((m) => m.index)).toEqual([0, 1, 2]);
+  });
+});
+
+describe("filtering (TTY)", () => {
+  test("/ enters filter mode: footer shows filter hints and header shows the query", () => {
+    return withTTYStdin(async (emitKey) => {
+      const writeSpy = vi.spyOn(process.stdout, "write");
+      const promise = selectSingle({ message: "Pick:", items: sampleItems });
+
+      writeSpy.mockClear();
+      emitKey(KEY_SLASH);
+      const output = stripAnsi(writeSpy.mock.calls.map((c) => String(c[0])).join(""));
+      expect(output).toContain("Type to filter");
+      expect(output).toContain("Filter:");
+
+      emitKey(KEY_ENTER); // leave filter input mode, query kept ("")
+      emitKey(KEY_ENTER); // confirm
+      await promise;
+    });
+  });
+
+  test("query narrows visible items and shows the match count", () => {
+    return withTTYStdin(async (emitKey) => {
+      const writeSpy = vi.spyOn(process.stdout, "write");
+      const promise = selectSingle({ message: "Pick:", items: sampleItems });
+
+      emitKey(KEY_SLASH);
+      typeText(emitKey, "a");
+      writeSpy.mockClear();
+      typeText(emitKey, "m"); // only inspect the render that follows the final keystroke
+      const raw = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+      const output = stripAnsi(raw);
+      expect(output).toContain("Filter: am");
+      expect(output).toContain("(1/3)");
+      expect(output).toContain("Gamma");
+      expect(output).not.toContain("Alpha");
+      expect(output).not.toContain("Beta");
+      // The matched "am" run is highlighted; the label is otherwise split across
+      // separately-colored runs, so this check must use the raw (non-stripped) output.
+      expect(raw).toContain(styles("am", "cyan", "bold"));
+
+      emitKey(KEY_ENTER);
+      emitKey(KEY_ENTER);
+      await promise;
+    });
+  });
+
+  test("Enter leaves filter input mode but keeps the query, then confirms the filtered match", () => {
+    return withTTYStdin(async (emitKey) => {
+      const writeSpy = vi.spyOn(process.stdout, "write");
+      const promise = selectSingle({ message: "Pick:", items: sampleItems });
+
+      emitKey(KEY_SLASH);
+      typeText(emitKey, "am");
+      writeSpy.mockClear();
+      emitKey(KEY_ENTER);
+      const output = stripAnsi(writeSpy.mock.calls.map((c) => String(c[0])).join(""));
+      expect(output).toContain("navigate");
+      expect(output).toContain("Filter: am");
+
+      emitKey(KEY_ENTER);
+      const result = await promise;
+      expect(result).toBe("c");
+    });
+  });
+
+  test("Esc while filtering discards the query without canceling the prompt", () => {
+    return withTTYStdin(async (emitKey) => {
+      const writeSpy = vi.spyOn(process.stdout, "write");
+      const promise = selectSingle({ message: "Pick:", items: sampleItems });
+
+      emitKey(KEY_SLASH);
+      typeText(emitKey, "am");
+      writeSpy.mockClear();
+      emitKey(KEY_ESC);
+      const output = stripAnsi(writeSpy.mock.calls.map((c) => String(c[0])).join(""));
+      expect(output).toContain("Alpha");
+      expect(output).toContain("Beta");
+      expect(output).toContain("Gamma");
+
+      emitKey(KEY_ENTER);
+      const result = await promise;
+      // setQuery keeps the cursor anchored to the item it was on (Gamma), it does not
+      // reset to the top of the unfiltered list.
+      expect(result).toBe("c");
+    });
+  });
+
+  test("Backspace removes the last filter character", () => {
+    return withTTYStdin(async (emitKey) => {
+      const writeSpy = vi.spyOn(process.stdout, "write");
+      const promise = selectSingle({ message: "Pick:", items: sampleItems });
+
+      emitKey(KEY_SLASH);
+      typeText(emitKey, "am");
+      writeSpy.mockClear();
+      emitKey(KEY_BACKSPACE);
+      const output = stripAnsi(writeSpy.mock.calls.map((c) => String(c[0])).join(""));
+      // fuzzyMatch("Beta", "a") also matches (the trailing "a"), so all three survive.
+      expect(output).toContain("Filter: a");
+      expect(output).toContain("(3/3)");
+
+      emitKey(KEY_ENTER);
+      emitKey(KEY_ENTER);
+      await promise;
+    });
+  });
+
+  test("Ctrl+U clears the filter query while staying in filter mode", () => {
+    return withTTYStdin(async (emitKey) => {
+      const writeSpy = vi.spyOn(process.stdout, "write");
+      const promise = selectSingle({ message: "Pick:", items: sampleItems });
+
+      emitKey(KEY_SLASH);
+      typeText(emitKey, "am");
+      writeSpy.mockClear();
+      emitKey(KEY_CTRL_U);
+      const output = stripAnsi(writeSpy.mock.calls.map((c) => String(c[0])).join(""));
+      expect(output).toContain("Filter:");
+      expect(output).toContain("Alpha");
+      expect(output).toContain("Beta");
+      expect(output).toContain("Gamma");
+
+      emitKey(KEY_ENTER);
+      emitKey(KEY_ENTER);
+      await promise;
+    });
+  });
+
+  test("Enter does not confirm when the filtered list has no matches", () => {
+    return withTTYStdin(async (emitKey) => {
+      const writeSpy = vi.spyOn(process.stdout, "write");
+      const promise = selectSingle({ message: "Pick:", items: sampleItems });
+
+      emitKey(KEY_SLASH);
+      typeText(emitKey, "zzz");
+      const output = stripAnsi(writeSpy.mock.calls.map((c) => String(c[0])).join(""));
+      expect(output).toContain("no matches");
+
+      emitKey(KEY_ENTER); // leaves filter input mode; still zero matches
+      let settled = false;
+      promise.then(() => {
+        settled = true;
+      });
+      emitKey(KEY_ENTER); // nothing to confirm
+      await new Promise((r) => setImmediate(r));
+      expect(settled).toBe(false);
+
+      emitKey(KEY_ESC); // clears the query, does not cancel the prompt
+      emitKey(KEY_ENTER);
+      const result = await promise;
+      expect(result).toBe("a");
+    });
+  });
+
+  test("arrow keys and Ctrl+P/Ctrl+N move the cursor while filtering", () => {
+    return withTTYStdin(async (emitKey) => {
+      const writeSpy = vi.spyOn(process.stdout, "write");
+      const promise = selectSingle({ message: "Pick:", items: sampleItems });
+
+      emitKey(KEY_SLASH);
+      typeText(emitKey, "a"); // matches all three items
+      writeSpy.mockClear();
+      emitKey(KEY_DOWN);
+      let output = stripAnsi(writeSpy.mock.calls.map((c) => String(c[0])).join(""));
+      expect(output).toContain("2/3");
+
+      writeSpy.mockClear();
+      emitKey(KEY_CTRL_N);
+      output = stripAnsi(writeSpy.mock.calls.map((c) => String(c[0])).join(""));
+      expect(output).toContain("3/3");
+
+      writeSpy.mockClear();
+      emitKey(KEY_CTRL_P);
+      output = stripAnsi(writeSpy.mock.calls.map((c) => String(c[0])).join(""));
+      expect(output).toContain("2/3");
+
+      emitKey(KEY_ENTER);
+      emitKey(KEY_ENTER);
+      await promise;
+    });
+  });
+
+  test("j/k/q/a are typed into the query while filtering instead of navigating", () => {
+    return withTTYStdin(async (emitKey) => {
+      const writeSpy = vi.spyOn(process.stdout, "write");
+      const promise = selectSingle({ message: "Pick:", items: sampleItems });
+
+      emitKey(KEY_SLASH);
+      writeSpy.mockClear();
+      emitKey(KEY_Q);
+      let output = stripAnsi(writeSpy.mock.calls.map((c) => String(c[0])).join(""));
+      expect(output).toContain("Filter: q");
+
+      let settled = false;
+      promise.then(() => {
+        settled = true;
+      });
+      emitKey(KEY_J);
+      emitKey(KEY_K);
+      emitKey(KEY_A);
+      output = stripAnsi(writeSpy.mock.calls.map((c) => String(c[0])).join(""));
+      expect(output).toContain("Filter: qjka");
+      await new Promise((r) => setImmediate(r));
+      expect(settled).toBe(false);
+
+      emitKey(KEY_CTRL_U); // back to a non-empty match list so the prompt can be closed
+      emitKey(KEY_ENTER);
+      emitKey(KEY_ENTER);
+      await promise;
+    });
+  });
+});
+
+describe("filtering with selectMany", () => {
+  const indexItems = [
+    { value: "x", label: "Xray" },
+    { value: "y", label: "Yankee" },
+    { value: "z", label: "Zulu" },
+  ];
+
+  test("toggling a filtered match selects the original item, surviving a discarded filter", () => {
+    return withTTYStdin(async (emitKey) => {
+      const promise = selectMany({ message: "Pick:", items: indexItems });
+      emitKey(KEY_SLASH);
+      typeText(emitKey, "zu"); // matches only Zulu
+      emitKey(KEY_ENTER); // leave filter input mode, query kept
+      emitKey(KEY_SPACE); // toggle the (filtered) current item: Zulu
+      emitKey(KEY_ESC); // discard the query, back to the full list; selection survives
+      emitKey(KEY_ENTER); // confirm
+      const result = await promise;
+      expect(result).toEqual(["z"]);
+    });
+  });
+
+  test("toggle-all while a query is active affects only the visible matches", () => {
+    return withTTYStdin(async (emitKey) => {
+      const promise = selectMany({ message: "Pick:", items: indexItems });
+      emitKey(KEY_SLASH);
+      typeText(emitKey, "y"); // matches Xray and Yankee
+      emitKey(KEY_ENTER); // leave filter input mode, query kept
+      emitKey(KEY_A); // toggle all visible matches
+      emitKey(KEY_ENTER); // confirm
+      const result = await promise;
+      expect(result).toEqual(["x", "y"]);
+    });
+  });
+
+  test("footer shows 'all matches' and 'Esc clear' once a query narrows the results", () => {
+    return withTTYStdin(async (emitKey) => {
+      const writeSpy = vi.spyOn(process.stdout, "write");
+      const promise = selectMany({ message: "Pick:", items: indexItems });
+
+      emitKey(KEY_SLASH);
+      typeText(emitKey, "y");
+      writeSpy.mockClear();
+      emitKey(KEY_ENTER); // leave filter input mode, query kept
+      const output = stripAnsi(writeSpy.mock.calls.map((c) => String(c[0])).join(""));
+      expect(output).toContain("all matches");
+      expect(output).toContain("Esc clear");
+
+      emitKey(KEY_ENTER); // confirm
+      await promise;
+    });
+  });
+});
+
+// =============================================================================
+// Mouse
+// =============================================================================
+
+describe("mouse (TTY)", () => {
+  // With rows: 12, computeViewportHeight(12, 0) = 6, so the viewport height
+  // below is 6 candidate rows.
+  function sgr(button: number, x: number, y: number, press = true): number[] {
+    return [...Buffer.from(`\x1b[<${button};${x};${y}${press ? "M" : "m"}`, "latin1")];
+  }
+  function dsr(row: number, col = 1): number[] {
+    return [...Buffer.from(`\x1b[${row};${col}R`, "latin1")];
+  }
+
+  test("enables mouse tracking on start and disables it on exit", () => {
+    return withTTYStdin(
+      async (emitKey) => {
+        const writeSpy = vi.spyOn(process.stdout, "write");
+        const promise = selectSingle({ message: "Pick:", items: manyItems(20) });
+
+        const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+        expect(output).toContain("\x1b[?1000;1006h");
+        expect(output).toContain("\x1b[?1002h");
+
+        emitKey(KEY_ENTER);
+        await promise;
+
+        const afterOutput = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+        expect(afterOutput).toContain("\x1b[?1002l");
+        expect(afterOutput).toContain("\x1b[?1000l");
+        expect(afterOutput).toContain("\x1b[?1006l");
+      },
+      { rows: 12 },
+    );
+  });
+
+  test("CLAUDE_WORKTREE_NO_MOUSE opts out of mouse tracking and clicks", () => {
+    process.env.CLAUDE_WORKTREE_NO_MOUSE = "1";
+    return withTTYStdin(
+      async (emitKey) => {
+        const writeSpy = vi.spyOn(process.stdout, "write");
+        const promise = selectSingle({ message: "Pick:", items: manyItems(20) });
+
+        const output = writeSpy.mock.calls.map((c) => String(c[0])).join("");
+        expect(output).not.toContain("\x1b[?1000");
+
+        emitKey(sgr(0, 1, 15));
+        const lastOutput = String(writeSpy.mock.calls[writeSpy.mock.calls.length - 1][0]);
+        expect(stripAnsi(lastOutput)).toContain("1/20");
+
+        emitKey(KEY_ENTER);
+        const result = await promise;
+        expect(result).toBe("v1");
+      },
+      { rows: 12 },
+    );
+  });
+
+  test("wheel down scrolls the viewport and clamps the cursor into view", () => {
+    return withTTYStdin(
+      async (emitKey) => {
+        const writeSpy = vi.spyOn(process.stdout, "write");
+        const promise = selectSingle({ message: "Pick:", items: manyItems(20) });
+
+        emitKey(sgr(65, 1, 1)); // wheel down
+        const lastOutput = stripAnsi(String(writeSpy.mock.calls[writeSpy.mock.calls.length - 1][0]));
+        expect(lastOutput).toContain("↑ 3 more");
+        expect(lastOutput).toContain("5/20");
+
+        emitKey(KEY_ENTER);
+        await promise;
+      },
+      { rows: 12 },
+    );
+  });
+
+  test("wheel up does not scroll past the top", () => {
+    return withTTYStdin(
+      async (emitKey) => {
+        const writeSpy = vi.spyOn(process.stdout, "write");
+        const promise = selectSingle({ message: "Pick:", items: manyItems(20) });
+
+        emitKey(sgr(64, 1, 1)); // wheel up
+        const lastOutput = stripAnsi(String(writeSpy.mock.calls[writeSpy.mock.calls.length - 1][0]));
+        expect(lastOutput).toContain("1/20");
+
+        emitKey(KEY_ENTER);
+        await promise;
+      },
+      { rows: 12 },
+    );
+  });
+
+  test("a click before the terminal answers the cursor position request is ignored", () => {
+    return withTTYStdin(
+      async (emitKey) => {
+        const writeSpy = vi.spyOn(process.stdout, "write");
+        const promise = selectSingle({ message: "Pick:", items: manyItems(20) });
+
+        // Ignored: no draw follows, so the frame still shows the initial position.
+        emitKey(sgr(0, 1, 15)); // left click, no DSR reply sent
+        const output = stripAnsi(writeSpy.mock.calls.map((c) => String(c[0])).join(""));
+        expect(output).toContain("1/20");
+
+        emitKey(KEY_ENTER);
+        await promise;
+      },
+      { rows: 12 },
+    );
+  });
+
+  test("a click after a DSR reply moves the cursor to the clicked candidate", () => {
+    return withTTYStdin(
+      async (emitKey) => {
+        const writeSpy = vi.spyOn(process.stdout, "write");
+        const promise = selectSingle({ message: "Pick:", items: manyItems(20) });
+
+        emitKey(dsr(21)); // frame is 10 lines tall, so baseRow = 21 - 10 = 11
+        emitKey(sgr(0, 1, 15)); // frame line 4 (11 + 4 = 15) is the third candidate row
+        const lastOutput = stripAnsi(String(writeSpy.mock.calls[writeSpy.mock.calls.length - 1][0]));
+        expect(lastOutput).toContain("3/20");
+
+        emitKey(KEY_ENTER);
+        await promise;
+      },
+      { rows: 12 },
+    );
+  });
+
+  test("a double click confirms the clicked candidate", () => {
+    return withTTYStdin(
+      async (emitKey) => {
+        const promise = selectSingle({ message: "Pick:", items: manyItems(20) });
+
+        emitKey(dsr(21));
+        emitKey(sgr(0, 1, 15));
+        emitKey(sgr(0, 1, 15));
+        const result = await promise;
+        expect(result).toBe("v3");
+      },
+      { rows: 12 },
+    );
+  });
+
+  test("selectMany: a click toggles the clicked candidate", () => {
+    return withTTYStdin(
+      async (emitKey) => {
+        const promise = selectMany({ message: "Pick:", items: manyItems(20) });
+
+        emitKey(dsr(21));
+        emitKey(sgr(0, 1, 15));
+        emitKey(KEY_ENTER);
+        const result = await promise;
+        expect(result).toEqual(["v3"]);
+      },
+      { rows: 12 },
+    );
+  });
+
+  test("right and middle clicks are ignored", () => {
+    return withTTYStdin(
+      async (emitKey) => {
+        const writeSpy = vi.spyOn(process.stdout, "write");
+        const promise = selectSingle({ message: "Pick:", items: manyItems(20) });
+
+        emitKey(dsr(21));
+        // Ignored: neither click causes a redraw.
+        emitKey(sgr(2, 1, 15)); // right click
+        emitKey(sgr(1, 1, 15)); // middle click
+        const output = stripAnsi(writeSpy.mock.calls.map((c) => String(c[0])).join(""));
+        expect(output).toContain("1/20");
+
+        emitKey(KEY_ENTER);
+        await promise;
+      },
+      { rows: 12 },
+    );
+  });
+
+  test("a click outside the candidate rows is ignored", () => {
+    return withTTYStdin(
+      async (emitKey) => {
+        const writeSpy = vi.spyOn(process.stdout, "write");
+        const promise = selectSingle({ message: "Pick:", items: manyItems(20) });
+
+        emitKey(dsr(21));
+        // Ignored: the click lands outside the candidate rows, so no redraw follows.
+        emitKey(sgr(0, 1, 12)); // frame line 1: the message line
+        const output = stripAnsi(writeSpy.mock.calls.map((c) => String(c[0])).join(""));
+        expect(output).toContain("1/20");
+
+        emitKey(KEY_ENTER);
+        await promise;
+      },
+      { rows: 12 },
+    );
+  });
+
+  test("clicking the down scroll indicator pages the viewport forward", () => {
+    return withTTYStdin(
+      async (emitKey) => {
+        const writeSpy = vi.spyOn(process.stdout, "write");
+        const promise = selectSingle({ message: "Pick:", items: manyItems(20) });
+
+        emitKey(dsr(21));
+        emitKey(sgr(0, 1, 19)); // frame line 8: the down scroll indicator
+        // scrollViewport(20, 6, 0, 0, 6) -> { offset: 6, cursor: 7 }
+        const lastOutput = stripAnsi(String(writeSpy.mock.calls[writeSpy.mock.calls.length - 1][0]));
+        expect(lastOutput).toContain("8/20");
+
+        emitKey(KEY_ENTER);
+        await promise;
+      },
+      { rows: 12 },
+    );
+  });
+
+  test("a paste-like burst of bytes in one data event is not dropped", () => {
+    return withTTYStdin(
+      async (emitKey) => {
+        const promise = selectSingle({ message: "Pick:", items: manyItems(20) });
+
+        emitKey([...KEY_DOWN, ...KEY_DOWN, ...KEY_ENTER]);
+        const result = await promise;
+        expect(result).toBe("v3");
+      },
+      { rows: 12 },
+    );
   });
 });
