@@ -44,7 +44,7 @@ Options:
   -n, -dry-run    Preview what would be created without executing
   -q, -quiet      Suppress informational output (errors only)
   -v, -verbose    Show hook execution logs
-  -h, -help       Show this help
+  -h, -help, --help    Show this help
   -version, --version  Show version number
 
 Resume options:
@@ -119,7 +119,7 @@ Options:
   -n, -dry-run         Preview what would be created without executing
   -q, -quiet           Suppress informational output (errors only)
   -v, -verbose         Show hook execution logs
-  -h, -help            Show this help
+  -h, -help, --help    Show this help
 
 Examples:
   claude-worktree feature/auth 'Implement authentication feature'
@@ -147,7 +147,7 @@ Options:
   -fetch           Fetch from remote before listing (default: local only)
   -q, -quiet       Suppress informational output (errors only)
   -v, -verbose     Show full paths and details
-  -h, -help        Show this help
+  -h, -help, --help  Show this help
 
 Examples:
   claude-worktree list
@@ -176,7 +176,7 @@ Options:
   -n, -dry-run   Preview targets without deleting
   -q, -quiet     Suppress informational output (errors only)
   -v, -verbose   Show hook execution logs
-  -h, -help      Show this help
+  -h, -help, --help  Show this help
 
 Examples:
   claude-worktree clean
@@ -206,7 +206,7 @@ Options:
   -model <name>  Language model to use (passed to claude --model)
   -q, -quiet     Suppress informational output (errors only)
   -v, -verbose   Show verbose output
-  -h, -help      Show this help
+  -h, -help, --help  Show this help
 
 Examples:
   claude-worktree resume feature/auth
@@ -312,7 +312,7 @@ export function parseCreateArgs(args: string[]): CreateArgs {
       model: { type: "string", flag: "-model", errorMessage: "-model requires a model name argument" },
     },
     unknownHandling: "error",
-    ignoredFlags: ["-h", "-help"],
+    ignoredFlags: ["-h", "-help", "--help"],
     unknownErrorPrefix: "Unknown option",
   });
 
@@ -376,7 +376,7 @@ export function parseResumeArgs(args: string[]): ResumeArgs {
       model: { type: "string", flag: "-model", errorMessage: "-model requires a model name argument" },
     },
     unknownHandling: "error",
-    ignoredFlags: ["-h", "-help"],
+    ignoredFlags: ["-h", "-help", "--help"],
     unknownErrorPrefix: "Unknown option for resume command",
   });
 
@@ -411,7 +411,7 @@ export function parseCleanArgs(args: string[]): CleanArgs {
       verbose: { type: "boolean", flag: "-verbose", alias: "-v" },
     },
     unknownHandling: "error",
-    ignoredFlags: ["-h", "-help"],
+    ignoredFlags: ["-h", "-help", "--help"],
     unknownErrorPrefix: "Unknown option for clean command",
   });
 
@@ -441,7 +441,7 @@ export function parseListArgs(args: string[]): ListArgs {
       verbose: { type: "boolean", flag: "-verbose", alias: "-v" },
     },
     unknownHandling: "error",
-    ignoredFlags: ["-h", "-help"],
+    ignoredFlags: ["-h", "-help", "--help"],
     unknownErrorPrefix: "Unknown option for list command",
   });
 
@@ -471,8 +471,15 @@ function topLevelHint(name: string): string {
   return match.startsWith("-") ? `\n\nDid you mean "${match}"?` : `\n\nDid you mean the "${match}" command?`;
 }
 
+/**
+ * Help flags accepted everywhere `-help` is accepted. `--help` is one of the two
+ * conventional double-dash exceptions (the other, `--version`, is handled in
+ * parseArgs); other options keep their single-dash-only spelling.
+ */
+const HELP_FLAGS = new Set(["-h", "-help", "--help"]);
+
 function hasHelpFlag(subArgs: string[]): boolean {
-  return subArgs.includes("-h") || subArgs.includes("-help");
+  return subArgs.some((arg) => HELP_FLAGS.has(arg));
 }
 
 function parseSubCommand(commandName: string, subArgs: string[]): Command | null {

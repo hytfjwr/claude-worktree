@@ -977,6 +977,42 @@ describe("parseArgs - per-command help", () => {
     const result = parseArgs(["resume", "-help"]);
     expect(result).toEqual({ type: "help", commandHelp: "resume" });
   });
+
+  test("--help returns global help", () => {
+    expect(parseArgs(["--help"])).toEqual({ type: "help" });
+  });
+
+  test("list --help returns list help", () => {
+    expect(parseArgs(["list", "--help"])).toEqual({ type: "help", commandHelp: "list" });
+  });
+
+  test("clean --help returns clean help", () => {
+    expect(parseArgs(["clean", "--help"])).toEqual({ type: "help", commandHelp: "clean" });
+  });
+
+  test("resume --help returns resume help", () => {
+    expect(parseArgs(["resume", "--help"])).toEqual({ type: "help", commandHelp: "resume" });
+  });
+
+  test("branch --help returns create help", () => {
+    expect(parseArgs(["feature/test", "--help"])).toEqual({ type: "help", commandHelp: "create" });
+  });
+
+  test("--help is accepted by the per-command parsers too", () => {
+    expect(parseListArgs(["--help"])).toEqual({
+      json: false,
+      quiet: false,
+      verbose: false,
+      noStatus: false,
+      fetch: false,
+    });
+    expect(parseCleanArgs(["--help"]).branches).toEqual([]);
+  });
+
+  test("other double-dash flags still error", () => {
+    expect(() => parseListArgs(["--json"])).toThrow("Unknown option for list command");
+    expect(() => parseCreateArgs(["feature/test", "prompt", "--pane"])).toThrow("Unknown option");
+  });
 });
 
 // ============================================================================
