@@ -223,9 +223,9 @@ async function handleExistingWorktree(
   let confirmed: boolean;
   if (existingWorktree.isDirty) {
     logInfo(`${icons.warning()}  Warning: there are uncommitted changes`);
-    confirmed = await deps.confirm("Discard changes and delete the worktree?");
+    confirmed = await deps.confirm("Discard changes and delete the worktree?", { danger: true });
   } else {
-    confirmed = await deps.confirm("Delete the existing worktree and start a new session?");
+    confirmed = await deps.confirm("Delete the existing worktree and start a new session?", { danger: true });
   }
 
   if (!confirmed) {
@@ -316,7 +316,7 @@ async function handleExistingBranch(branchName: string, deps: CreateDeps): Promi
 
   logInfo(`\n${icons.warning()}  Branch already exists: ${branchName}`);
 
-  const confirmed = await deps.confirm("Delete the branch and create a new one?");
+  const confirmed = await deps.confirm("Delete the branch and create a new one?", { danger: true });
   if (!confirmed) {
     logInfo("Cancelled.");
     return null;

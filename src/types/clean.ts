@@ -1,6 +1,7 @@
 import type { HookVars, ProjectConfig, RunHookFn } from "./config.ts";
 import type { GitContext, ListWorktreesResult, WorktreeInfo, WorktreeStatus } from "./git.ts";
 import type { PullRequestInfo } from "./github.ts";
+import type { ConfirmOptions } from "./prompt.ts";
 import type { AllPanes, SessionInfo, SessionState } from "./session.ts";
 import type { Spinner } from "./spinner.ts";
 
@@ -47,7 +48,7 @@ export type CleanDeps = {
   gcSessions: (validPaths: Set<string>) => Promise<number>;
   gcSlots: (validPaths: Set<string>) => Promise<number>;
   getUnpushedCommitCount: (worktreePath: string, branch: string) => Promise<number | null>;
-  confirm: (message: string) => Promise<boolean>;
+  confirm: (message: string, options?: ConfirmOptions) => Promise<boolean>;
   selectMultiple: (statuses: WorktreeStatus[]) => Promise<WorktreeStatus[]>;
   startSpinner: (message: string) => Spinner;
   checkGhAvailable: () => Promise<boolean>;
