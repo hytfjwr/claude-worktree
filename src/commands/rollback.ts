@@ -6,7 +6,8 @@ import { deleteSlot } from "../core/slot.ts";
 import type { RollbackOptions } from "../types/index.ts";
 import { icons } from "../ui/icons.ts";
 import { logInfo, logWarn } from "../ui/logger.ts";
-import { createTailUpdater, startSpinner } from "../ui/spinner.ts";
+import { startSpinner } from "../ui/spinner.ts";
+import { runHookWithTail } from "./hooks.ts";
 
 type StepResult = { name: string; success: boolean; error?: string };
 
@@ -59,19 +60,20 @@ export async function performRollback(options: RollbackOptions): Promise<void> {
     const spinner = verbose
       ? null
       : startSpinner("Running postClean hook (rollback)...", { timeoutSec: options.postCleanTimeout });
-    try {
-      await runHook(options.postCleanCommand, repoRoot, {
-        verbose,
-        onLine: spinner ? createTailUpdater(spinner) : undefined,
-        timeout: options.postCleanTimeout,
-      });
+    const result = await runHookWithTail({
+      hookCmd: options.postCleanCommand,
+      cwd: repoRoot,
+      verbose,
+      timeout: options.postCleanTimeout,
+      spinner,
+    });
+    if (result.success) {
       spinner?.stop();
       steps.push({ name: "postClean", success: true });
-    } catch (err) {
-      const message = getErrorMessage(err);
+    } else {
       spinner?.fail("postClean hook failed during rollback");
-      if (verbose) logWarn(`  postClean failed: ${message}`);
-      steps.push({ name: "postClean", success: false, error: message });
+      if (verbose) logWarn(`  postClean failed: ${result.message}`);
+      steps.push({ name: "postClean", success: false, error: result.message });
     }
   }
 

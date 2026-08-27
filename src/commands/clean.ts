@@ -34,13 +34,15 @@ import type {
   ProjectConfig,
   PullRequestInfo,
   SessionState,
+  Spinner,
   WorktreeStatus,
 } from "../types/index.ts";
 import { cyan, dim, yellow } from "../ui/color.ts";
 import { icons } from "../ui/icons.ts";
 import { logDebug, logInfo, logWarn } from "../ui/logger.ts";
 import { confirm, selectMultiple } from "../ui/prompt.ts";
-import { createTailUpdater, startSpinner } from "../ui/spinner.ts";
+import { startSpinner } from "../ui/spinner.ts";
+import { runHookWithTail } from "./hooks.ts";
 
 const defaultDeps: CleanDeps = {
   getRemoteTrackingBranches,
@@ -135,6 +137,36 @@ async function computeUnpushedMap(targets: WorktreeStatus[], deps: CleanDeps): P
     }),
   );
   return map;
+}
+
+type CleanHookContext = {
+  config: ProjectConfig;
+  repoRoot: string;
+  worktreePath: string;
+  slot: number | undefined;
+  verbose: boolean;
+  spinner: Spinner;
+};
+
+/**
+ * Run a clean-time hook if it is configured. Failures are non-fatal: they are
+ * reported as a warning so the remaining deletion steps still run.
+ */
+async function runCleanHook(hookName: "preClean" | "postClean", ctx: CleanHookContext, deps: CleanDeps): Promise<void> {
+  const template = ctx.config[hookName];
+  if (!template) return;
+
+  const result = await runHookWithTail({
+    hookCmd: deps.buildHookCommand(template, { path: ctx.worktreePath, slot: ctx.slot }),
+    cwd: ctx.repoRoot,
+    verbose: ctx.verbose,
+    timeout: resolveHookTimeout(hookName, ctx.config),
+    spinner: ctx.spinner,
+    runHook: deps.runHook,
+  });
+  if (!result.success) {
+    logWarn(`  ${hookName} hook failed (continuing): ${result.message}`);
+  }
 }
 
 function buildConfirmMessage(count: number, hasRunningSessions: boolean, hasRiskyTargets: boolean): string {
@@ -387,19 +419,14 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
       // Read cached slot for this worktree
       const slot = await deps.readSlot(worktree.path);
 
+      const hookCtx: CleanHookContext | null =
+        config && repoRoot
+          ? { config, repoRoot, worktreePath: worktree.path, slot, verbose: args.verbose, spinner }
+          : null;
+
       // preClean hook
-      if (config?.preClean && repoRoot) {
-        const hookCmd = deps.buildHookCommand(config.preClean, { path: worktree.path, slot });
-        try {
-          await deps.runHook(hookCmd, repoRoot, {
-            verbose: args.verbose,
-            onLine: args.verbose ? undefined : createTailUpdater(spinner),
-            timeout: resolveHookTimeout("preClean", config),
-          });
-        } catch (error) {
-          const message = getErrorMessage(error);
-          logWarn(`  preClean hook failed (continuing): ${message}`);
-        }
+      if (hookCtx) {
+        await runCleanHook("preClean", hookCtx, deps);
       }
 
       await deps.removeWorktree(worktree.path, worktree.isDirty);
@@ -416,18 +443,8 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
       }
 
       // postClean hook
-      if (config?.postClean && repoRoot) {
-        const hookCmd = deps.buildHookCommand(config.postClean, { path: worktree.path, slot });
-        try {
-          await deps.runHook(hookCmd, repoRoot, {
-            verbose: args.verbose,
-            onLine: args.verbose ? undefined : createTailUpdater(spinner),
-            timeout: resolveHookTimeout("postClean", config),
-          });
-        } catch (error) {
-          const message = getErrorMessage(error);
-          logWarn(`  postClean hook failed (continuing): ${message}`);
-        }
+      if (hookCtx) {
+        await runCleanHook("postClean", hookCtx, deps);
       }
 
       // Delete cached slot and session

@@ -1,4 +1,4 @@
-import type { HookVars, ProjectConfig } from "./config.ts";
+import type { HookVars, ProjectConfig, RunHookFn } from "./config.ts";
 import type { GitContext, ListWorktreesResult, WorktreeInfo, WorktreeStatus } from "./git.ts";
 import type { PullRequestInfo } from "./github.ts";
 import type { AllPanes, SessionInfo, SessionState } from "./session.ts";
@@ -37,11 +37,7 @@ export type CleanDeps = {
   getGitContext: () => Promise<GitContext>;
   loadProjectConfig: (repoRoot: string) => Promise<ProjectConfig | null>;
   buildHookCommand: (template: string, vars: HookVars) => string;
-  runHook: (
-    command: string,
-    cwd: string,
-    options?: { verbose?: boolean; onLine?: (line: string) => void; timeout?: number },
-  ) => Promise<void>;
+  runHook: RunHookFn;
   readSlot: (worktreePath: string) => Promise<number | undefined>;
   deleteSlot: (worktreePath: string) => Promise<void>;
   deleteSession: (worktreePath: string) => Promise<void>;
