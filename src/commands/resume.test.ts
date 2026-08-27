@@ -180,6 +180,33 @@ describe("runResume", () => {
       exitSpy.mockRestore();
       onSpy.mockRestore();
     });
+
+    test("reports a completeSession failure instead of swallowing it", async () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const deps = makeDeps({
+        completeSession: vi.fn(async () => {
+          throw new Error("cache write failed");
+        }),
+      });
+
+      await runResume({ branchName: "feature/test" }, deps);
+
+      const warned = warnSpy.mock.calls.flat().join("\n");
+      expect(warned).toContain("Failed to mark the session as completed");
+      expect(warned).toContain("cache write failed");
+      warnSpy.mockRestore();
+    });
+
+    test("a completeSession failure does not fail the resume", async () => {
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      const deps = makeDeps({
+        completeSession: vi.fn(async () => {
+          throw new Error("cache write failed");
+        }),
+      });
+
+      await expect(runResume({ branchName: "feature/test" }, deps)).resolves.toBeUndefined();
+    });
   });
 
   describe("branch name specified", () => {

@@ -96,7 +96,14 @@ async function launchResumeInTerminal(worktree: WorktreeInfo, claudeCommand: str
   const doCompleteSession = async () => {
     if (sessionCompleted) return;
     sessionCompleted = true;
-    await deps.completeSession(worktree.path).catch(() => {});
+    try {
+      await deps.completeSession(worktree.path);
+    } catch (error) {
+      // Not fatal, but the session record now stays "Running" forever, which
+      // makes every later resume warn about a session that already ended.
+      logWarn(`Failed to mark the session as completed: ${getErrorMessage(error)}`);
+      logWarn(`  ${worktree.path} may keep showing as "Running" in list and resume.`);
+    }
   };
 
   const createSignalHandler = (exitCode: number) => () => {
