@@ -18,6 +18,8 @@ export type CreateDeps = {
   createWorktree: (branchName: string, worktreePath: string, baseBranch: string) => Promise<void>;
   removeWorktree: (path: string, force?: boolean) => Promise<void>;
   deleteLocalBranch: (branchName: string, force?: boolean) => Promise<void>;
+  getBranchCommitSha: (branchName: string) => Promise<string | null>;
+  restoreLocalBranch: (branchName: string, commitSha: string) => Promise<void>;
 
   // Config/hooks
   buildHookCommand: (template: string, vars: HookVars) => string;

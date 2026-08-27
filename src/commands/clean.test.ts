@@ -57,7 +57,15 @@ function makeDeps(overrides: Partial<CleanDeps> = {}): CleanDeps {
   };
 }
 
-const defaultArgs: CleanArgs = { force: false, all: false, dryRun: false, quiet: false, verbose: false, branches: [] };
+const defaultArgs: CleanArgs = {
+  force: false,
+  discardUnsaved: false,
+  all: false,
+  dryRun: false,
+  quiet: false,
+  verbose: false,
+  branches: [],
+};
 
 // Suppress console output
 let consoleWarnSpy: ReturnType<typeof vi.spyOn>;
@@ -294,7 +302,9 @@ describe("executeClean", () => {
         },
       });
 
-      await executeClean({ ...defaultArgs, force: true }, deps);
+      // discardUnsaved is required here: -force alone now skips dirty worktrees
+      // (see the "-force and unsaved work" describe block below).
+      await executeClean({ ...defaultArgs, force: true, discardUnsaved: true }, deps);
 
       expect(removedWithForce).toBe(true);
     });
@@ -1899,6 +1909,126 @@ describe("executeClean", () => {
 
       expect(gcSessionsCalled).toBe(false);
       expect(gcSlotsCalled).toBe(false);
+    });
+  });
+
+  describe("-force and unsaved work", () => {
+    function depsFor(worktree: ReturnType<typeof makeWorktree>, status: WorktreeStatus, unpushed: number | null) {
+      return makeDeps({
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
+        getWorktreeStatuses: async () => [status],
+        getUnpushedCommitCount: async () => unpushed,
+        removeWorktree: vi.fn(async () => {}),
+        deleteLocalBranch: vi.fn(async () => {}),
+        confirm: vi.fn(async () => true),
+      });
+    }
+
+    test("skips a dirty worktree named explicitly with -force", async () => {
+      const worktree = makeWorktree({ path: "/wt/feat-x", branch: "feature/x", isDirty: true });
+      const status = makeStatus({ path: "/wt/feat-x", branch: "feature/x", isDirty: true }, { canAutoClean: false });
+      const deps = depsFor(worktree, status, 0);
+
+      const result = await executeClean({ ...defaultArgs, force: true, branches: ["feature/x"] }, deps);
+
+      expect(deps.removeWorktree).not.toHaveBeenCalled();
+      expect(deps.deleteLocalBranch).not.toHaveBeenCalled();
+      expect(result.deleted).toEqual([]);
+      expect(result.skipped).toEqual(["/wt/feat-x"]);
+    });
+
+    test("skips a branch with unpushed commits named explicitly with -force", async () => {
+      const worktree = makeWorktree({ path: "/wt/feat-y", branch: "feature/y" });
+      const status = makeStatus({ path: "/wt/feat-y", branch: "feature/y" }, { canAutoClean: false });
+      const deps = depsFor(worktree, status, 3);
+
+      const result = await executeClean({ ...defaultArgs, force: true, branches: ["feature/y"] }, deps);
+
+      expect(deps.removeWorktree).not.toHaveBeenCalled();
+      expect(result.skipped).toEqual(["/wt/feat-y"]);
+    });
+
+    test("skips a branch that was never pushed with -force", async () => {
+      const worktree = makeWorktree({ path: "/wt/feat-z", branch: "feature/z" });
+      const status = makeStatus(
+        { path: "/wt/feat-z", branch: "feature/z" },
+        { canAutoClean: false, branchMerged: false, branchDeletedOnRemote: false },
+      );
+      const deps = depsFor(worktree, status, null);
+
+      const result = await executeClean({ ...defaultArgs, force: true, branches: ["feature/z"] }, deps);
+
+      expect(deps.removeWorktree).not.toHaveBeenCalled();
+      expect(result.skipped).toEqual(["/wt/feat-z"]);
+    });
+
+    test("deletes a merged, clean worktree with -force without prompting", async () => {
+      const worktree = makeWorktree({ path: "/wt/feat-m", branch: "feature/m" });
+      const status = makeStatus(
+        { path: "/wt/feat-m", branch: "feature/m" },
+        { canAutoClean: true, branchMerged: true, reason: "Merged" },
+      );
+      const deps = depsFor(worktree, status, 0);
+
+      const result = await executeClean({ ...defaultArgs, force: true, branches: ["feature/m"] }, deps);
+
+      expect(deps.confirm).not.toHaveBeenCalled();
+      expect(deps.removeWorktree).toHaveBeenCalledWith("/wt/feat-m", false);
+      expect(deps.deleteLocalBranch).toHaveBeenCalledWith("feature/m", true);
+      expect(result.deleted).toEqual(["/wt/feat-m"]);
+      expect(result.skipped).toEqual([]);
+    });
+
+    test("deletes a dirty worktree with -force -discard-unsaved", async () => {
+      const worktree = makeWorktree({ path: "/wt/feat-x", branch: "feature/x", isDirty: true });
+      const status = makeStatus({ path: "/wt/feat-x", branch: "feature/x", isDirty: true }, { canAutoClean: false });
+      const deps = depsFor(worktree, status, 0);
+
+      const result = await executeClean(
+        { ...defaultArgs, force: true, discardUnsaved: true, branches: ["feature/x"] },
+        deps,
+      );
+
+      expect(deps.confirm).not.toHaveBeenCalled();
+      expect(deps.removeWorktree).toHaveBeenCalledWith("/wt/feat-x", true);
+      expect(result.deleted).toEqual(["/wt/feat-x"]);
+    });
+
+    test("still deletes a dirty worktree interactively when the user confirms", async () => {
+      const worktree = makeWorktree({ path: "/wt/feat-x", branch: "feature/x", isDirty: true });
+      const status = makeStatus({ path: "/wt/feat-x", branch: "feature/x", isDirty: true }, { canAutoClean: false });
+      const deps = depsFor(worktree, status, 0);
+
+      const result = await executeClean({ ...defaultArgs, branches: ["feature/x"] }, deps);
+
+      expect(deps.confirm).toHaveBeenCalled();
+      expect(deps.removeWorktree).toHaveBeenCalledWith("/wt/feat-x", true);
+      expect(result.deleted).toEqual(["/wt/feat-x"]);
+    });
+
+    test("skips a merged-but-dirty worktree in auto-detect mode with -force", async () => {
+      const worktree = makeWorktree({ path: "/wt/feat-md", branch: "feature/md", isDirty: true });
+      const status = makeStatus(
+        { path: "/wt/feat-md", branch: "feature/md", isDirty: true },
+        { canAutoClean: true, branchMerged: true, reason: "Merged (dirty)" },
+      );
+      const deps = depsFor(worktree, status, 0);
+
+      const result = await executeClean({ ...defaultArgs, force: true }, deps);
+
+      expect(deps.removeWorktree).not.toHaveBeenCalled();
+      expect(result.skipped).toEqual(["/wt/feat-md"]);
+    });
+
+    test("dry-run with -force previews the skip instead of the deletion", async () => {
+      const worktree = makeWorktree({ path: "/wt/feat-x", branch: "feature/x", isDirty: true });
+      const status = makeStatus({ path: "/wt/feat-x", branch: "feature/x", isDirty: true }, { canAutoClean: false });
+      const deps = depsFor(worktree, status, 0);
+
+      const result = await executeClean({ ...defaultArgs, force: true, dryRun: true, branches: ["feature/x"] }, deps);
+
+      expect(result.skipped).toEqual(["/wt/feat-x"]);
+      expect(result.deleted).toEqual([]);
     });
   });
 });

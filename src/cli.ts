@@ -62,12 +62,15 @@ List options:
   -v, -verbose     Show full paths and details
 
 Clean options:
-  <branch-name>  Specific branch(es) to clean (can specify multiple)
-  -f, -force     Skip confirmation prompt
-  -a, -all       Show all worktrees for manual selection
-  -n, -dry-run   Preview targets without deleting
-  -q, -quiet     Suppress informational output (errors only)
-  -v, -verbose   Show hook execution logs
+  <branch-name>     Specific branch(es) to clean (can specify multiple)
+  -f, -force        Skip confirmation prompt (worktrees with uncommitted changes
+                    or unpushed commits are skipped unless -discard-unsaved is given)
+  -discard-unsaved  Let -force delete worktrees with uncommitted changes or
+                    unpushed commits (destructive)
+  -a, -all          Show all worktrees for manual selection
+  -n, -dry-run      Preview targets without deleting
+  -q, -quiet        Suppress informational output (errors only)
+  -v, -verbose      Show hook execution logs
 
 Examples:
   claude-worktree feature/auth 'Implement authentication feature'
@@ -89,6 +92,7 @@ Examples:
   claude-worktree clean
   claude-worktree clean feature/auth
   claude-worktree clean feature/auth fix/bug-123
+  claude-worktree clean feature/auth -force -discard-unsaved
   claude-worktree clean -dry-run`);
 }
 
@@ -171,18 +175,22 @@ Arguments:
   <branch-name>  Specific branch(es) to clean (can specify multiple)
 
 Options:
-  -f, -force     Skip confirmation prompt
-  -a, -all       Show all worktrees for manual selection
-  -n, -dry-run   Preview targets without deleting
-  -q, -quiet     Suppress informational output (errors only)
-  -v, -verbose   Show hook execution logs
-  -h, -help      Show this help
+  -f, -force        Skip confirmation prompt (worktrees with uncommitted changes
+                    or unpushed commits are skipped unless -discard-unsaved is given)
+  -discard-unsaved  Let -force delete worktrees with uncommitted changes or
+                    unpushed commits (destructive)
+  -a, -all          Show all worktrees for manual selection
+  -n, -dry-run      Preview targets without deleting
+  -q, -quiet        Suppress informational output (errors only)
+  -v, -verbose      Show hook execution logs
+  -h, -help         Show this help
 
 Examples:
   claude-worktree clean
   claude-worktree clean feature/auth
   claude-worktree clean feature/auth fix/bug-123
   claude-worktree clean feature/auth -force
+  claude-worktree clean feature/auth -force -discard-unsaved
   claude-worktree clean -dry-run
   claude-worktree clean -all`);
 }
@@ -405,6 +413,7 @@ export function parseCleanArgs(args: string[]): CleanArgs {
   const { booleans, remaining } = extractOptions(args, {
     options: {
       force: { type: "boolean", flag: "-force", alias: "-f" },
+      discardUnsaved: { type: "boolean", flag: "-discard-unsaved" },
       all: { type: "boolean", flag: "-all", alias: "-a" },
       dryRun: { type: "boolean", flag: "-dry-run", alias: "-n" },
       quiet: { type: "boolean", flag: "-quiet", alias: "-q" },
@@ -423,6 +432,7 @@ export function parseCleanArgs(args: string[]): CleanArgs {
 
   return {
     force: booleans.force,
+    discardUnsaved: booleans.discardUnsaved,
     all: booleans.all,
     dryRun: booleans.dryRun,
     quiet: booleans.quiet,
