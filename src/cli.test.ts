@@ -82,6 +82,10 @@ describe("parseArgs", () => {
         args: { json: true, quiet: false, verbose: true, noStatus: false, fetch: false },
       });
     });
+
+    test("list with a positional argument throws", () => {
+      expect(() => parseArgs(["list", "some prompt"])).toThrow("Unexpected argument for list command");
+    });
   });
 
   describe("create", () => {
@@ -791,6 +795,22 @@ describe("parseListArgs", () => {
     expect(() => parseListArgs(["--json"])).toThrow(
       'Unknown option for list command: "--json" (did you mean "-json"?)',
     );
+  });
+
+  test("unexpected positional argument throws", () => {
+    expect(() => parseListArgs(["some prompt"])).toThrow('Unexpected argument for list command: "some prompt"');
+  });
+
+  test("unexpected positional argument mentions the reserved name", () => {
+    expect(() => parseListArgs(["foo"])).toThrow("reserved sub-command name");
+  });
+
+  test("multiple unexpected positional arguments are all reported", () => {
+    expect(() => parseListArgs(["foo", "bar"])).toThrow('Unexpected arguments for list command: "foo", "bar"');
+  });
+
+  test("options mixed with a positional still throw", () => {
+    expect(() => parseListArgs(["-json", "foo"])).toThrow("Unexpected argument for list command");
   });
 });
 

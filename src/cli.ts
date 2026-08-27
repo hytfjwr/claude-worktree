@@ -432,7 +432,7 @@ export function parseCleanArgs(args: string[]): CleanArgs {
 }
 
 export function parseListArgs(args: string[]): ListArgs {
-  const { booleans } = extractOptions(args, {
+  const { booleans, remaining } = extractOptions(args, {
     options: {
       json: { type: "boolean", flag: "-json", alias: "-j" },
       noStatus: { type: "boolean", flag: "-no-status" },
@@ -444,6 +444,19 @@ export function parseListArgs(args: string[]): ListArgs {
     ignoredFlags: ["-h", "-help", "--help"],
     unknownErrorPrefix: "Unknown option for list command",
   });
+
+  // "list" is a reserved sub-command name, so a stray positional is most likely a
+  // create command whose branch name collided with it — say so instead of ignoring it.
+  if (remaining.length > 0) {
+    const label = remaining.length === 1 ? "argument" : "arguments";
+    const quoted = remaining.map((arg) => `"${arg}"`).join(", ");
+    throw new UsageError(
+      `Unexpected ${label} for list command: ${quoted}\n\n` +
+        "The list command takes no positional arguments.\n\n" +
+        "Usage:\n  claude-worktree list [options]\n\n" +
+        'Note: "list" is a reserved sub-command name and cannot be used as a branch name.',
+    );
+  }
 
   return {
     json: booleans.json,
