@@ -298,4 +298,71 @@ describe("extractOptions", () => {
       expect(result.remaining).toEqual(["prompt text"]);
     });
   });
+
+  describe("value-taking options reject a flag as their value", () => {
+    const schema: OptionSchema = {
+      options: {
+        pull: { type: "boolean", flag: "-pull" },
+        danger: { type: "boolean", flag: "-danger", alias: "-d" },
+        base: { type: "string", flag: "-base", alias: "-b", errorMessage: "-base requires a branch name argument" },
+        plan: { type: "string", flag: "-plan", errorMessage: "-plan requires a file path argument" },
+      },
+      unknownHandling: "error",
+      ignoredFlags: ["-h", "-help"],
+    };
+
+    test("-plan followed by a known flag throws naming -plan", () => {
+      expect(() => extractOptions(["-plan", "-pull"], schema)).toThrow("-plan requires a file path argument");
+      expect(() => extractOptions(["-plan", "-pull"], schema)).toThrow('found the option "-pull"');
+    });
+
+    test("-base followed by a known flag throws naming -base", () => {
+      expect(() => extractOptions(["-base", "-pull"], schema)).toThrow("-base requires a branch name argument");
+    });
+
+    test("an alias counts as a known flag", () => {
+      expect(() => extractOptions(["-base", "-d"], schema)).toThrow("-base requires a branch name argument");
+    });
+
+    test("an ignored flag counts as a known flag", () => {
+      expect(() => extractOptions(["-base", "-help"], schema)).toThrow("-base requires a branch name argument");
+    });
+
+    test("a value that merely starts with a dash is still accepted", () => {
+      const result = extractOptions(["-plan", "-not-a-flag"], schema);
+      expect(result.strings.plan).toBe("-not-a-flag");
+    });
+
+    test("a normal value is unaffected", () => {
+      const result = extractOptions(["-base", "develop"], schema);
+      expect(result.strings.base).toBe("develop");
+    });
+  });
+
+  describe("duplicate options", () => {
+    const schema: OptionSchema = {
+      options: {
+        verbose: { type: "boolean", flag: "-verbose", alias: "-v" },
+        base: { type: "string", flag: "-base", alias: "-b", errorMessage: "-base requires a branch name argument" },
+      },
+      unknownHandling: "error",
+    };
+
+    test("the same string option twice throws", () => {
+      expect(() => extractOptions(["-base", "a", "-base", "b"], schema)).toThrow("Duplicate option: -base");
+    });
+
+    test("the error names both values so neither is silently dropped", () => {
+      expect(() => extractOptions(["-base", "a", "-base", "b"], schema)).toThrow('"-base a" and "-base b"');
+    });
+
+    test("an alias and its flag are the same option", () => {
+      expect(() => extractOptions(["-b", "a", "-base", "b"], schema)).toThrow("Duplicate option: -base");
+    });
+
+    test("repeated boolean flags stay allowed (idempotent)", () => {
+      const result = extractOptions(["-verbose", "-v"], schema);
+      expect(result.booleans.verbose).toBe(true);
+    });
+  });
 });

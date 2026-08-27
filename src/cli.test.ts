@@ -596,6 +596,26 @@ describe("parseCreateArgs", () => {
       'Unknown option: "-mode" (did you mean "-model"?)',
     );
   });
+
+  test("-plan swallowing the next flag throws", () => {
+    expect(() => parseCreateArgs(["foo", "-plan", "-pull"])).toThrow("-plan requires a file path argument");
+  });
+
+  test("-model swallowing the next flag throws", () => {
+    expect(() => parseCreateArgs(["foo", "p", "-model", "-danger"])).toThrow("-model requires a model name argument");
+  });
+
+  test("-base swallowing the next flag throws", () => {
+    expect(() => parseCreateArgs(["foo", "p", "-base", "-pull"])).toThrow("-base requires a branch name argument");
+  });
+
+  test("-base given twice throws instead of taking the last value", () => {
+    expect(() => parseCreateArgs(["foo", "p", "-base", "a", "-base", "b"])).toThrow("Duplicate option: -base");
+  });
+
+  test("-b and -base are the same option for duplicate detection", () => {
+    expect(() => parseCreateArgs(["foo", "p", "-b", "a", "-base", "b"])).toThrow("Duplicate option: -base");
+  });
 });
 
 describe("parseCleanArgs", () => {
