@@ -397,16 +397,24 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
     logWarn(`${icons.warning()} Some worktrees have running Claude sessions.`);
   }
 
-  // Load config for preClean hook
+  // Load config for the preClean/postClean hooks
   let repoRoot: string | undefined;
   let config: ProjectConfig | null = null;
   try {
     const git = await deps.getGitContext();
     repoRoot = git.repoRoot;
     config = await deps.loadProjectConfig(repoRoot);
+    if (!config) {
+      // No .claude-worktree.json: there are no hooks to run, which is not a failure.
+      logDebug("No project config found: no clean hooks to run.");
+    }
   } catch (error) {
     const message = getErrorMessage(error);
-    logDebug(`preClean hooks will be skipped: failed to get git context or load project config: ${message}`);
+    // Without the config we cannot tell whether hooks exist, so both are skipped.
+    // A preClean like "docker-compose down" silently not running would leave
+    // containers behind, so this has to be visible without -verbose.
+    logWarn(`Failed to load the project config: ${message}`);
+    logWarn("  The preClean and postClean hooks will be skipped for every worktree.");
   }
 
   // Execute deletion

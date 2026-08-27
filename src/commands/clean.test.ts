@@ -531,6 +531,63 @@ describe("executeClean", () => {
       expect(hookCalled).toBe(false);
       expect(result.deleted).toEqual([worktree.path]);
     });
+
+    test("warns that preClean and postClean will be skipped when getGitContext fails", async () => {
+      const worktree = makeWorktree();
+      const status = makeStatus({}, { canAutoClean: true });
+      const deps = makeDeps({
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
+        getWorktreeStatuses: async () => [status],
+        getGitContext: async () => {
+          throw new Error("not a git repository");
+        },
+      });
+
+      await executeClean({ ...defaultArgs, force: true }, deps);
+
+      const warnCalls = consoleWarnSpy.mock.calls.flat();
+      expect(
+        warnCalls.some((arg) => typeof arg === "string" && arg.includes("Failed to load the project config")),
+      ).toBe(true);
+      expect(warnCalls.some((arg) => typeof arg === "string" && arg.includes("preClean and postClean"))).toBe(true);
+    });
+
+    test("warns that preClean and postClean will be skipped when loadProjectConfig fails", async () => {
+      const worktree = makeWorktree();
+      const status = makeStatus({}, { canAutoClean: true });
+      const deps = makeDeps({
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
+        getWorktreeStatuses: async () => [status],
+        loadProjectConfig: async () => {
+          throw new Error("invalid json");
+        },
+      });
+
+      await executeClean({ ...defaultArgs, force: true }, deps);
+
+      const warnCalls = consoleWarnSpy.mock.calls.flat();
+      expect(
+        warnCalls.some((arg) => typeof arg === "string" && arg.includes("Failed to load the project config")),
+      ).toBe(true);
+      expect(warnCalls.some((arg) => typeof arg === "string" && arg.includes("preClean and postClean"))).toBe(true);
+    });
+
+    test("does not warn when there is simply no project config", async () => {
+      const worktree = makeWorktree();
+      const status = makeStatus({}, { canAutoClean: true });
+      const deps = makeDeps({
+        listWorktrees: async () => ({ worktrees: [worktree], mainBranch: "main" }),
+        getWorktreeStatuses: async () => [status],
+        loadProjectConfig: async () => null,
+      });
+
+      await executeClean({ ...defaultArgs, force: true }, deps);
+
+      const warnCalls = consoleWarnSpy.mock.calls.flat();
+      expect(
+        warnCalls.some((arg) => typeof arg === "string" && arg.includes("Failed to load the project config")),
+      ).toBe(false);
+    });
   });
 
   describe("postClean hook", () => {
