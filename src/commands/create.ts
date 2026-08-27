@@ -11,10 +11,12 @@ import {
   createWorktree,
   deleteLocalBranch,
   fetchOrigin,
+  getBranchCommitSha,
   getGitContext,
   getWorktreePath,
   listWorktrees,
   removeWorktree,
+  restoreLocalBranch,
   verifyBranchRef,
 } from "../core/git.ts";
 import { completeSession, deleteSession, saveSession } from "../core/session.ts";
@@ -56,6 +58,8 @@ const defaultDeps: CreateDeps = {
   createWorktree,
   removeWorktree,
   deleteLocalBranch,
+  getBranchCommitSha,
+  restoreLocalBranch,
   buildHookCommand,
   resolveHookTimeout,
   executeHookWithSpinner,
@@ -186,9 +190,25 @@ export function buildClaudeOptions(
 // =============================================================================
 
 /**
+ * What a destructive replacement step already removed, so a later failure can
+ * report it precisely and put back what is restorable.
+ *
+ * The removed worktree's uncommitted contents are gone for good once
+ * `git worktree remove --force` has run; only the branch ref can be restored.
+ */
+type DestroyedState = {
+  /** Path of the worktree that was removed. Its uncommitted contents are unrecoverable. */
+  removedWorktreePath?: string;
+  /** True when the branch was deleted, even if its commit could not be resolved beforehand. */
+  branchDeleted?: boolean;
+  /** Commit the deleted branch pointed at, when it could be resolved before deletion. */
+  deletedBranchSha?: string;
+};
+
+/**
  * Handle an existing worktree for the target branch.
  * Prompts user, runs clean hooks, removes worktree/branch.
- * Returns true if creation should continue, false if cancelled.
+ * Returns what was destroyed, or null if the user cancelled.
  */
 async function handleExistingWorktree(
   existingWorktree: WorktreeInfo,
@@ -197,7 +217,7 @@ async function handleExistingWorktree(
   branchName: string,
   verbose: boolean,
   deps: CreateDeps,
-): Promise<boolean> {
+): Promise<DestroyedState | null> {
   logInfo(`\n${icons.warning()}  Worktree already exists: ${existingWorktree.path}`);
 
   let confirmed: boolean;
@@ -210,7 +230,7 @@ async function handleExistingWorktree(
 
   if (!confirmed) {
     logInfo("Cancelled.");
-    return false;
+    return null;
   }
 
   const existingSlot = await deps.readSlot(existingWorktree.path);
@@ -230,13 +250,24 @@ async function handleExistingWorktree(
     }
   }
 
+  const destroyed: DestroyedState = {};
+
   // Delete existing worktree and branch
   logInfo(`${icons.trash()}  Deleting existing worktree...`);
   await deps.removeWorktree(existingWorktree.path, existingWorktree.isDirty);
+  destroyed.removedWorktreePath = existingWorktree.path;
   logInfo(`  ${icons.success()} Worktree deleted: ${existingWorktree.path}`);
+
+  // Capture the branch tip before deleting it so a failed `git worktree add`
+  // can put the ref back (see runCreate).
+  const branchShaBeforeDelete = await deps.getBranchCommitSha(branchName);
 
   try {
     await deps.deleteLocalBranch(branchName, true);
+    destroyed.branchDeleted = true;
+    if (branchShaBeforeDelete) {
+      destroyed.deletedBranchSha = branchShaBeforeDelete;
+    }
     logInfo(`  ${icons.success()} Branch deleted: ${branchName}`);
   } catch {
     // Ignore if branch does not exist
@@ -262,18 +293,18 @@ async function handleExistingWorktree(
   await Promise.all([deps.deleteSlot(existingWorktree.path), deps.deleteSession(existingWorktree.path)]);
 
   logInfo("");
-  return true;
+  return destroyed;
 }
 
 /**
  * Handle an existing branch (without worktree) for the target branch name.
  * Prompts user and deletes the branch if confirmed.
- * Returns true if creation should continue, false if cancelled/failed.
+ * Returns what was destroyed, or null if the user cancelled or deletion failed.
  */
-async function handleExistingBranch(branchName: string, deps: CreateDeps): Promise<boolean> {
+async function handleExistingBranch(branchName: string, deps: CreateDeps): Promise<DestroyedState | null> {
   const branchAlreadyExists = await deps.branchExists(branchName);
   if (!branchAlreadyExists) {
-    return true;
+    return {};
   }
 
   logInfo(`\n${icons.warning()}  Branch already exists: ${branchName}`);
@@ -281,8 +312,12 @@ async function handleExistingBranch(branchName: string, deps: CreateDeps): Promi
   const confirmed = await deps.confirm("Delete the branch and create a new one?");
   if (!confirmed) {
     logInfo("Cancelled.");
-    return false;
+    return null;
   }
+
+  // Capture the branch tip before deleting it so a failed `git worktree add`
+  // can put the ref back (see runCreate).
+  const branchShaBeforeDelete = await deps.getBranchCommitSha(branchName);
 
   logInfo(`${icons.trash()}  Deleting existing branch...`);
   try {
@@ -291,10 +326,61 @@ async function handleExistingBranch(branchName: string, deps: CreateDeps): Promi
   } catch (e) {
     const errorMessage = getErrorMessage(e);
     logInfo(`  ${icons.error()} Failed to delete branch: ${errorMessage}`);
-    return false;
+    return null;
   }
   logInfo("");
-  return true;
+
+  const destroyed: DestroyedState = { branchDeleted: true };
+  if (branchShaBeforeDelete) {
+    destroyed.deletedBranchSha = branchShaBeforeDelete;
+  }
+  return destroyed;
+}
+
+/**
+ * Build the error for a `git worktree add` failure that happened after an existing
+ * worktree or branch was already replaced. Restores the deleted branch ref when the
+ * commit is known; the removed worktree's uncommitted contents cannot be restored, so
+ * the message names exactly what was destroyed and what was not created.
+ */
+async function buildReplacementFailureError(
+  cause: unknown,
+  branchName: string,
+  worktreePath: string,
+  destroyed: DestroyedState,
+  deps: CreateDeps,
+): Promise<Error> {
+  const lines = [
+    getErrorMessage(cause),
+    "",
+    `The new worktree was NOT created: ${worktreePath}`,
+    "",
+    "Already deleted before this failure:",
+  ];
+
+  if (destroyed.removedWorktreePath) {
+    lines.push(`  - Worktree removed: ${destroyed.removedWorktreePath}`);
+    lines.push("    Its uncommitted changes cannot be recovered.");
+  }
+
+  if (destroyed.branchDeleted) {
+    const sha = destroyed.deletedBranchSha;
+    if (!sha) {
+      lines.push(`  - Branch deleted: ${branchName}`);
+      lines.push("    Its commit could not be resolved beforehand, so the ref cannot be restored.");
+    } else {
+      try {
+        await deps.restoreLocalBranch(branchName, sha);
+        lines.push(`  - Branch deleted: ${branchName} — restored to ${sha}`);
+      } catch (restoreError) {
+        lines.push(`  - Branch deleted: ${branchName} (was at ${sha})`);
+        lines.push(`    Restore failed: ${getErrorMessage(restoreError)}`);
+        lines.push(`    Restore it manually with: git branch ${branchName} ${sha}`);
+      }
+    }
+  }
+
+  return new GitError(lines.join("\n"));
 }
 
 /**
@@ -655,9 +741,16 @@ export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps
     logInfo(`${icons.sparkle()} Pull: fetch latest from remote`);
   }
 
+  // Track what the replacement steps below destroy. There is no ordering that creates
+  // before destroying: `git worktree add -b <branch>` refuses to run while <branch>
+  // still exists, and the replacement worktree normally occupies the exact same path
+  // as the one being removed. So instead capture enough state to put the branch ref
+  // back and to report precisely what was lost if the create then fails.
+  const destroyed: DestroyedState = {};
+
   // Handle existing worktree
   if (existingWorktree) {
-    const shouldContinue = await handleExistingWorktree(
+    const outcome = await handleExistingWorktree(
       existingWorktree,
       config,
       git.repoRoot,
@@ -665,17 +758,27 @@ export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps
       !!args.verbose,
       deps,
     );
-    if (!shouldContinue) return;
+    if (!outcome) return;
+    Object.assign(destroyed, outcome);
   }
 
   // Handle existing branch (without worktree)
   if (!existingWorktree) {
-    const shouldContinue = await handleExistingBranch(branchName, deps);
-    if (!shouldContinue) return;
+    const outcome = await handleExistingBranch(branchName, deps);
+    if (!outcome) return;
+    Object.assign(destroyed, outcome);
   }
 
   // Create worktree
-  await deps.createWorktree(branchName, worktreePath, worktreeBaseBranch);
+  try {
+    await deps.createWorktree(branchName, worktreePath, worktreeBaseBranch);
+  } catch (error) {
+    if (!destroyed.removedWorktreePath && !destroyed.branchDeleted) {
+      // Nothing was replaced — the original error already says everything.
+      throw error;
+    }
+    throw await buildReplacementFailureError(error, branchName, worktreePath, destroyed, deps);
+  }
 
   // Register signal handlers for graceful cleanup during creation phase.
   // Removed before launching Claude (spawnInteractive has its own signal forwarding,
