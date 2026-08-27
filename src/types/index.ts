@@ -33,9 +33,11 @@ export type {
   WorktreeStatus,
 } from "./git.ts";
 export type { PullRequestInfo } from "./github.ts";
+export type { HelpEntry, HelpSection, HelpSectionKind, HelpSpec } from "./help.ts";
 export type { ListArgs, ListDeps, ListResult, WorktreeListEntry } from "./list.ts";
 export type { Logger } from "./logger.ts";
 export type { BooleanOptionDef, ExtractResult, OptionDef, OptionSchema, StringOptionDef } from "./options.ts";
+export type { ConfirmOptions } from "./prompt.ts";
 export type { ResumeDeps } from "./resume.ts";
 export type { RollbackOptions } from "./rollback.ts";
 export type { SelectItem } from "./select.ts";

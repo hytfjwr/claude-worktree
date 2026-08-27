@@ -174,7 +174,7 @@ function buildConfirmMessage(count: number, hasRunningSessions: boolean, hasRisk
   if (hasRunningSessions) warnings.push("running Claude sessions");
   if (hasRiskyTargets) warnings.push("uncommitted changes or unpushed commits");
   if (warnings.length > 0) {
-    return `${icons.warning()} Some worktrees have ${warnings.join(" and ")}. Delete ${count} worktree(s)?`;
+    return `Some worktrees have ${warnings.join(" and ")}. Delete ${count} worktree(s)?`;
   }
   return `Delete ${count} worktree(s)?`;
 }
@@ -405,7 +405,10 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
   if (!args.force) {
     logInfo("");
     const confirmMessage = buildConfirmMessage(toDelete.length, hasRunningSessions, hasRiskyTargets);
-    const confirmed = await deps.confirm(confirmMessage);
+    const confirmed = await deps.confirm(confirmMessage, {
+      danger: true,
+      details: toDelete.map((status) => status.worktree.branch || status.worktree.path),
+    });
     if (!confirmed) {
       logInfo("Cancelled.");
       return result;

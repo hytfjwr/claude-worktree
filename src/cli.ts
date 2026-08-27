@@ -6,221 +6,358 @@ import { executeRunInPane, parseRunInPaneArgs } from "./commands/run-in-pane.ts"
 import { UsageError } from "./core/errors.ts";
 import { findClosestCommand } from "./core/suggest.ts";
 import { extractOptions } from "./options.ts";
-import type { CleanArgs, Command, CreateArgs, ListArgs, ResumeArgs } from "./types/index.ts";
+import type { CleanArgs, Command, CreateArgs, HelpSpec, ListArgs, ResumeArgs } from "./types/index.ts";
+import { renderHelp } from "./ui/help.ts";
 import { createQuietLogger, logInfo, setLogger } from "./ui/logger.ts";
 import { setQuietMode } from "./ui/spinner.ts";
 import { getVersion } from "./version.ts";
 
+const GLOBAL_HELP: HelpSpec = {
+  name: "claude-worktree",
+  tagline: "CLI for parallel development with git worktree + Claude Code",
+  usage: [
+    "claude-worktree <branch-name> <prompt>",
+    "claude-worktree <branch-name> -plan <file-path>",
+    "claude-worktree resume [<branch-name>] [<prompt>]",
+    "claude-worktree list [options]",
+    "claude-worktree clean [<branch-name>...] [options]",
+  ],
+  sections: [
+    {
+      title: "Commands",
+      kind: "commands",
+      entries: [
+        { arg: "<branch-name>", description: "Create a new worktree with Claude Code" },
+        { arg: "resume", description: "Resume a Claude session in an existing worktree" },
+        { arg: "list", description: "List existing worktrees with status" },
+        { arg: "clean", description: "Remove unnecessary worktrees" },
+      ],
+    },
+    {
+      title: "Arguments",
+      kind: "arguments",
+      entries: [
+        { arg: "<branch-name>", description: "Branch name for the git worktree to create" },
+        { arg: "<prompt>", description: "Prompt to pass to Claude Code" },
+      ],
+    },
+    {
+      title: "Options",
+      kind: "options",
+      entries: [
+        {
+          flags: "-p, -pane",
+          description: "Open in a new pane (requires WezTerm or tmux; default: run in current terminal)",
+        },
+        { flags: "-plan <file>", description: "Read prompt from a plan file (cannot be used with inline prompt)" },
+        { flags: "-b, -base <branch>", description: "Specify base branch (default: current branch)" },
+        { flags: "-model <name>", description: "Language model to use (e.g. sonnet, opus; passed to claude --model)" },
+        {
+          flags: "-d, -danger",
+          description: "Run Claude without permission prompts (uses --dangerously-skip-permissions)",
+        },
+        {
+          flags: "-m, -merge",
+          description:
+            "Auto-merge into base branch and cleanup after task completion (cannot be used with -draft or -pr)",
+        },
+        {
+          flags: "-draft",
+          description: "Auto-create Draft PR after task completion (cannot be used with -merge or -pr)",
+        },
+        { flags: "-pr", description: "Auto-create PR after task completion (cannot be used with -merge or -draft)" },
+        { flags: "-pull", description: "Fetch latest base branch from remote before creating worktree" },
+        { flags: "-n, -dry-run", description: "Preview what would be created without executing" },
+        { flags: "-q, -quiet", description: "Suppress informational output (errors only)" },
+        { flags: "-v, -verbose", description: "Show hook execution logs" },
+        { flags: "-h, -help, --help", description: "Show this help" },
+        { flags: "-version, --version", description: "Show version number" },
+      ],
+    },
+    {
+      title: "Resume options",
+      kind: "options",
+      entries: [
+        { flags: "-p, -pane", description: "Open in a new pane (requires WezTerm or tmux)" },
+        {
+          flags: "-d, -danger",
+          description: "Run Claude without permission prompts (uses --dangerously-skip-permissions)",
+        },
+        { flags: "-model <name>", description: "Language model to use (passed to claude --model)" },
+        { flags: "-q, -quiet", description: "Suppress informational output (errors only)" },
+        { flags: "-v, -verbose", description: "Show verbose output" },
+      ],
+    },
+    {
+      title: "List options",
+      kind: "options",
+      entries: [
+        { flags: "-j, -json", description: "Output as JSON" },
+        { flags: "-no-status", description: "Hide Claude session status (shown by default)" },
+        { flags: "-fetch", description: "Fetch from remote before listing (default: local only)" },
+        { flags: "-q, -quiet", description: "Suppress informational output (errors only)" },
+        { flags: "-v, -verbose", description: "Show full paths and details" },
+      ],
+    },
+    {
+      title: "Clean options",
+      kind: "options",
+      entries: [
+        { arg: "<branch-name>", description: "Specific branch(es) to clean (can specify multiple)" },
+        {
+          flags: "-f, -force",
+          description:
+            "Skip confirmation prompt (worktrees with uncommitted changes or unpushed commits are skipped unless -discard-unsaved is given)",
+        },
+        {
+          flags: "-discard-unsaved",
+          description: "Let -force delete worktrees with uncommitted changes or unpushed commits (destructive)",
+        },
+        { flags: "-a, -all", description: "Show all worktrees for manual selection" },
+        { flags: "-n, -dry-run", description: "Preview targets without deleting" },
+        { flags: "-q, -quiet", description: "Suppress informational output (errors only)" },
+        { flags: "-v, -verbose", description: "Show hook execution logs" },
+      ],
+    },
+    {
+      title: "Examples",
+      kind: "examples",
+      entries: [
+        { arg: "claude-worktree feature/auth 'Implement authentication feature'" },
+        { arg: "claude-worktree feature/auth 'Implement authentication feature' -p" },
+        { arg: "claude-worktree fix/bug-123 'Fix login bug' -pane" },
+        { arg: "claude-worktree feature/api -plan ./plan.md" },
+        { arg: "claude-worktree feature/auth 'Implement authentication feature' -danger" },
+        { arg: "claude-worktree feature/auth 'Implement authentication feature' -merge" },
+        { arg: "claude-worktree feature/auth 'Implement authentication feature' -draft" },
+        { arg: "claude-worktree feature/auth 'Implement authentication feature' -draft -base main" },
+        { arg: "claude-worktree feature/auth 'Implement authentication feature' -pr" },
+        { arg: "claude-worktree feature/auth 'Implement authentication feature' -pr -base main" },
+        { arg: "claude-worktree feature/auth 'Prompt' -dry-run" },
+        { arg: "claude-worktree resume feature/auth" },
+        { arg: "claude-worktree resume feature/auth 'Continue implementation'" },
+        { arg: "claude-worktree resume" },
+        { arg: "claude-worktree list" },
+        { arg: "claude-worktree list -json" },
+        { arg: "claude-worktree clean" },
+        { arg: "claude-worktree clean feature/auth" },
+        { arg: "claude-worktree clean feature/auth fix/bug-123" },
+        { arg: "claude-worktree clean feature/auth -force -discard-unsaved" },
+        { arg: "claude-worktree clean -dry-run" },
+      ],
+    },
+  ],
+};
+
 export function showHelp(): void {
-  logInfo(`claude-worktree - CLI for parallel development with git worktree + Claude Code
-
-Usage:
-  claude-worktree <branch-name> <prompt>
-  claude-worktree <branch-name> -plan <file-path>
-  claude-worktree resume [<branch-name>] [<prompt>]
-  claude-worktree list [options]
-  claude-worktree clean [<branch-name>...] [options]
-
-Commands:
-  <branch-name>  Create a new worktree with Claude Code
-  resume         Resume a Claude session in an existing worktree
-  list           List existing worktrees with status
-  clean          Remove unnecessary worktrees
-
-Arguments:
-  <branch-name>  Branch name for the git worktree to create
-  <prompt>       Prompt to pass to Claude Code
-
-Options:
-  -p, -pane       Open in a new pane (requires WezTerm or tmux; default: run in current terminal)
-  -plan <file>    Read prompt from a plan file (cannot be used with inline prompt)
-  -b, -base <branch>  Specify base branch (default: current branch)
-  -model <name>   Language model to use (e.g. sonnet, opus; passed to claude --model)
-  -d, -danger     Run Claude without permission prompts (uses --dangerously-skip-permissions)
-  -m, -merge      Auto-merge into base branch and cleanup after task completion (cannot be used with -draft or -pr)
-  -draft          Auto-create Draft PR after task completion (cannot be used with -merge or -pr)
-  -pr             Auto-create PR after task completion (cannot be used with -merge or -draft)
-  -pull           Fetch latest base branch from remote before creating worktree
-  -n, -dry-run    Preview what would be created without executing
-  -q, -quiet      Suppress informational output (errors only)
-  -v, -verbose    Show hook execution logs
-  -h, -help, --help    Show this help
-  -version, --version  Show version number
-
-Resume options:
-  -p, -pane      Open in a new pane (requires WezTerm or tmux)
-  -d, -danger    Run Claude without permission prompts (uses --dangerously-skip-permissions)
-  -model <name>  Language model to use (passed to claude --model)
-  -q, -quiet     Suppress informational output (errors only)
-  -v, -verbose   Show verbose output
-
-List options:
-  -j, -json        Output as JSON
-  -no-status       Hide Claude session status (shown by default)
-  -fetch           Fetch from remote before listing (default: local only)
-  -q, -quiet       Suppress informational output (errors only)
-  -v, -verbose     Show full paths and details
-
-Clean options:
-  <branch-name>     Specific branch(es) to clean (can specify multiple)
-  -f, -force        Skip confirmation prompt (worktrees with uncommitted changes
-                    or unpushed commits are skipped unless -discard-unsaved is given)
-  -discard-unsaved  Let -force delete worktrees with uncommitted changes or
-                    unpushed commits (destructive)
-  -a, -all          Show all worktrees for manual selection
-  -n, -dry-run      Preview targets without deleting
-  -q, -quiet        Suppress informational output (errors only)
-  -v, -verbose      Show hook execution logs
-
-Examples:
-  claude-worktree feature/auth 'Implement authentication feature'
-  claude-worktree feature/auth 'Implement authentication feature' -p
-  claude-worktree fix/bug-123 'Fix login bug' -pane
-  claude-worktree feature/api -plan ./plan.md
-  claude-worktree feature/auth 'Implement authentication feature' -danger
-  claude-worktree feature/auth 'Implement authentication feature' -merge
-  claude-worktree feature/auth 'Implement authentication feature' -draft
-  claude-worktree feature/auth 'Implement authentication feature' -draft -base main
-  claude-worktree feature/auth 'Implement authentication feature' -pr
-  claude-worktree feature/auth 'Implement authentication feature' -pr -base main
-  claude-worktree feature/auth 'Prompt' -dry-run
-  claude-worktree resume feature/auth
-  claude-worktree resume feature/auth 'Continue implementation'
-  claude-worktree resume
-  claude-worktree list
-  claude-worktree list -json
-  claude-worktree clean
-  claude-worktree clean feature/auth
-  claude-worktree clean feature/auth fix/bug-123
-  claude-worktree clean feature/auth -force -discard-unsaved
-  claude-worktree clean -dry-run`);
+  logInfo(renderHelp(GLOBAL_HELP));
 }
+
+const CREATE_HELP: HelpSpec = {
+  name: "claude-worktree <branch-name>",
+  tagline: "Create a new worktree and launch Claude Code",
+  description:
+    "Creates a git worktree for a new branch, then starts a Claude Code session. Optionally opens in a new pane (WezTerm or tmux) for parallel development.",
+  usage: ["claude-worktree <branch-name> <prompt>", "claude-worktree <branch-name> -plan <file-path>"],
+  sections: [
+    {
+      title: "Arguments",
+      kind: "arguments",
+      entries: [
+        { arg: "<branch-name>", description: "Branch name for the git worktree to create" },
+        { arg: "<prompt>", description: "Prompt to pass to Claude Code" },
+      ],
+    },
+    {
+      title: "Options",
+      kind: "options",
+      entries: [
+        {
+          flags: "-p, -pane",
+          description: "Open in a new pane (requires WezTerm or tmux; default: run in current terminal)",
+        },
+        { flags: "-plan <file>", description: "Read prompt from a plan file (cannot be used with inline prompt)" },
+        { flags: "-b, -base <branch>", description: "Specify base branch (default: current branch)" },
+        { flags: "-model <name>", description: "Language model to use (e.g. sonnet, opus; passed to claude --model)" },
+        {
+          flags: "-d, -danger",
+          description: "Run Claude without permission prompts (uses --dangerously-skip-permissions)",
+        },
+        {
+          flags: "-m, -merge",
+          description:
+            "Auto-merge into base branch and cleanup after task completion (cannot be used with -draft or -pr)",
+        },
+        {
+          flags: "-draft",
+          description: "Auto-create Draft PR after task completion (cannot be used with -merge or -pr)",
+        },
+        { flags: "-pr", description: "Auto-create PR after task completion (cannot be used with -merge or -draft)" },
+        { flags: "-pull", description: "Fetch latest base branch from remote before creating worktree" },
+        { flags: "-n, -dry-run", description: "Preview what would be created without executing" },
+        { flags: "-q, -quiet", description: "Suppress informational output (errors only)" },
+        { flags: "-v, -verbose", description: "Show hook execution logs" },
+        { flags: "-h, -help, --help", description: "Show this help" },
+      ],
+    },
+    {
+      title: "Examples",
+      kind: "examples",
+      entries: [
+        { arg: "claude-worktree feature/auth 'Implement authentication feature'" },
+        { arg: "claude-worktree feature/auth 'Implement auth' -pane" },
+        { arg: "claude-worktree feature/auth -plan ./plan.md" },
+        { arg: "claude-worktree feature/auth 'Implement auth' -base develop" },
+        { arg: "claude-worktree feature/auth 'Implement auth' -merge" },
+        { arg: "claude-worktree feature/auth 'Implement auth' -draft -base main" },
+        { arg: "claude-worktree feature/auth 'Implement auth' -pr -base main" },
+        { arg: "claude-worktree feature/auth 'Implement auth' -dry-run" },
+      ],
+    },
+  ],
+};
 
 export function showCreateHelp(): void {
-  logInfo(`claude-worktree <branch-name> - Create a new worktree and launch Claude Code
-
-Creates a git worktree for a new branch, then starts a Claude Code session.
-Optionally opens in a new pane (WezTerm or tmux) for parallel development.
-
-Usage:
-  claude-worktree <branch-name> <prompt>
-  claude-worktree <branch-name> -plan <file-path>
-
-Arguments:
-  <branch-name>  Branch name for the git worktree to create
-  <prompt>       Prompt to pass to Claude Code
-
-Options:
-  -p, -pane            Open in a new pane (requires WezTerm or tmux; default: run in current terminal)
-  -plan <file>         Read prompt from a plan file (cannot be used with inline prompt)
-  -b, -base <branch>   Specify base branch (default: current branch)
-  -model <name>        Language model to use (e.g. sonnet, opus; passed to claude --model)
-  -d, -danger          Run Claude without permission prompts (uses --dangerously-skip-permissions)
-  -m, -merge           Auto-merge into base branch and cleanup after task completion (cannot be used with -draft or -pr)
-  -draft               Auto-create Draft PR after task completion (cannot be used with -merge or -pr)
-  -pr                  Auto-create PR after task completion (cannot be used with -merge or -draft)
-  -pull                Fetch latest base branch from remote before creating worktree
-  -n, -dry-run         Preview what would be created without executing
-  -q, -quiet           Suppress informational output (errors only)
-  -v, -verbose         Show hook execution logs
-  -h, -help, --help    Show this help
-
-Examples:
-  claude-worktree feature/auth 'Implement authentication feature'
-  claude-worktree feature/auth 'Implement auth' -pane
-  claude-worktree feature/auth -plan ./plan.md
-  claude-worktree feature/auth 'Implement auth' -base develop
-  claude-worktree feature/auth 'Implement auth' -merge
-  claude-worktree feature/auth 'Implement auth' -draft -base main
-  claude-worktree feature/auth 'Implement auth' -pr -base main
-  claude-worktree feature/auth 'Implement auth' -dry-run`);
+  logInfo(renderHelp(CREATE_HELP));
 }
+
+const LIST_HELP: HelpSpec = {
+  name: "claude-worktree list",
+  tagline: "List existing worktrees with status",
+  description:
+    "Displays all git worktrees managed by claude-worktree, including branch info, commit details, and optionally Claude session status.",
+  usage: ["claude-worktree list [options]"],
+  sections: [
+    {
+      title: "Options",
+      kind: "options",
+      entries: [
+        { flags: "-j, -json", description: "Output as JSON (machine-readable format)" },
+        { flags: "-no-status", description: "Hide Claude session status (shown by default)" },
+        { flags: "-fetch", description: "Fetch from remote before listing (default: local only)" },
+        { flags: "-q, -quiet", description: "Suppress informational output (errors only)" },
+        { flags: "-v, -verbose", description: "Show full paths and details" },
+        { flags: "-h, -help, --help", description: "Show this help" },
+      ],
+    },
+    {
+      title: "Examples",
+      kind: "examples",
+      entries: [
+        { arg: "claude-worktree list" },
+        { arg: "claude-worktree list -fetch" },
+        { arg: "claude-worktree list -no-status" },
+        { arg: "claude-worktree list -json" },
+        { arg: "claude-worktree list -verbose" },
+      ],
+    },
+  ],
+};
 
 export function showListHelp(): void {
-  logInfo(`claude-worktree list - List existing worktrees with status
-
-Displays all git worktrees managed by claude-worktree, including branch info,
-commit details, and optionally Claude session status.
-
-Usage:
-  claude-worktree list [options]
-
-Options:
-  -j, -json        Output as JSON (machine-readable format)
-  -no-status       Hide Claude session status (shown by default)
-  -fetch           Fetch from remote before listing (default: local only)
-  -q, -quiet       Suppress informational output (errors only)
-  -v, -verbose     Show full paths and details
-  -h, -help, --help  Show this help
-
-Examples:
-  claude-worktree list
-  claude-worktree list -fetch
-  claude-worktree list -no-status
-  claude-worktree list -json
-  claude-worktree list -verbose`);
+  logInfo(renderHelp(LIST_HELP));
 }
+
+const CLEAN_HELP: HelpSpec = {
+  name: "claude-worktree clean",
+  tagline: "Remove unnecessary worktrees",
+  description:
+    "Identifies worktrees that can be safely removed (merged branches, deleted remote branches) and prompts for confirmation before deleting. Specify branch names to clean specific worktrees directly.",
+  usage: ["claude-worktree clean [<branch-name>...] [options]"],
+  sections: [
+    {
+      title: "Arguments",
+      kind: "arguments",
+      entries: [{ arg: "<branch-name>", description: "Specific branch(es) to clean (can specify multiple)" }],
+    },
+    {
+      title: "Options",
+      kind: "options",
+      entries: [
+        {
+          flags: "-f, -force",
+          description:
+            "Skip confirmation prompt (worktrees with uncommitted changes or unpushed commits are skipped unless -discard-unsaved is given)",
+        },
+        {
+          flags: "-discard-unsaved",
+          description: "Let -force delete worktrees with uncommitted changes or unpushed commits (destructive)",
+        },
+        { flags: "-a, -all", description: "Show all worktrees for manual selection" },
+        { flags: "-n, -dry-run", description: "Preview targets without deleting" },
+        { flags: "-q, -quiet", description: "Suppress informational output (errors only)" },
+        { flags: "-v, -verbose", description: "Show hook execution logs" },
+        { flags: "-h, -help, --help", description: "Show this help" },
+      ],
+    },
+    {
+      title: "Examples",
+      kind: "examples",
+      entries: [
+        { arg: "claude-worktree clean" },
+        { arg: "claude-worktree clean feature/auth" },
+        { arg: "claude-worktree clean feature/auth fix/bug-123" },
+        { arg: "claude-worktree clean feature/auth -force" },
+        { arg: "claude-worktree clean feature/auth -force -discard-unsaved" },
+        { arg: "claude-worktree clean -dry-run" },
+        { arg: "claude-worktree clean -all" },
+      ],
+    },
+  ],
+};
 
 export function showCleanHelp(): void {
-  logInfo(`claude-worktree clean - Remove unnecessary worktrees
-
-Identifies worktrees that can be safely removed (merged branches, deleted remote
-branches) and prompts for confirmation before deleting.
-Specify branch names to clean specific worktrees directly.
-
-Usage:
-  claude-worktree clean [<branch-name>...] [options]
-
-Arguments:
-  <branch-name>  Specific branch(es) to clean (can specify multiple)
-
-Options:
-  -f, -force        Skip confirmation prompt (worktrees with uncommitted changes
-                    or unpushed commits are skipped unless -discard-unsaved is given)
-  -discard-unsaved  Let -force delete worktrees with uncommitted changes or
-                    unpushed commits (destructive)
-  -a, -all          Show all worktrees for manual selection
-  -n, -dry-run      Preview targets without deleting
-  -q, -quiet        Suppress informational output (errors only)
-  -v, -verbose      Show hook execution logs
-  -h, -help, --help Show this help
-
-Examples:
-  claude-worktree clean
-  claude-worktree clean feature/auth
-  claude-worktree clean feature/auth fix/bug-123
-  claude-worktree clean feature/auth -force
-  claude-worktree clean feature/auth -force -discard-unsaved
-  claude-worktree clean -dry-run
-  claude-worktree clean -all`);
+  logInfo(renderHelp(CLEAN_HELP));
 }
 
+const RESUME_HELP: HelpSpec = {
+  name: "claude-worktree resume",
+  tagline: "Resume a Claude session in an existing worktree",
+  description:
+    "Resumes a Claude Code session using --continue in an existing worktree. If no branch name is specified, an interactive selection prompt is shown.",
+  usage: ["claude-worktree resume [<branch-name>] [<prompt>]"],
+  sections: [
+    {
+      title: "Arguments",
+      kind: "arguments",
+      entries: [
+        { arg: "<branch-name>", description: "Branch name of the worktree to resume (optional)" },
+        { arg: "<prompt>", description: "Additional prompt message for the resumed session (optional)" },
+      ],
+    },
+    {
+      title: "Options",
+      kind: "options",
+      entries: [
+        {
+          flags: "-p, -pane",
+          description: "Open in a new pane (requires WezTerm or tmux; default: run in current terminal)",
+        },
+        {
+          flags: "-d, -danger",
+          description: "Run Claude without permission prompts (uses --dangerously-skip-permissions)",
+        },
+        { flags: "-model <name>", description: "Language model to use (passed to claude --model)" },
+        { flags: "-q, -quiet", description: "Suppress informational output (errors only)" },
+        { flags: "-v, -verbose", description: "Show verbose output" },
+        { flags: "-h, -help, --help", description: "Show this help" },
+      ],
+    },
+    {
+      title: "Examples",
+      kind: "examples",
+      entries: [
+        { arg: "claude-worktree resume feature/auth" },
+        { arg: "claude-worktree resume feature/auth 'Continue the authentication implementation'" },
+        { arg: "claude-worktree resume" },
+        { arg: "claude-worktree resume feature/auth -pane" },
+      ],
+    },
+  ],
+};
+
 export function showResumeHelp(): void {
-  logInfo(`claude-worktree resume - Resume a Claude session in an existing worktree
-
-Resumes a Claude Code session using --continue in an existing worktree.
-If no branch name is specified, an interactive selection prompt is shown.
-
-Usage:
-  claude-worktree resume [<branch-name>] [<prompt>]
-
-Arguments:
-  <branch-name>  Branch name of the worktree to resume (optional)
-  <prompt>       Additional prompt message for the resumed session (optional)
-
-Options:
-  -p, -pane      Open in a new pane (requires WezTerm or tmux; default: run in current terminal)
-  -d, -danger    Run Claude without permission prompts (uses --dangerously-skip-permissions)
-  -model <name>  Language model to use (passed to claude --model)
-  -q, -quiet     Suppress informational output (errors only)
-  -v, -verbose   Show verbose output
-  -h, -help, --help  Show this help
-
-Examples:
-  claude-worktree resume feature/auth
-  claude-worktree resume feature/auth 'Continue the authentication implementation'
-  claude-worktree resume
-  claude-worktree resume feature/auth -pane`);
+  logInfo(renderHelp(RESUME_HELP));
 }
 
 const CREATE_USAGE = "claude-worktree <branch-name> <prompt>\n" + "  claude-worktree <branch-name> -plan <file-path>";

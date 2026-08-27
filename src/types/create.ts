@@ -1,6 +1,7 @@
 import type { ClaudeOptions } from "./claude.ts";
 import type { HookExecOptions, HookExecResult, HookVars, ProjectConfig } from "./config.ts";
 import type { GitContext, ListWorktreesResult } from "./git.ts";
+import type { ConfirmOptions } from "./prompt.ts";
 import type { RollbackOptions } from "./rollback.ts";
 import type { SessionInfo } from "./session.ts";
 import type { Spinner } from "./spinner.ts";
@@ -41,7 +42,7 @@ export type CreateDeps = {
   ensurePaneBackend: (usageHint: string) => Promise<TerminalBackend>;
 
   // UI
-  confirm: (message: string) => Promise<boolean>;
+  confirm: (message: string, options?: ConfirmOptions) => Promise<boolean>;
   startSpinner: (message: string) => Spinner;
 
   // Rollback
