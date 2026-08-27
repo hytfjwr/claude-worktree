@@ -1,10 +1,11 @@
 import * as readline from "node:readline";
 
+import { padToWidth, stringWidth } from "../core/width.ts";
 import type { SelectItem } from "../types/index.ts";
 import { cyan, dim, green } from "./color.ts";
 import { icons } from "./icons.ts";
 import { logInfo } from "./logger.ts";
-import { countVisualLines, stripAnsi } from "./spinner.ts";
+import { countVisualLines } from "./spinner.ts";
 
 export type { SelectItem } from "../types/index.ts";
 
@@ -68,7 +69,7 @@ function parseKey(data: Buffer): KeyAction {
 function computeLabelWidth<T>(items: SelectItem<T>[]): number {
   let max = 0;
   for (const item of items) {
-    const len = stripAnsi(item.label).length;
+    const len = stringWidth(item.label);
     if (len > max) max = len;
   }
   return max;
@@ -81,9 +82,8 @@ function renderSingle<T>(items: SelectItem<T>[], cursor: number, labelWidth: num
     const isCurrent = i === cursor;
     const pointer = isCurrent ? cyan(icons.cursor()) : " ";
     const label = isCurrent ? cyan(item.label) : item.label;
-    const padding = " ".repeat(Math.max(0, labelWidth - stripAnsi(item.label).length));
     const desc = item.description ? dim(`  ${item.description}`) : "";
-    out += `  ${pointer} ${label}${padding}${desc}\n`;
+    out += `  ${pointer} ${padToWidth(label, labelWidth)}${desc}\n`;
   }
   return out;
 }
@@ -97,7 +97,6 @@ function renderMulti<T>(items: SelectItem<T>[], cursor: number, selected: Set<nu
     const pointer = isCurrent ? cyan(icons.cursor()) : " ";
     const check = isSelected ? green(icons.checked()) : dim(icons.unchecked());
     const label = isCurrent ? cyan(item.label) : item.label;
-    const padding = " ".repeat(Math.max(0, labelWidth - stripAnsi(item.label).length));
     let meta = "";
     if (item.description && item.hint) {
       meta = dim(`  ${item.description} – ${item.hint}`);
@@ -106,7 +105,7 @@ function renderMulti<T>(items: SelectItem<T>[], cursor: number, selected: Set<nu
     } else if (item.hint) {
       meta = dim(`  ${item.hint}`);
     }
-    out += `  ${pointer} ${check} ${label}${padding}${meta}\n`;
+    out += `  ${pointer} ${check} ${padToWidth(label, labelWidth)}${meta}\n`;
   }
   return out;
 }

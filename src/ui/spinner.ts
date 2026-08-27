@@ -1,3 +1,4 @@
+import { stringWidth, truncateToWidth } from "../core/width.ts";
 import type { ColorTheme, Spinner } from "../types/index.ts";
 import { isColorEnabled } from "./color.ts";
 import { icons } from "./icons.ts";
@@ -29,11 +30,7 @@ export function pickRandomTheme(): ColorTheme {
   return COLOR_THEMES[Math.floor(Math.random() * COLOR_THEMES.length)];
 }
 
-export function stripAnsi(str: string): string {
-  // CSI sequences (including ? for cursor hide/show), OSC sequences, and simple escapes
-  // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional ANSI escape sequence matching
-  return str.replace(/\x1b(?:\[[0-9;?]*[a-zA-Z]|\][^\x07]*(?:\x07|\x1b\\)|\[[0-9;]*m)/g, "");
-}
+export { stripAnsi } from "../core/width.ts";
 
 /**
  * Count visual terminal lines a string occupies, accounting for line wrapping in narrow terminals.
@@ -46,22 +43,14 @@ export function countVisualLines(text: string, cols?: number): number {
   const count = text.endsWith("\n") ? lines.length - 1 : lines.length;
   let total = 0;
   for (let i = 0; i < count; i++) {
-    const width = stripAnsi(lines[i]).length;
+    const width = stringWidth(lines[i]);
     total += width === 0 ? 1 : Math.ceil(width / termCols);
   }
   return total;
 }
 
 export function formatTailLine(line: string, maxWidth: number): string {
-  const stripped = stripAnsi(line);
-  const safeWidth = Math.max(1, maxWidth);
-  if (stripped.length > safeWidth) {
-    if (safeWidth <= 1) {
-      return "…";
-    }
-    return `${stripped.substring(0, safeWidth - 1)}…`;
-  }
-  return stripped;
+  return truncateToWidth(line, Math.max(1, maxWidth));
 }
 
 export function lerp(a: number, b: number, t: number): number {
