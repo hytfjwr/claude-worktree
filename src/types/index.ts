@@ -10,7 +10,14 @@ export type {
 export { VALID_PERMISSION_MODES } from "./claude.ts";
 export type { CleanArgs, CleanDeps, CleanResult } from "./clean.ts";
 export type { CliArgs, Command, CreateArgs, ResumeArgs, RunInPaneArgs } from "./cli.ts";
-export type { HookExecOptions, HookExecResult, HookVars, ProjectConfig } from "./config.ts";
+export type {
+  HookExecOptions,
+  HookExecResult,
+  HookRunOptions,
+  HookVars,
+  ProjectConfig,
+  RunHookFn,
+} from "./config.ts";
 export { projectConfigFields } from "./config.ts";
 export type { CreateDeps } from "./create.ts";
 export type { ExitCodeValue } from "./errors.ts";

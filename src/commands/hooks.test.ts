@@ -1,6 +1,6 @@
-import { describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 
-import { executeHookWithSpinner } from "./hooks.ts";
+import { executeHookWithSpinner, runHookWithTail } from "./hooks.ts";
 
 vi.mock("../core/config.ts", () => ({
   runHook: vi.fn(),
@@ -60,5 +60,91 @@ describe("executeHookWithSpinner", () => {
     const result = await executeHookWithSpinner(baseOptions);
 
     expect(result).toEqual({ success: false, message: "string error" });
+  });
+});
+
+describe("runHookWithTail", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const spinner = {
+    stop: vi.fn(),
+    fail: vi.fn(),
+    updateTail: vi.fn(),
+    isExpanded: vi.fn(() => false),
+  };
+
+  const baseRunOptions = {
+    hookCmd: "echo hello",
+    cwd: "/tmp/repo",
+    verbose: false,
+    timeout: 300,
+  };
+
+  test("uses the default runHook and streams output into the spinner tail", async () => {
+    mockRunHook.mockResolvedValue(undefined);
+
+    const result = await runHookWithTail({ ...baseRunOptions, spinner });
+
+    expect(result).toEqual({ success: true });
+    expect(mockRunHook).toHaveBeenCalledWith("echo hello", "/tmp/repo", {
+      verbose: false,
+      onLine: expect.any(Function),
+      timeout: 300,
+    });
+  });
+
+  test("omits the tail updater when verbose", async () => {
+    mockRunHook.mockResolvedValue(undefined);
+
+    await runHookWithTail({ ...baseRunOptions, verbose: true, spinner });
+
+    expect(mockRunHook).toHaveBeenCalledWith("echo hello", "/tmp/repo", {
+      verbose: true,
+      onLine: undefined,
+      timeout: 300,
+    });
+  });
+
+  test("omits the tail updater when no spinner is given", async () => {
+    mockRunHook.mockResolvedValue(undefined);
+
+    await runHookWithTail(baseRunOptions);
+
+    expect(mockRunHook).toHaveBeenCalledWith("echo hello", "/tmp/repo", {
+      verbose: false,
+      onLine: undefined,
+      timeout: 300,
+    });
+  });
+
+  test("uses the injected runHook override", async () => {
+    const injected = vi.fn(async () => {});
+
+    const result = await runHookWithTail({ ...baseRunOptions, runHook: injected });
+
+    expect(result).toEqual({ success: true });
+    expect(injected).toHaveBeenCalledTimes(1);
+    expect(mockRunHook).not.toHaveBeenCalled();
+  });
+
+  test("returns failure with message when the hook throws", async () => {
+    const injected = vi.fn(async () => {
+      throw new Error("boom");
+    });
+
+    const result = await runHookWithTail({ ...baseRunOptions, runHook: injected });
+
+    expect(result).toEqual({ success: false, message: "boom" });
+  });
+
+  test("leaves the spinner untouched (lifecycle belongs to the caller)", async () => {
+    mockRunHook.mockRejectedValue(new Error("boom"));
+
+    await runHookWithTail({ ...baseRunOptions, spinner });
+
+    expect(spinner.stop).not.toHaveBeenCalled();
+    expect(spinner.fail).not.toHaveBeenCalled();
   });
 });

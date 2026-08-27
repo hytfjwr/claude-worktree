@@ -1,4 +1,5 @@
 import type { PermissionMode } from "./claude.ts";
+import type { Spinner } from "./spinner.ts";
 
 export type ProjectConfig = {
   permissionMode?: PermissionMode; // Default permission mode for Claude Code
@@ -27,6 +28,24 @@ export const projectConfigFields = {
 export type HookVars = {
   path: string;
   slot?: number;
+};
+
+export type RunHookFn = (
+  command: string,
+  cwd: string,
+  options?: { verbose?: boolean; onLine?: (line: string) => void; timeout?: number },
+) => Promise<void>;
+
+/** Options for running a hook against a spinner whose lifecycle the caller owns. */
+export type HookRunOptions = {
+  hookCmd: string;
+  cwd: string;
+  verbose: boolean;
+  timeout: number;
+  /** Spinner to stream hook output into. Ignored when verbose (output goes to stdout instead). */
+  spinner?: Spinner | null;
+  /** Override the hook runner (dependency injection). Defaults to the core implementation. */
+  runHook?: RunHookFn;
 };
 
 export type HookExecOptions = {
