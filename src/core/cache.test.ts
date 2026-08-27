@@ -91,6 +91,39 @@ describe("withLock", () => {
     const { existsSync } = await import("node:fs");
     expect(existsSync(lockFile)).toBe(false);
   });
+
+  test("reclaims a lock left by a dead process without waiting for the stale threshold", async () => {
+    const lockFile = join(tempDir, "dead-pid.lock");
+    // PID 999999 is extremely unlikely to be running. Do NOT backdate the mtime —
+    // a dead PID must be reclaimed immediately regardless of lock file age.
+    await writeFile(lockFile, "999999", "utf-8");
+
+    const result = await withLock(lockFile, async () => "recovered", { maxRetries: 15, retryIntervalMs: 1 });
+    expect(result).toBe("recovered");
+  });
+
+  test("never steals a lock held by a live process even when the lock file is old", async () => {
+    const lockFile = join(tempDir, "live-pid-old.lock");
+    await writeFile(lockFile, String(process.pid), "utf-8");
+    const old = new Date(Date.now() - STALE_LOCK_THRESHOLD_MS - 60_000);
+    await utimes(lockFile, old, old);
+
+    await expect(withLock(lockFile, async () => "unreachable", { maxRetries: 15, retryIntervalMs: 1 })).rejects.toThrow(
+      LockAcquisitionError,
+    );
+
+    const { existsSync } = await import("node:fs");
+    expect(existsSync(lockFile)).toBe(true);
+  });
+
+  test("does not reclaim a lock file whose PID is not written yet", async () => {
+    const lockFile = join(tempDir, "empty-pid.lock");
+    await writeFile(lockFile, "", "utf-8");
+
+    await expect(withLock(lockFile, async () => "unreachable", { maxRetries: 15, retryIntervalMs: 1 })).rejects.toThrow(
+      LockAcquisitionError,
+    );
+  });
 });
 
 describe("atomicWriteJson", () => {
