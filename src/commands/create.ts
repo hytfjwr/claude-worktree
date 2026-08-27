@@ -269,9 +269,16 @@ async function handleExistingWorktree(
       destroyed.deletedBranchSha = branchShaBeforeDelete;
     }
     logInfo(`  ${icons.success()} Branch deleted: ${branchName}`);
-  } catch {
-    // Ignore if branch does not exist
-    logInfo(`  ${icons.warning()}  Branch not found (skipping): ${branchName}`);
+  } catch (error) {
+    // git reports a branch that is already gone as "branch '<name>' not found";
+    // that is the only ignorable case — anything else (a locked ref, a branch
+    // still checked out elsewhere) is a real failure and must say so.
+    const message = getErrorMessage(error);
+    if (/\bnot found\b/i.test(message)) {
+      logInfo(`  ${icons.warning()}  Branch not found (skipping): ${branchName}`);
+    } else {
+      logWarn(`  Failed to delete branch ${branchName}: ${message}`);
+    }
   }
 
   // postClean hook

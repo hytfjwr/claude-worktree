@@ -184,6 +184,7 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
     deleted: [],
     skipped: [],
     errors: [],
+    branchDeletionFailures: [],
   };
 
   // Capture remote tracking branches BEFORE fetching/pruning
@@ -414,16 +415,24 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
     logWarn(`${icons.warning()} Some worktrees have running Claude sessions.`);
   }
 
-  // Load config for preClean hook
+  // Load config for the preClean/postClean hooks
   let repoRoot: string | undefined;
   let config: ProjectConfig | null = null;
   try {
     const git = await deps.getGitContext();
     repoRoot = git.repoRoot;
     config = await deps.loadProjectConfig(repoRoot);
+    if (!config) {
+      // No .claude-worktree.json: there are no hooks to run, which is not a failure.
+      logDebug("No project config found: no clean hooks to run.");
+    }
   } catch (error) {
     const message = getErrorMessage(error);
-    logDebug(`preClean hooks will be skipped: failed to get git context or load project config: ${message}`);
+    // Without the config we cannot tell whether hooks exist, so both are skipped.
+    // A preClean like "docker-compose down" silently not running would leave
+    // containers behind, so this has to be visible without -verbose.
+    logWarn(`Failed to load the project config: ${message}`);
+    logWarn("  The preClean and postClean hooks will be skipped for every worktree.");
   }
 
   // Execute deletion
@@ -451,12 +460,18 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
       removedWorktreePaths.push(worktree.path);
 
       // Delete local branch (skip for detached HEAD)
+      let branchDeletionError: string | undefined;
       if (worktree.branch) {
         try {
           await deps.deleteLocalBranch(worktree.branch, true);
         } catch (error) {
-          const branchError = getErrorMessage(error);
-          logWarn(`  Failed to delete branch ${worktree.branch}: ${branchError}`);
+          branchDeletionError = getErrorMessage(error);
+          logWarn(`  Failed to delete branch ${worktree.branch}: ${branchDeletionError}`);
+          result.branchDeletionFailures.push({
+            path: worktree.path,
+            branch: worktree.branch,
+            error: branchDeletionError,
+          });
         }
       }
 
@@ -469,7 +484,11 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
       // Slot and session caches use separate lock files — safe to delete concurrently.
       await Promise.all([deps.deleteSlot(worktree.path), deps.deleteSession(worktree.path)]);
 
-      spinner.stop(`${icons.success()} ${label}`);
+      if (branchDeletionError) {
+        spinner.stop(`${icons.warning()} ${label} (worktree removed, branch kept)`);
+      } else {
+        spinner.stop(`${icons.success()} ${label}`);
+      }
       result.deleted.push(worktree.path);
     } catch (error) {
       const message = getErrorMessage(error);
@@ -500,6 +519,12 @@ export async function executeClean(args: CleanArgs, deps: CleanDeps = defaultDep
   logInfo("");
   if (result.deleted.length > 0) {
     logInfo(`${icons.done()} Deleted ${result.deleted.length} worktree(s).`);
+  }
+  if (result.branchDeletionFailures.length > 0) {
+    logWarn(`Removed the worktree but kept ${result.branchDeletionFailures.length} local branch(es):`);
+    for (const failure of result.branchDeletionFailures) {
+      logWarn(`  ${failure.branch}: ${failure.error}`);
+    }
   }
   if (result.errors.length > 0) {
     logInfo(`${icons.warning()}  Failed to delete ${result.errors.length} worktree(s).`);
