@@ -353,6 +353,7 @@ async function launchClaudeInPane(
   const runInPaneArgs: RunInPaneArgs = {
     worktreePath,
     repoRoot,
+    branchName,
     claudeCommand,
     postCreateCommand: config?.postCreate
       ? deps.buildHookCommand(config.postCreate, { path: worktreePath, slot })

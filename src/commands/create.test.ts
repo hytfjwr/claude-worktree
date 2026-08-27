@@ -1,4 +1,4 @@
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterAll, afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -365,6 +365,20 @@ describe("runCreate", () => {
         mode: "pane",
         startedAt: expect.any(String),
       });
+    });
+
+    test("payload carries branchName so the pane can roll the branch back", async () => {
+      const deps = makeDeps();
+      await runCreate(defaultPaneArgs, deps);
+
+      const backend = await (deps.ensurePaneBackend as ReturnType<typeof vi.fn>).mock.results[0].value;
+      const sentCommand = backend.sendCommand.mock.calls[0][1] as string;
+      const payloadPath = sentCommand.match(/_run-in-pane "([^"]+)"/)?.[1];
+      expect(payloadPath).toBeDefined();
+
+      const payload = JSON.parse(readFileSync(payloadPath as string, "utf-8"));
+      rmSync(payloadPath as string, { force: true });
+      expect(payload.branchName).toBe("feat/x");
     });
 
     test("does not call spawnInteractive in pane mode", async () => {

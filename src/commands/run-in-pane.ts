@@ -50,6 +50,9 @@ export async function parseRunInPaneArgs(payloadPath: string): Promise<RunInPane
   if (typeof obj.repoRoot !== "string" || !obj.repoRoot) {
     throw new UsageError("_run-in-pane: missing required field 'repoRoot'");
   }
+  if (typeof obj.branchName !== "string" || !obj.branchName) {
+    throw new UsageError("_run-in-pane: missing required field 'branchName'");
+  }
   if (typeof obj.claudeCommand !== "string" || !obj.claudeCommand) {
     throw new UsageError("_run-in-pane: missing required field 'claudeCommand'");
   }
@@ -73,6 +76,7 @@ export async function parseRunInPaneArgs(payloadPath: string): Promise<RunInPane
   return {
     worktreePath: obj.worktreePath,
     repoRoot: obj.repoRoot,
+    branchName: obj.branchName,
     claudeCommand: obj.claudeCommand,
     postCreateCommand: typeof obj.postCreateCommand === "string" ? obj.postCreateCommand : undefined,
     postCreateTimeout: obj.postCreateTimeout,
@@ -92,7 +96,7 @@ export async function executeRunInPane(args: RunInPaneArgs): Promise<void> {
     setQuietMode(true);
   }
 
-  const { worktreePath, repoRoot, claudeCommand, verbose } = args;
+  const { worktreePath, repoRoot, branchName, claudeCommand, verbose } = args;
 
   // Run postCreate hook if configured
   if (args.postCreateCommand) {
@@ -108,6 +112,7 @@ export async function executeRunInPane(args: RunInPaneArgs): Promise<void> {
       await performRollback({
         worktreePath,
         repoRoot,
+        branchName,
         preCleanCommand: args.preCleanCommand,
         preCleanTimeout: args.preCleanTimeout,
         postCleanCommand: args.postCleanCommand,
