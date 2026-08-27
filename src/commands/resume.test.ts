@@ -381,6 +381,54 @@ describe("runResume", () => {
       expect(deps.listTmuxPanes).toHaveBeenCalled();
       expect(deps.listWeztermPanes).not.toHaveBeenCalled();
     });
+
+    test("confirms before resuming when the pane list is unavailable", async () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const deps = makeDeps({
+        readSession: vi.fn(async () => runningSession),
+        listWeztermPanes: vi.fn(async () => null),
+        confirm: vi.fn(async () => false),
+      });
+
+      await runResume({ branchName: "feature/test", pane: true }, deps);
+
+      expect(deps.confirm).toHaveBeenCalledWith("Continue anyway?");
+      expect(deps.saveSession).not.toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+
+    test("proceeds when the user confirms despite an unknown session status", async () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const deps = makeDeps({
+        readSession: vi.fn(async () => runningSession),
+        listWeztermPanes: vi.fn(async () => null),
+        confirm: vi.fn(async () => true),
+      });
+
+      await runResume({ branchName: "feature/test", pane: true }, deps);
+
+      expect(deps.saveSession).toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+
+    test("reports why the pane list could not be read", async () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const deps = makeDeps({
+        readSession: vi.fn(async () => runningSession),
+        listWeztermPanes: vi.fn(async () => {
+          throw new Error("wezterm cli exploded");
+        }),
+        confirm: vi.fn(async () => false),
+      });
+
+      await runResume({ branchName: "feature/test", pane: true }, deps);
+
+      const warned = warnSpy.mock.calls.flat().join("\n");
+      expect(warned).toContain("Could not determine whether a Claude session is still running");
+      expect(warned).toContain("wezterm cli exploded");
+      expect(deps.confirm).toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
   });
 
   describe("pane mode", () => {

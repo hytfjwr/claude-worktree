@@ -1,6 +1,6 @@
 import { access } from "node:fs/promises";
 
-import { GitError } from "../core/errors.ts";
+import { GitError, getErrorMessage } from "../core/errors.ts";
 import { getGitContext, listWorktrees } from "../core/git.ts";
 import { completeSession, determineSessionStatus, readSession, saveSession } from "../core/session.ts";
 import { spawnInteractive } from "../core/spawn.ts";
@@ -202,17 +202,29 @@ export async function runResume(args: ResumeArgs, deps: ResumeDeps = defaultDeps
     let weztermPanes: Awaited<ReturnType<typeof deps.listWeztermPanes>> = null;
     let tmuxPanes: Awaited<ReturnType<typeof deps.listTmuxPanes>> = null;
 
+    // Pane listing failures must not silently disable the duplicate-session
+    // guard, so the reason is kept and reported instead of being dropped.
+    const paneListErrors: string[] = [];
+    const listPanes = async <T>(label: string, list: () => Promise<T>): Promise<T | null> => {
+      try {
+        return await list();
+      } catch (error) {
+        paneListErrors.push(`${label}: ${getErrorMessage(error)}`);
+        return null;
+      }
+    };
+
     if (existingSession.mode === "pane") {
       const bt = existingSession.backendType;
       if (bt === "wezterm") {
-        weztermPanes = await deps.listWeztermPanes().catch(() => null);
+        weztermPanes = await listPanes("wezterm", deps.listWeztermPanes);
       } else if (bt === "tmux") {
-        tmuxPanes = await deps.listTmuxPanes().catch(() => null);
+        tmuxPanes = await listPanes("tmux", deps.listTmuxPanes);
       } else {
         // Backward compat: backendType missing, query both
         [weztermPanes, tmuxPanes] = await Promise.all([
-          deps.listWeztermPanes().catch(() => null),
-          deps.listTmuxPanes().catch(() => null),
+          listPanes("wezterm", deps.listWeztermPanes),
+          listPanes("tmux", deps.listTmuxPanes),
         ]);
       }
     }
@@ -220,9 +232,19 @@ export async function runResume(args: ResumeArgs, deps: ResumeDeps = defaultDeps
     const allPanes = { wezterm: weztermPanes, tmux: tmuxPanes };
     const state = deps.determineSessionStatus(existingSession, allPanes);
 
-    if (state.status === "running") {
-      logWarn("An active Claude session is already running on this worktree.");
-      logWarn("Resuming will overwrite the existing session metadata and may cause conflicts.");
+    if (state.status === "running" || state.status === "unknown") {
+      if (state.status === "running") {
+        logWarn("An active Claude session is already running on this worktree.");
+        logWarn("Resuming will overwrite the existing session metadata and may cause conflicts.");
+      } else {
+        // Fail safe: without a pane list an active session cannot be ruled out,
+        // so ask instead of silently launching a second one.
+        logWarn("Could not determine whether a Claude session is still running on this worktree.");
+        for (const reason of paneListErrors) {
+          logWarn(`  ${reason}`);
+        }
+        logWarn("Resuming may overwrite an active session's metadata and cause conflicts.");
+      }
       const confirmed = await deps.confirm("Continue anyway?");
       if (!confirmed) {
         logInfo("Cancelled.");
