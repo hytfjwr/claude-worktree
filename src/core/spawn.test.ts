@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { createFakeChildProcess } from "../__test-utils__.ts";
 import { spawnInteractive } from "./spawn.ts";
@@ -90,5 +90,47 @@ describe("spawnInteractive", () => {
       fakeProc.emit("close", 0);
       await promise.catch(() => {});
     }
+  });
+
+  describe("OSC 7 terminal cwd reporting", () => {
+    let savedIsTTY: PropertyDescriptor | undefined;
+
+    afterEach(() => {
+      if (savedIsTTY) {
+        Object.defineProperty(process.stdout, "isTTY", savedIsTTY);
+      }
+      vi.restoreAllMocks();
+    });
+
+    test("reports the worktree cwd before spawn and restores the original cwd on close", async () => {
+      savedIsTTY = Object.getOwnPropertyDescriptor(process.stdout, "isTTY");
+      Object.defineProperty(process.stdout, "isTTY", { value: true, configurable: true });
+      const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+      const originalCwd = process.cwd();
+
+      await spawnInteractive({ command: "true", cwd: "/tmp" });
+
+      const oscWrites = writeSpy.mock.calls
+        .map((call) => call[0])
+        .filter((arg): arg is string => typeof arg === "string" && arg.startsWith("\x1b]7;"));
+
+      expect(oscWrites).toHaveLength(2);
+      expect(oscWrites[0]).toContain("/tmp");
+      expect(oscWrites[oscWrites.length - 1]).toContain(originalCwd);
+    });
+
+    test("does not report cwd when no cwd option is given", async () => {
+      savedIsTTY = Object.getOwnPropertyDescriptor(process.stdout, "isTTY");
+      Object.defineProperty(process.stdout, "isTTY", { value: true, configurable: true });
+      const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+      await spawnInteractive({ command: "true" });
+
+      const oscWrites = writeSpy.mock.calls
+        .map((call) => call[0])
+        .filter((arg): arg is string => typeof arg === "string" && arg.startsWith("\x1b]7;"));
+
+      expect(oscWrites).toHaveLength(0);
+    });
   });
 });

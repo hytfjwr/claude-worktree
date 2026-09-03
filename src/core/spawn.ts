@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 
 import type { SpawnInteractiveOptions } from "../types/index.ts";
+import { reportTerminalCwd } from "../ui/osc.ts";
 
 export type { SpawnInteractiveOptions } from "../types/index.ts";
 
@@ -15,6 +16,12 @@ export type { SpawnInteractiveOptions } from "../types/index.ts";
  */
 export function spawnInteractive(options: SpawnInteractiveOptions): Promise<number> {
   const { command, cwd } = options;
+
+  // Report the worktree directory so the terminal emulator (e.g. WezTerm splits)
+  // stays anchored to it while the child process runs, then restore the original
+  // directory once it exits — see src/ui/osc.ts for why this is necessary.
+  const returnCwd = cwd ? process.cwd() : undefined;
+  if (cwd) reportTerminalCwd(cwd);
 
   return new Promise<number>((resolve, reject) => {
     const proc = spawn("sh", ["-c", command], {
@@ -45,6 +52,7 @@ export function spawnInteractive(options: SpawnInteractiveOptions): Promise<numb
     const cleanup = () => {
       process.removeListener("SIGINT", onSigint);
       process.removeListener("SIGTERM", onSigterm);
+      if (returnCwd) reportTerminalCwd(returnCwd);
     };
 
     proc.on("error", (err) => {

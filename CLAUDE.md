@@ -178,6 +178,8 @@ src/
     icons.test.ts
     logger.ts          # Logging utilities
     logger.test.ts
+    osc.ts             # OSC 7 terminal cwd reporting
+    osc.test.ts
     prompt.ts          # Interactive user prompts
     select.ts          # Interactive selection (single/multi, TTY/non-TTY)
     select.test.ts
@@ -232,6 +234,7 @@ src/
 **Environment Variables:**
 - `CLAUDE_WORKTREE_CACHE_DIR` — override the slot cache directory (default: `~/.cache/claude-worktree`)
 - `CLAUDE_WORKTREE_NO_MOUSE` — disable mouse support in the interactive selectors (any non-empty value). Mouse tracking takes over the terminal's own text selection while a selector is open.
+- `CLAUDE_WORKTREE_NO_OSC7` — disable reporting the worktree directory to the terminal emulator via OSC 7 (any non-empty value). Keeps emulator-spawned panes/tabs (e.g. WezTerm splits) anchored to the worktree while Claude Code is running.
 
 **External Tool Dependencies:** node, git, wezterm CLI or tmux (for -pane), claude CLI, gh CLI (optional)
 
