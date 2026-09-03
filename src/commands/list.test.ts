@@ -55,6 +55,7 @@ function makeListDeps(overrides: Partial<ListDeps> = {}): ListDeps {
     readAllSessions: async () => ({}),
     listWeztermPanes: async () => null,
     listTmuxPanes: async () => null,
+    listHerdrPanes: async () => null,
     gcMissingSessions: async () => 0,
     gcMissingSlots: async () => 0,
     ...overrides,
@@ -658,6 +659,94 @@ describe("executeList", () => {
     expect(panesCalled).toBe(false);
   });
 
+  test("herdr session status is fetched and includes agentStatus", async () => {
+    const featureWt = makeWorktree({ branch: "feature/auth", path: "/repo-feature-auth" });
+    const featureStatus = makeStatus({ branch: "feature/auth", path: "/repo-feature-auth" });
+
+    const deps = makeListDeps({
+      listWorktrees: async () => ({ worktrees: [featureWt], mainBranch: "main" }),
+      getWorktreeStatuses: async () => [featureStatus],
+      getLastCommit: async () => makeCommitInfo(),
+      readAllSessions: async () => ({
+        "/repo-feature-auth": {
+          mode: "pane" as const,
+          paneId: "w1B:p1",
+          backendType: "herdr" as const,
+          workspaceId: "w1B",
+          startedAt: new Date(Date.now() - 15 * 60_000).toISOString(),
+        },
+      }),
+      listHerdrPanes: async () => [
+        { paneId: "w1B:p1", workspaceId: "w1B", title: "claude", cwd: "/tmp", agentStatus: "working" as const },
+      ],
+    });
+
+    const result = await executeList(defaultArgs, deps);
+
+    expect(result.entries[0].session?.status).toBe("running");
+    expect(result.entries[0].session?.agentStatus).toBe("working");
+  });
+
+  test("JSON output includes agentStatus for a running herdr session", async () => {
+    const featureWt = makeWorktree({ branch: "feature/auth", path: "/repo-feature-auth" });
+    const featureStatus = makeStatus({ branch: "feature/auth", path: "/repo-feature-auth" });
+
+    let jsonOutput = "";
+    vi.spyOn(console, "log").mockImplementation((msg: string) => {
+      jsonOutput += msg;
+    });
+
+    const deps = makeListDeps({
+      listWorktrees: async () => ({ worktrees: [featureWt], mainBranch: "main" }),
+      getWorktreeStatuses: async () => [featureStatus],
+      getLastCommit: async () => makeCommitInfo(),
+      readAllSessions: async () => ({
+        "/repo-feature-auth": {
+          mode: "pane" as const,
+          paneId: "w1B:p1",
+          backendType: "herdr" as const,
+          workspaceId: "w1B",
+          startedAt: new Date(Date.now() - 15 * 60_000).toISOString(),
+        },
+      }),
+      listHerdrPanes: async () => [
+        { paneId: "w1B:p1", workspaceId: "w1B", title: "claude", cwd: "/tmp", agentStatus: "working" as const },
+      ],
+    });
+
+    await executeList({ json: true, verbose: false, noStatus: false, quiet: false, fetch: false }, deps);
+
+    const parsed = JSON.parse(jsonOutput);
+    expect(parsed.worktrees[0].session.agentStatus).toBe("working");
+  });
+
+  test("listHerdrPanes failure results in unknown status for a herdr session", async () => {
+    const featureWt = makeWorktree({ branch: "feature/auth", path: "/repo-feature-auth" });
+    const featureStatus = makeStatus({ branch: "feature/auth", path: "/repo-feature-auth" });
+
+    const deps = makeListDeps({
+      listWorktrees: async () => ({ worktrees: [featureWt], mainBranch: "main" }),
+      getWorktreeStatuses: async () => [featureStatus],
+      getLastCommit: async () => makeCommitInfo(),
+      readAllSessions: async () => ({
+        "/repo-feature-auth": {
+          mode: "pane" as const,
+          paneId: "w1B:p1",
+          backendType: "herdr" as const,
+          workspaceId: "w1B",
+          startedAt: new Date(Date.now() - 15 * 60_000).toISOString(),
+        },
+      }),
+      listHerdrPanes: async () => {
+        throw new Error("herdr socket error");
+      },
+    });
+
+    const result = await executeList(defaultArgs, deps);
+
+    expect(result.entries[0].session?.status).toBe("unknown");
+  });
+
   test("runs cache GC before listing", async () => {
     const mainWt = makeWorktree({ isMain: true, branch: "main", path: "/repo" });
     const mainStatus = makeStatus({ isMain: true, branch: "main", path: "/repo" });
@@ -753,5 +842,41 @@ describe("formatSessionState", () => {
     expect(result).toContain("pane #3");
     expect(result).not.toContain("Running");
     expect(result).not.toContain("Done");
+  });
+
+  test("running herdr session with blocked agentStatus shows [blocked]", () => {
+    const session: SessionState = {
+      status: "running",
+      elapsedMs: 10 * 60_000,
+      mode: "pane",
+      paneId: "w1B:p1",
+      agentStatus: "blocked",
+    };
+    const result = formatSessionState(session);
+    expect(result).toContain("[blocked]");
+  });
+
+  test("running herdr session with unknown agentStatus does not show [unknown]", () => {
+    const session: SessionState = {
+      status: "running",
+      elapsedMs: 10 * 60_000,
+      mode: "pane",
+      paneId: "w1B:p1",
+      agentStatus: "unknown",
+    };
+    const result = formatSessionState(session);
+    expect(result).not.toContain("[unknown]");
+  });
+
+  test("done herdr session with idle agentStatus does not show [idle]", () => {
+    const session: SessionState = {
+      status: "done",
+      elapsedMs: 10 * 60_000,
+      mode: "pane",
+      paneId: "w1B:p1",
+      agentStatus: "idle",
+    };
+    const result = formatSessionState(session);
+    expect(result).not.toContain("[idle]");
   });
 });

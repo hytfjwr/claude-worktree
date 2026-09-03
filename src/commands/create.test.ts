@@ -320,7 +320,7 @@ function makeDeps(overrides: Partial<CreateDeps> = {}): CreateDeps {
     buildClaudeCommand: vi.fn(() => "claude --prompt 'test'"),
     ensurePaneBackend: vi.fn(async () => ({
       name: "wezterm" as const,
-      createPane: vi.fn(async () => "42"),
+      createPane: vi.fn(async () => ({ paneId: "42" })),
       sendCommand: vi.fn(async () => {}),
       closePane: vi.fn(async () => {}),
     })),
@@ -368,7 +368,11 @@ describe("runCreate", () => {
       expect(deps.listWorktrees).toHaveBeenCalled();
       expect(deps.createWorktree).toHaveBeenCalledWith("feat/x", "/repo/.worktrees/feat-x", "main");
       expect(deps.buildClaudeCommand).toHaveBeenCalled();
-      expect(backend.createPane).toHaveBeenCalledWith({ keepFocus: true });
+      expect(backend.createPane).toHaveBeenCalledWith({
+        keepFocus: true,
+        cwd: expect.any(String),
+        label: expect.any(String),
+      });
       expect(backend.sendCommand).toHaveBeenCalledWith("42", expect.stringContaining("_run-in-pane"));
       expect(deps.saveSession).toHaveBeenCalledWith("/repo/.worktrees/feat-x", {
         paneId: 42,
@@ -376,6 +380,44 @@ describe("runCreate", () => {
         mode: "pane",
         startedAt: expect.any(String),
       });
+    });
+
+    test("uses the configured herdr label template when launching in a pane", async () => {
+      const deps = makeDeps({
+        loadProjectConfig: vi.fn(async () => ({ herdr: { label: "{branch}@{repo}" } })),
+      });
+      await runCreate(defaultPaneArgs, deps);
+
+      const backend = await (deps.ensurePaneBackend as ReturnType<typeof vi.fn>).mock.results[0].value;
+      expect(backend.createPane).toHaveBeenCalledWith({
+        keepFocus: true,
+        cwd: expect.any(String),
+        label: "feat/x@repo",
+      });
+    });
+
+    test("saves workspaceId in the session when the herdr backend returns one", async () => {
+      const herdrBackend = {
+        name: "herdr" as const,
+        createPane: vi.fn(async () => ({ paneId: "w1B:p1", workspaceId: "w1B" })),
+        sendCommand: vi.fn(async () => {}),
+        closePane: vi.fn(async () => {}),
+      };
+      const deps = makeDeps({ ensurePaneBackend: vi.fn(async () => herdrBackend) });
+      await runCreate(defaultPaneArgs, deps);
+
+      expect(deps.saveSession).toHaveBeenCalledWith(
+        "/repo/.worktrees/feat-x",
+        expect.objectContaining({ backendType: "herdr", paneId: "w1B:p1", workspaceId: "w1B" }),
+      );
+    });
+
+    test("does not include workspaceId in the session when the backend does not return one", async () => {
+      const deps = makeDeps();
+      await runCreate(defaultPaneArgs, deps);
+
+      const saved = (deps.saveSession as ReturnType<typeof vi.fn>).mock.calls[0][1];
+      expect(saved).not.toHaveProperty("workspaceId");
     });
 
     test("payload carries branchName so the pane can roll the branch back", async () => {
@@ -1381,7 +1423,7 @@ describe("runCreate", () => {
     test("rolls back and closes pane when sendCommand fails", async () => {
       const failingBackend = {
         name: "wezterm" as const,
-        createPane: vi.fn(async () => "42"),
+        createPane: vi.fn(async () => ({ paneId: "42" })),
         sendCommand: vi.fn(async () => {
           throw new Error("send failed");
         }),
@@ -1392,13 +1434,13 @@ describe("runCreate", () => {
       await expect(runCreate(defaultPaneArgs, deps)).rejects.toThrow("send failed");
       expect(deps.performRollback).toHaveBeenCalled();
       // closePane should be called to clean up the orphaned pane
-      expect(failingBackend.closePane).toHaveBeenCalledWith("42");
+      expect(failingBackend.closePane).toHaveBeenCalledWith({ paneId: "42" });
     });
 
     test("continues rollback even if closePane fails", async () => {
       const failingBackend = {
         name: "wezterm" as const,
-        createPane: vi.fn(async () => "42"),
+        createPane: vi.fn(async () => ({ paneId: "42" })),
         sendCommand: vi.fn(async () => {
           throw new Error("send failed");
         }),
@@ -1409,14 +1451,14 @@ describe("runCreate", () => {
       const deps = makeDeps({ ensurePaneBackend: vi.fn(async () => failingBackend) });
 
       await expect(runCreate(defaultPaneArgs, deps)).rejects.toThrow("send failed");
-      expect(failingBackend.closePane).toHaveBeenCalledWith("42");
+      expect(failingBackend.closePane).toHaveBeenCalledWith({ paneId: "42" });
       expect(deps.performRollback).toHaveBeenCalled();
     });
 
     test("pane rollback does not delete a session entry it never wrote", async () => {
       const failingBackend = {
         name: "wezterm" as const,
-        createPane: vi.fn(async () => "42"),
+        createPane: vi.fn(async () => ({ paneId: "42" })),
         sendCommand: vi.fn(async () => {
           throw new Error("send failed");
         }),
@@ -1436,7 +1478,7 @@ describe("runCreate", () => {
 
       const tmuxBackend = {
         name: "tmux" as const,
-        createPane: vi.fn(async () => "42"),
+        createPane: vi.fn(async () => ({ paneId: "42" })),
         sendCommand: vi.fn(async () => {}),
         closePane: vi.fn(async () => {}),
       };
@@ -1445,7 +1487,7 @@ describe("runCreate", () => {
       await expect(runCreate(defaultPaneArgs, deps)).rejects.toThrow("tmux lookup failed");
       expect(deps.saveSession).toHaveBeenCalled();
       expect(deps.performRollback).toHaveBeenCalledWith(expect.objectContaining({ deleteSessionData: true }));
-      expect(tmuxBackend.closePane).toHaveBeenCalledWith("42");
+      expect(tmuxBackend.closePane).toHaveBeenCalledWith({ paneId: "42" });
     });
   });
 

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import type { ProjectConfig } from "../types/index.ts";
 import {
+  buildHerdrLabel,
   buildHookCommand,
   DEFAULT_HOOK_TIMEOUT,
   loadProjectConfig,
@@ -277,6 +278,54 @@ describe("validateProjectConfig", () => {
   test("allows fractional timeout values", () => {
     expect(validateProjectConfig({ hookTimeout: 0.5 })).toEqual([]);
   });
+
+  test("allows herdr.label as a string", () => {
+    expect(validateProjectConfig({ herdr: { label: "{branch}" } })).toEqual([]);
+  });
+
+  test("allows an empty herdr object", () => {
+    expect(validateProjectConfig({ herdr: {} })).toEqual([]);
+  });
+
+  test("rejects non-object herdr", () => {
+    const errors = validateProjectConfig({ herdr: "x" });
+    expect(errors.some((e) => e.includes("herdr must be an object"))).toBe(true);
+  });
+
+  test("rejects non-string herdr.label", () => {
+    const errors = validateProjectConfig({ herdr: { label: 1 } });
+    expect(errors.some((e) => e.includes("herdr.label must be a string"))).toBe(true);
+  });
+
+  test("rejects array herdr", () => {
+    const errors = validateProjectConfig({ herdr: [] });
+    expect(errors.length).toBeGreaterThan(0);
+  });
+});
+
+describe("buildHerdrLabel", () => {
+  test("returns the default template when config is null", () => {
+    expect(buildHerdrLabel(null, { repo: "app", branch: "feature/x" })).toBe("app/feature/x");
+  });
+
+  test("returns the default template when herdr config is empty", () => {
+    expect(buildHerdrLabel({ herdr: {} }, { repo: "app", branch: "feature/x" })).toBe("app/feature/x");
+  });
+
+  test("uses the configured template", () => {
+    const config: ProjectConfig = { herdr: { label: "{branch} ({repo})" } };
+    expect(buildHerdrLabel(config, { repo: "app", branch: "feature/x" })).toBe("feature/x (app)");
+  });
+
+  test("replaces multiple occurrences of the same placeholder", () => {
+    const config: ProjectConfig = { herdr: { label: "{repo}-{repo}-{branch}-{branch}" } };
+    expect(buildHerdrLabel(config, { repo: "app", branch: "x" })).toBe("app-app-x-x");
+  });
+
+  test("returns the template unchanged when it has no placeholders", () => {
+    const config: ProjectConfig = { herdr: { label: "static-label" } };
+    expect(buildHerdrLabel(config, { repo: "app", branch: "x" })).toBe("static-label");
+  });
 });
 
 describe("loadProjectConfig", () => {
@@ -320,6 +369,13 @@ describe("loadProjectConfig", () => {
 
     const result = await loadProjectConfig(tempDir);
     expect(result).toEqual(config);
+  });
+
+  test("returns the herdr.label field for a valid config file", async () => {
+    await writeFile(join(tempDir, ".claude-worktree.json"), JSON.stringify({ herdr: { label: "{branch}" } }), "utf-8");
+
+    const result = await loadProjectConfig(tempDir);
+    expect(result?.herdr?.label).toBe("{branch}");
   });
 });
 

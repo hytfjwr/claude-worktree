@@ -47,6 +47,7 @@ function makeListDeps(overrides: Partial<ListDeps> = {}): ListDeps {
     readAllSessions: async () => ({}),
     listWeztermPanes: async () => null,
     listTmuxPanes: async () => null,
+    listHerdrPanes: async () => null,
     gcMissingSessions: async () => 0,
     gcMissingSlots: async () => 0,
     ...overrides,

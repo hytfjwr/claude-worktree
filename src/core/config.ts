@@ -51,6 +51,17 @@ export function validateProjectConfig(value: unknown): string[] {
     }
   }
 
+  if (obj.herdr !== undefined) {
+    if (typeof obj.herdr !== "object" || obj.herdr === null || Array.isArray(obj.herdr)) {
+      errors.push(`herdr must be an object, got ${JSON.stringify(obj.herdr)}`);
+    } else {
+      const herdr = obj.herdr as Record<string, unknown>;
+      if (herdr.label !== undefined && typeof herdr.label !== "string") {
+        errors.push(`herdr.label must be a string, got ${JSON.stringify(herdr.label)}`);
+      }
+    }
+  }
+
   return errors;
 }
 
@@ -115,6 +126,14 @@ function validateHookVars(vars: HookVars): void {
 export function buildHookCommand(template: string, vars: HookVars): string {
   validateHookVars(vars);
   return template.replace(/\{path\}/g, vars.path).replace(/\{slot\}/g, vars.slot != null ? String(vars.slot) : "");
+}
+
+export const DEFAULT_HERDR_LABEL = "{repo}/{branch}";
+
+/** Build the herdr workspace label from the configured template (default: "{repo}/{branch}"). */
+export function buildHerdrLabel(config: ProjectConfig | null, vars: { repo: string; branch: string }): string {
+  const template = config?.herdr?.label ?? DEFAULT_HERDR_LABEL;
+  return template.replace(/\{repo\}/g, vars.repo).replace(/\{branch\}/g, vars.branch);
 }
 
 export const DEFAULT_HOOK_TIMEOUT = 600;

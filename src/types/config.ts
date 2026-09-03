@@ -1,6 +1,10 @@
 import type { PermissionMode } from "./claude.ts";
 import type { Spinner } from "./spinner.ts";
 
+export type HerdrConfig = {
+  label?: string; // Template for the herdr workspace label. Placeholders: {repo}, {branch}. Default: "{repo}/{branch}"
+};
+
 export type ProjectConfig = {
   permissionMode?: PermissionMode; // Default permission mode for Claude Code
   maxWorktrees?: number; // Maximum number of concurrent worktrees (excludes main)
@@ -11,6 +15,7 @@ export type ProjectConfig = {
   preCleanTimeout?: number; // Timeout in seconds for the preClean hook
   postClean?: string;
   postCleanTimeout?: number; // Timeout in seconds for the postClean hook
+  herdr?: HerdrConfig; // herdr backend settings
 };
 
 export const projectConfigFields = {
@@ -23,7 +28,7 @@ export const projectConfigFields = {
   postCreate: String,
   preClean: String,
   postClean: String,
-} satisfies Record<keyof Required<ProjectConfig>, typeof Number | typeof String>;
+} satisfies Record<Exclude<keyof Required<ProjectConfig>, "herdr">, typeof Number | typeof String>;
 
 export type HookVars = {
   path: string;

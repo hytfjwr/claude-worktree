@@ -19,10 +19,12 @@ import {
 } from "../core/session.ts";
 import { gcMissingSlots } from "../core/slot.ts";
 import { truncateToWidth } from "../core/width.ts";
+import { listHerdrPanes } from "../external/herdr.ts";
 import { listTmuxPanes } from "../external/tmux.ts";
 import { listWeztermPanes } from "../external/wezterm.ts";
 import type {
   AheadBehind,
+  HerdrAgentStatus,
   ListArgs,
   ListDeps,
   ListResult,
@@ -31,7 +33,7 @@ import type {
   WorktreeListEntry,
   WorktreeStatus,
 } from "../types/index.ts";
-import { bold, colorize, dim, green, rawCode, yellow } from "../ui/color.ts";
+import { bold, colorize, cyan, dim, green, rawCode, yellow } from "../ui/color.ts";
 import { icons } from "../ui/icons.ts";
 import { logInfo } from "../ui/logger.ts";
 import { startSpinner } from "../ui/spinner.ts";
@@ -48,6 +50,7 @@ export const defaultListDeps: ListDeps = {
   readAllSessions,
   listWeztermPanes,
   listTmuxPanes,
+  listHerdrPanes,
   gcMissingSessions,
   gcMissingSlots,
 };
@@ -138,9 +141,19 @@ export function formatSessionState(session: SessionState): string {
     return `${yellow("?")} ${yellow("Unknown")} ${dim(`(${elapsed})`)}${panePart}`;
   }
   if (session.status === "running") {
-    return `${green(icons.active())} ${green("Running")} ${dim(`(${elapsed})`)}${panePart}`;
+    const agentPart =
+      session.agentStatus && session.agentStatus !== "unknown" ? `  ${formatAgentStatus(session.agentStatus)}` : "";
+    return `${green(icons.active())} ${green("Running")} ${dim(`(${elapsed})`)}${agentPart}${panePart}`;
   }
   return `${green(icons.success())} Done ${dim(`(${elapsed})`)}${panePart}`;
+}
+
+/** herdr agent state shown next to Running, e.g. "[working]". */
+function formatAgentStatus(status: HerdrAgentStatus): string {
+  const text = `[${status}]`;
+  if (status === "blocked") return yellow(text);
+  if (status === "working") return cyan(text);
+  return dim(text);
 }
 
 export function formatWorktreeEntry(entry: WorktreeListEntry, repoRoot: string, verbose: boolean): string[] {
@@ -240,7 +253,7 @@ export async function collectListEntries(
     // (wezterm/tmux), the sessions file read, and the per-worktree commit lookups.
     const [statuses, allPanes, sessions, commitInfos] = await Promise.all([
       deps.getWorktreeStatuses(worktrees, mainBranch, trackedBranches, remoteBranches),
-      args.noStatus ? Promise.resolve({ wezterm: null, tmux: null }) : fetchAllPanes(deps),
+      args.noStatus ? Promise.resolve({ wezterm: null, tmux: null, herdr: null }) : fetchAllPanes(deps),
       args.noStatus ? Promise.resolve<Record<string, SessionInfo>>({}) : deps.readAllSessions(),
       promiseAllLimit(
         worktrees.map(
@@ -317,6 +330,7 @@ export async function executeList(args: ListArgs, deps: ListDeps = defaultListDe
             elapsedMs: e.session.elapsedMs,
             mode: e.session.mode,
             paneId: e.session.paneId,
+            ...(e.session.agentStatus !== undefined && { agentStatus: e.session.agentStatus }),
           },
         }),
       })),

@@ -3,14 +3,14 @@
 [![npm version](https://img.shields.io/npm/v/@hytfjwr/claude-worktree.svg)](https://www.npmjs.com/package/@hytfjwr/claude-worktree)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A CLI tool that creates a git worktree and launches [Claude Code](https://docs.anthropic.com/en/docs/claude-code) with a prompt. With the `-pane` option, it opens in a new [WezTerm](https://wezfurlong.org/wezterm/) or [tmux](https://github.com/tmux/tmux) pane, enabling parallel development across multiple worktrees.
+A CLI tool that creates a git worktree and launches [Claude Code](https://docs.anthropic.com/en/docs/claude-code) with a prompt. With the `-pane` option, it opens in a new [WezTerm](https://wezfurlong.org/wezterm/) or [tmux](https://github.com/tmux/tmux) pane, or a new [herdr](https://herdr.dev) workspace, enabling parallel development across multiple worktrees.
 
 ## Requirements
 
 - [Node.js](https://nodejs.org/) (v22+)
 - [Git](https://git-scm.com/)
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
-- [WezTerm](https://wezfurlong.org/wezterm/) or [tmux](https://github.com/tmux/tmux) (optional, required only for `-pane`)
+- [WezTerm](https://wezfurlong.org/wezterm/), [tmux](https://github.com/tmux/tmux) or [herdr](https://herdr.dev) v0.7.0+ (optional, required only for `-pane`)
 - [GitHub CLI](https://cli.github.com/) (optional, enables PR info display in `clean`)
 
 ## Installation
@@ -31,7 +31,7 @@ npx @hytfjwr/claude-worktree feature/auth 'Implement authentication feature'
 # Create a worktree and start Claude Code
 claude-worktree feature/auth 'Implement authentication feature'
 
-# Open in a new pane for parallel development (WezTerm or tmux)
+# Open in a new pane for parallel development (WezTerm, tmux or herdr)
 claude-worktree feature/auth 'Implement authentication feature' -pane
 
 # Resume a session in an existing worktree
@@ -96,7 +96,7 @@ Did you mean "feature/auth"?
 
 ### Options
 
-- `-p, -pane` - Open in a new pane (requires WezTerm or tmux; default: run in current terminal)
+- `-p, -pane` - Open in a new pane (requires WezTerm, tmux or herdr; default: run in current terminal)
 - `-plan <file>` - Read prompt from a file (cannot be used with inline prompt)
 - `-b, -base <branch>` - Specify base branch (default: current branch)
 - `-d, -danger` - Skip workspace warning (uses --dangerously-skip-permissions)
@@ -138,7 +138,7 @@ When stdin is not a TTY (e.g., piped input), the selector falls back to a number
 
 ### Resume Options
 
-- `-p, -pane` - Open in a new pane (requires WezTerm or tmux; default: run in current terminal)
+- `-p, -pane` - Open in a new pane (requires WezTerm, tmux or herdr; default: run in current terminal)
 - `-d, -danger` - Skip workspace warning (uses --dangerously-skip-permissions)
 - `-v, -verbose` - Show verbose output
 
@@ -149,13 +149,31 @@ When stdin is not a TTY (e.g., piped input), the selector falls back to a number
 - `-n, -dry-run` - Preview targets without deleting
 - `-v, -verbose` - Show hook execution logs
 
+### Pane Backends
+
+`-pane` opens the worktree in a new pane of the terminal multiplexer you are running in. The backend is detected from the environment, in this order:
+
+1. **herdr** — when running inside a herdr pane (`HERDR_ENV=1`). Checked first because herdr panes inherit the `WEZTERM_PANE` / `TMUX` variables of the herdr server process.
+2. **WezTerm** — when `WEZTERM_PANE` is set.
+3. **tmux** — when `TMUX` is set.
+
+Outside any of them, `-pane` still works if a herdr server is running (`herdr status server` reports `status: running`) or tmux is installed (a detached session is created). herdr is preferred over tmux.
+
+Set `CLAUDE_WORKTREE_BACKEND=wezterm|tmux|herdr` to skip detection and force a backend. The command fails if the forced backend is not usable (for example, herdr without a running server).
+
+#### herdr
+
+With herdr, `-pane` creates a **new workspace** rather than splitting the current one. The workspace's working directory is the worktree, its label defaults to `<repo>/<branch>` (configurable via `herdr.label` in `.claude-worktree.json`), and focus stays on the current workspace. The command is sent once the workspace's shell reaches its prompt (up to 15s).
+
+`list` shows herdr sessions as Running while the pane exists, and appends herdr's agent state (`[working]`, `[blocked]`, `[idle]`, `[done]`) when it is known. `clean` removes the worktree and its session metadata but leaves the herdr workspace open, matching the WezTerm/tmux behaviour.
+
 ### Examples
 
 ```bash
 # Create a worktree and start Claude Code in current terminal
 claude-worktree feature/auth 'Implement authentication feature'
 
-# Open in a new pane (WezTerm or tmux)
+# Open in a new pane (WezTerm, tmux or herdr)
 claude-worktree feature/auth 'Implement authentication feature' -pane
 
 # Short form
@@ -269,11 +287,12 @@ When using `claude-worktree list -json`, the output follows this schema:
 | `status` | `string` | One of: `"Main"`, `"Locked"`, `"Merged"`, `"Dirty"`, `"Active"` |
 | `commit` | `object \| null` | Latest commit info (`hash`, `message`, `date`) |
 | `aheadBehind` | `object \| null` | `{ ahead: number, behind: number }` relative to main branch |
-| `session` | `object \| undefined` | Claude session info (only with `-status` flag) |
-| `session.status` | `string` | `"running"` or `"done"` |
+| `session` | `object \| undefined` | Claude session info (omitted with `-no-status`) |
+| `session.status` | `string` | `"running"`, `"done"`, or `"unknown"` (pane backend unavailable) |
 | `session.elapsedMs` | `number` | Milliseconds since session started |
 | `session.mode` | `string` | `"pane"` or `"terminal"` |
-| `session.paneId` | `number \| string \| undefined` | Pane ID — WezTerm (number) or tmux (string, e.g. `%0`). Pane mode only. |
+| `session.paneId` | `number \| string \| undefined` | Pane ID — WezTerm (number), tmux (string, e.g. `%0`) or herdr (string, e.g. `w1:p1`). Pane mode only. |
+| `session.agentStatus` | `string \| undefined` | herdr only — agent state reported by herdr: `"idle"`, `"working"`, `"blocked"`, `"done"` or `"unknown"` |
 
 ## Hook Configuration
 
@@ -288,7 +307,8 @@ You can define project-specific hooks in `.claude-worktree.json` at the reposito
   "preClean": "cd {path} && docker-compose down",
   "preCleanTimeout": 120,
   "postClean": "docker volume rm app-{path}-data || true",
-  "postCleanTimeout": 60
+  "postCleanTimeout": 60,
+  "herdr": { "label": "{repo}/{branch}" }
 }
 ```
 
@@ -316,9 +336,14 @@ You can define project-specific hooks in `.claude-worktree.json` at the reposito
 
 Priority: hook-specific value > `hookTimeout` > default (600s)
 
+### herdr
+
+- `herdr.label` — Template for the label of the herdr workspace created by `-pane` (default: `{repo}/{branch}`). `{repo}` is the repository directory name and `{branch}` is the branch name.
+
 ### Environment Variables
 
 - `CLAUDE_WORKTREE_CACHE_DIR` — Override the slot cache directory (default: `~/.cache/claude-worktree`)
+- `CLAUDE_WORKTREE_BACKEND` — Force the pane backend for `-pane`: `wezterm`, `tmux` or `herdr` (default: auto-detect, see [Pane Backends](#pane-backends)).
 - `CLAUDE_WORKTREE_NO_MOUSE` — Disable mouse support in the interactive selectors (any non-empty value). Mouse tracking takes over the terminal's own text selection while a selector is open, so set this if you need to copy from the list.
 - `CLAUDE_WORKTREE_NO_OSC7` — Disable reporting the worktree directory to the terminal emulator via OSC 7 (any non-empty value). The report keeps emulator-spawned panes/tabs (e.g. WezTerm splits) anchored to the worktree while Claude Code is running.
 - `NO_COLOR` — Disable colored output ([no-color.org](https://no-color.org/)). Colors are also automatically disabled when stdout is not a TTY (e.g., piped output).

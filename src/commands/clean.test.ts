@@ -47,6 +47,7 @@ function makeDeps(overrides: Partial<CleanDeps> = {}): CleanDeps {
     readAllSessions: async () => ({}),
     listWeztermPanes: async () => null,
     listTmuxPanes: async () => null,
+    listHerdrPanes: async () => null,
     determineSessionStatus: (session, _allPanes) => ({
       status: "done" as const,
       elapsedMs: 0,

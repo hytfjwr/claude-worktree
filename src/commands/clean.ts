@@ -25,6 +25,7 @@ import {
 import { deleteSlot, gcSlots, readSlot } from "../core/slot.ts";
 import { findClosestMatch } from "../core/suggest.ts";
 import { checkGhAvailable, getPullRequestsForBranches } from "../external/github.ts";
+import { listHerdrPanes } from "../external/herdr.ts";
 import { listTmuxPanes } from "../external/tmux.ts";
 import { listWeztermPanes } from "../external/wezterm.ts";
 import type {
@@ -72,6 +73,7 @@ const defaultDeps: CleanDeps = {
   readAllSessions,
   listWeztermPanes,
   listTmuxPanes,
+  listHerdrPanes,
   determineSessionStatus,
 };
 
