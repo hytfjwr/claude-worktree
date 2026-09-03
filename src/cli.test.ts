@@ -199,6 +199,7 @@ describe("parseArgs", () => {
           model: undefined,
           pane: false,
           quiet: false,
+          json: false,
           verbose: false,
           dryRun: false,
         },
@@ -334,6 +335,7 @@ describe("parseCreateArgs", () => {
       model: undefined,
       pane: false,
       quiet: false,
+      json: false,
       verbose: false,
       dryRun: false,
     });
@@ -407,6 +409,7 @@ describe("parseCreateArgs", () => {
       baseBranch: undefined,
       pane: true,
       quiet: false,
+      json: false,
       verbose: true,
       dryRun: true,
     });
@@ -466,6 +469,7 @@ describe("parseCreateArgs", () => {
       baseBranch: "develop",
       pane: true,
       quiet: false,
+      json: false,
       verbose: true,
       dryRun: true,
     });
@@ -719,6 +723,32 @@ describe("parseCreateArgs", () => {
 
   test("-b and -base are the same option for duplicate detection", () => {
     expect(() => parseCreateArgs(["foo", "p", "-b", "a", "-base", "b"])).toThrow("Duplicate option: -base");
+  });
+
+  test("-pane -json sets json", () => {
+    const result = parseCreateArgs(["feature/test", "Prompt", "-pane", "-json"]);
+    expect(result.json).toBe(true);
+  });
+
+  test("-pane -j (alias for -json) sets json", () => {
+    const result = parseCreateArgs(["feature/test", "Prompt", "-pane", "-j"]);
+    expect(result.json).toBe(true);
+  });
+
+  test("-dry-run -json sets json", () => {
+    const result = parseCreateArgs(["feature/test", "Prompt", "-dry-run", "-json"]);
+    expect(result.json).toBe(true);
+  });
+
+  test("-json without -pane or -dry-run throws", () => {
+    expect(() => parseCreateArgs(["feature/test", "Prompt", "-json"])).toThrow(
+      "-json option requires -pane or -dry-run",
+    );
+  });
+
+  test("-json is falsy when not specified", () => {
+    const result = parseCreateArgs(["feature/test", "Prompt", "-pane"]);
+    expect(result.json).toBeFalsy();
   });
 });
 
@@ -1334,6 +1364,7 @@ describe("parseArgs - resume", () => {
         danger: false,
         pane: false,
         quiet: false,
+        json: false,
         verbose: false,
       },
     });
@@ -1349,6 +1380,7 @@ describe("parseArgs - resume", () => {
         danger: false,
         pane: false,
         quiet: false,
+        json: false,
         verbose: false,
       },
     });
@@ -1364,6 +1396,7 @@ describe("parseArgs - resume", () => {
         danger: false,
         pane: false,
         quiet: false,
+        json: false,
         verbose: false,
       },
     });
@@ -1379,6 +1412,7 @@ describe("parseArgs - resume", () => {
         danger: true,
         pane: true,
         quiet: false,
+        json: false,
         verbose: false,
       },
     });
@@ -1399,6 +1433,7 @@ describe("parseResumeArgs", () => {
       model: undefined,
       pane: false,
       quiet: false,
+      json: false,
       verbose: false,
     });
   });
@@ -1412,6 +1447,7 @@ describe("parseResumeArgs", () => {
       model: undefined,
       pane: false,
       quiet: false,
+      json: false,
       verbose: false,
     });
   });
@@ -1425,6 +1461,7 @@ describe("parseResumeArgs", () => {
       model: undefined,
       pane: false,
       quiet: false,
+      json: false,
       verbose: false,
     });
   });
@@ -1495,6 +1532,7 @@ describe("parseResumeArgs", () => {
       pane: true,
       danger: true,
       quiet: false,
+      json: false,
       verbose: true,
     });
   });
@@ -1507,6 +1545,7 @@ describe("parseResumeArgs", () => {
       pane: false,
       danger: false,
       quiet: false,
+      json: false,
       verbose: true,
     });
   });
@@ -1537,6 +1576,19 @@ describe("parseResumeArgs", () => {
   test("no branch name - no validation error", () => {
     const result = parseResumeArgs([]);
     expect(result.branchName).toBeUndefined();
+  });
+
+  test("-pane -json sets json", () => {
+    const result = parseResumeArgs(["feature/x", "-pane", "-json"]);
+    expect(result.json).toBe(true);
+  });
+
+  test("-json without -pane throws", () => {
+    expect(() => parseResumeArgs(["feature/x", "-json"])).toThrow("-json option requires -pane");
+  });
+
+  test("-pane -json without a branch name throws", () => {
+    expect(() => parseResumeArgs(["-pane", "-json"])).toThrow("requires a branch name");
   });
 });
 
@@ -1725,6 +1777,7 @@ describe("help output parity", () => {
       "-pr",
       "-pull",
       "-dry-run",
+      "-json",
       "-quiet",
       "-verbose",
       "--help",
@@ -1753,7 +1806,7 @@ describe("help output parity", () => {
 
   test("resume help lists every flag", async () => {
     const output = await renderedHelp({ type: "help", commandHelp: "resume" });
-    const flags = ["-pane", "-danger", "-model", "-quiet", "-verbose", "--help"];
+    const flags = ["-pane", "-danger", "-model", "-json", "-quiet", "-verbose", "--help"];
     for (const flag of flags) {
       expect(output).toContain(flag);
     }

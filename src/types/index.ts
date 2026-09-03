@@ -9,7 +9,7 @@ export type {
 } from "./claude.ts";
 export { VALID_PERMISSION_MODES } from "./claude.ts";
 export type { CleanArgs, CleanDeps, CleanResult } from "./clean.ts";
-export type { CliArgs, Command, CreateArgs, ResumeArgs, RunInPaneArgs } from "./cli.ts";
+export type { CliArgs, Command, CreateArgs, LaunchResult, ResumeArgs, RunInPaneArgs } from "./cli.ts";
 export type {
   HookExecOptions,
   HookExecResult,

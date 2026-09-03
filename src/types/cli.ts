@@ -1,5 +1,7 @@
 import type { CleanArgs } from "./clean.ts";
 import type { ListArgs } from "./list.ts";
+import type { SessionMode } from "./session.ts";
+import type { BackendType } from "./wezterm.ts";
 
 export type CreateArgs = {
   branchName: string;
@@ -16,6 +18,7 @@ export type CreateArgs = {
   verbose?: boolean;
   dryRun?: boolean;
   quiet?: boolean;
+  json?: boolean;
 };
 
 export type ResumeArgs = {
@@ -26,6 +29,21 @@ export type ResumeArgs = {
   pane?: boolean;
   verbose?: boolean;
   quiet?: boolean;
+  json?: boolean;
+};
+
+/** Machine-readable result printed by `-json` for create/resume. Fields are always present; null when not applicable. */
+export type LaunchResult = {
+  dryRun: boolean;
+  repoRoot: string;
+  branch: string | null;
+  baseBranch: string | null;
+  worktreePath: string;
+  mode: SessionMode;
+  backend: BackendType | null;
+  paneId: number | string | null;
+  workspaceId: string | null;
+  claudeCommand: string;
 };
 
 export type RunInPaneArgs = {

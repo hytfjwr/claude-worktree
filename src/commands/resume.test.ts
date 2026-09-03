@@ -587,6 +587,48 @@ describe("runResume", () => {
       expect(sentCommand.startsWith('cd "')).toBe(false);
     });
   });
+
+  describe("json output", () => {
+    test("pane mode prints a single JSON line with the launch result", async () => {
+      const deps = makeDeps();
+      const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+      await runResume({ branchName: "feature/test", pane: true, json: true }, deps);
+
+      expect(writeSpy).toHaveBeenCalledOnce();
+      const written = writeSpy.mock.calls[0][0] as string;
+      expect(JSON.parse(written)).toEqual({
+        dryRun: false,
+        repoRoot: "/repo",
+        branch: "feature/test",
+        baseBranch: null,
+        worktreePath: tempDir,
+        mode: "pane",
+        backend: "wezterm",
+        paneId: 42,
+        workspaceId: null,
+        claudeCommand: "claude --continue",
+      });
+    });
+
+    test("fails instead of prompting when an active session requires confirmation", async () => {
+      const runningSession: SessionInfo = {
+        mode: "pane",
+        paneId: 99,
+        backendType: "wezterm",
+        startedAt: new Date().toISOString(),
+      };
+      const deps = makeDeps({
+        readSession: vi.fn(async () => runningSession),
+        listWeztermPanes: vi.fn(async () => [{ paneId: 99, title: "claude", cwd: "/tmp" }]),
+      });
+
+      await expect(runResume({ branchName: "feature/test", pane: true, json: true }, deps)).rejects.toThrow(
+        "Confirmation required",
+      );
+      expect(deps.confirm).not.toHaveBeenCalled();
+    });
+  });
 });
 
 // ============================================================================

@@ -69,6 +69,10 @@ const GLOBAL_HELP: HelpSpec = {
         { flags: "-pr", description: "Auto-create PR after task completion (cannot be used with -merge or -draft)" },
         { flags: "-pull", description: "Fetch latest base branch from remote before creating worktree" },
         { flags: "-n, -dry-run", description: "Preview what would be created without executing" },
+        {
+          flags: "-j, -json",
+          description: "Print the result as one line of JSON (requires -pane or -dry-run)",
+        },
         { flags: "-q, -quiet", description: "Suppress informational output (errors only)" },
         { flags: "-v, -verbose", description: "Show hook execution logs" },
         { flags: "-h, -help, --help", description: "Show this help" },
@@ -85,6 +89,7 @@ const GLOBAL_HELP: HelpSpec = {
           description: "Run Claude without permission prompts (uses --dangerously-skip-permissions)",
         },
         { flags: "-model <name>", description: "Language model to use (passed to claude --model)" },
+        { flags: "-j, -json", description: "Print the result as one line of JSON (requires -pane and a branch name)" },
         { flags: "-q, -quiet", description: "Suppress informational output (errors only)" },
         { flags: "-v, -verbose", description: "Show verbose output" },
       ],
@@ -206,6 +211,10 @@ const CREATE_HELP: HelpSpec = {
         { flags: "-pr", description: "Auto-create PR after task completion (cannot be used with -merge or -draft)" },
         { flags: "-pull", description: "Fetch latest base branch from remote before creating worktree" },
         { flags: "-n, -dry-run", description: "Preview what would be created without executing" },
+        {
+          flags: "-j, -json",
+          description: "Print the result as one line of JSON (requires -pane or -dry-run)",
+        },
         { flags: "-q, -quiet", description: "Suppress informational output (errors only)" },
         { flags: "-v, -verbose", description: "Show hook execution logs" },
         { flags: "-h, -help, --help", description: "Show this help" },
@@ -360,6 +369,7 @@ const RESUME_HELP: HelpSpec = {
           description: "Run Claude without permission prompts (uses --dangerously-skip-permissions)",
         },
         { flags: "-model <name>", description: "Language model to use (passed to claude --model)" },
+        { flags: "-j, -json", description: "Print the result as one line of JSON (requires -pane and a branch name)" },
         { flags: "-q, -quiet", description: "Suppress informational output (errors only)" },
         { flags: "-v, -verbose", description: "Show verbose output" },
         { flags: "-h, -help, --help", description: "Show this help" },
@@ -473,6 +483,7 @@ export function parseCreateArgs(args: string[]): CreateArgs {
       pull: { type: "boolean", flag: "-pull" },
       dryRun: { type: "boolean", flag: "-dry-run", alias: "-n" },
       quiet: { type: "boolean", flag: "-quiet", alias: "-q" },
+      json: { type: "boolean", flag: "-json", alias: "-j" },
       verbose: { type: "boolean", flag: "-verbose", alias: "-v" },
       baseBranch: { type: "string", flag: "-base", alias: "-b", errorMessage: "-base requires a branch name argument" },
       planFile: { type: "string", flag: "-plan", errorMessage: "-plan requires a file path argument" },
@@ -483,7 +494,7 @@ export function parseCreateArgs(args: string[]): CreateArgs {
     unknownErrorPrefix: "Unknown option",
   });
 
-  const { pane, danger, merge, draft, pr, pull, dryRun, quiet, verbose } = booleans;
+  const { pane, danger, merge, draft, pr, pull, dryRun, quiet, json, verbose } = booleans;
   const { baseBranch, planFile, model } = strings;
 
   if (baseBranch) {
@@ -500,6 +511,15 @@ export function parseCreateArgs(args: string[]): CreateArgs {
         "  -draft  Auto-create a Draft PR after task completion\n" +
         "  -pr     Auto-create a PR after task completion\n\n" +
         "These options are mutually exclusive. Use only one.",
+    );
+  }
+
+  if (json && !pane && !dryRun) {
+    throw new UsageError(
+      "The -json option requires -pane or -dry-run.\n\n" +
+        "Usage:\n" +
+        "  claude-worktree <branch-name> <prompt> -pane -json\n" +
+        "  claude-worktree <branch-name> <prompt> -dry-run -json",
     );
   }
 
@@ -528,6 +548,7 @@ export function parseCreateArgs(args: string[]): CreateArgs {
     model,
     pane,
     quiet,
+    json,
     verbose,
     dryRun,
   };
@@ -539,6 +560,7 @@ export function parseResumeArgs(args: string[]): ResumeArgs {
       pane: { type: "boolean", flag: "-pane", alias: "-p" },
       danger: { type: "boolean", flag: "-danger", alias: "-d" },
       quiet: { type: "boolean", flag: "-quiet", alias: "-q" },
+      json: { type: "boolean", flag: "-json", alias: "-j" },
       verbose: { type: "boolean", flag: "-verbose", alias: "-v" },
       model: { type: "string", flag: "-model", errorMessage: "-model requires a model name argument" },
     },
@@ -547,7 +569,7 @@ export function parseResumeArgs(args: string[]): ResumeArgs {
     unknownErrorPrefix: "Unknown option for resume command",
   });
 
-  const { pane, danger, quiet, verbose } = booleans;
+  const { pane, danger, quiet, json, verbose } = booleans;
 
   // First remaining arg that doesn't start with - is branchName, rest is prompt
   const branchName = remaining.length > 0 ? remaining[0] : undefined;
@@ -557,6 +579,18 @@ export function parseResumeArgs(args: string[]): ResumeArgs {
     assertValidBranchName(branchName);
   }
 
+  if (json && !pane) {
+    throw new UsageError(
+      "The -json option requires -pane.\n\nUsage:\n  claude-worktree resume <branch-name> -pane -json",
+    );
+  }
+
+  if (json && !branchName) {
+    throw new UsageError(
+      "The -json option requires a branch name (the interactive worktree selector is not available in JSON mode).\n\nUsage:\n  claude-worktree resume <branch-name> -pane -json",
+    );
+  }
+
   return {
     branchName,
     prompt,
@@ -564,6 +598,7 @@ export function parseResumeArgs(args: string[]): ResumeArgs {
     model: strings.model,
     pane,
     quiet,
+    json,
     verbose,
   };
 }
@@ -794,7 +829,10 @@ export function parseArgs(args: string[]): Command {
 
 export async function run(command: Command): Promise<void> {
   const quiet = "args" in command && command.args && "quiet" in command.args && command.args.quiet;
-  if (quiet) {
+  // create/resume -json prints a single JSON line on stdout, so silence human-readable output.
+  // (list -json prints through the logger and must not be silenced here.)
+  const jsonMode = (command.type === "create" || command.type === "resume") && Boolean(command.args.json);
+  if (quiet || jsonMode) {
     setLogger(createQuietLogger());
     setQuietMode(true);
   }

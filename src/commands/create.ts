@@ -31,6 +31,7 @@ import type {
   CreateDeps,
   CreatedPane,
   GitContext,
+  LaunchResult,
   ProjectConfig,
   RollbackOptions,
   RunInPaneArgs,
@@ -38,8 +39,9 @@ import type {
   WorktreeInfo,
 } from "../types/index.ts";
 import { icons } from "../ui/icons.ts";
+import { printJsonLine } from "../ui/json.ts";
 import { logError, logInfo, logWarn } from "../ui/logger.ts";
-import { confirm } from "../ui/prompt.ts";
+import { confirm, rejectConfirmNonInteractive } from "../ui/prompt.ts";
 import { startSpinner } from "../ui/spinner.ts";
 import { executeHookWithSpinner } from "./hooks.ts";
 import { performRollback } from "./rollback.ts";
@@ -431,16 +433,19 @@ async function launchClaudeInPane(
     worktreePath: string;
     repoRoot: string;
     branchName: string;
+    baseBranch: string;
     config: ProjectConfig | null;
     claudeOptions: ClaudeOptions;
     backend: TerminalBackend;
     slot?: number;
     verbose: boolean;
     quiet: boolean;
+    json: boolean;
   },
   deps: CreateDeps,
 ): Promise<void> {
-  const { worktreePath, repoRoot, branchName, config, claudeOptions, backend, slot, verbose, quiet } = options;
+  const { worktreePath, repoRoot, branchName, baseBranch, config, claudeOptions, backend, slot, verbose, quiet, json } =
+    options;
 
   const claudeCommand = deps.buildClaudeCommand(claudeOptions);
 
@@ -495,6 +500,21 @@ async function launchClaudeInPane(
       ...(createdPane.workspaceId !== undefined && { workspaceId: createdPane.workspaceId }),
     });
     sessionSaved = true;
+
+    if (json) {
+      printJsonLine({
+        dryRun: false,
+        repoRoot,
+        branch: branchName,
+        baseBranch,
+        worktreePath,
+        mode: "pane",
+        backend: backend.name,
+        paneId,
+        workspaceId: createdPane.workspaceId ?? null,
+        claudeCommand,
+      } satisfies LaunchResult);
+    }
 
     logInfo(`${icons.done()} Worktree created and Claude started in new pane`);
 
@@ -629,7 +649,10 @@ async function launchClaudeInTerminal(
 // Main orchestration
 // =============================================================================
 
-export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps): Promise<void> {
+export async function runCreate(args: CreateArgs, baseDeps: CreateDeps = defaultDeps): Promise<void> {
+  // -json is non-interactive: a confirmation prompt would block automation, so fail instead of asking.
+  const deps: CreateDeps = args.json ? { ...baseDeps, confirm: rejectConfirmNonInteractive } : baseDeps;
+
   const { branchName, planFile, merge, draft, pr, baseBranch, pane } = args;
   let { prompt } = args;
 
@@ -769,6 +792,21 @@ export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps
     const claudeCmdPreview = claudeCmdLines.length > 1 ? `${claudeCmdLines[0]} ...` : claudeCmdLines[0];
     logInfo(`  ${step++}. Claude command:    ${claudeCmdPreview}`);
 
+    if (args.json) {
+      printJsonLine({
+        dryRun: true,
+        repoRoot: git.repoRoot,
+        branch: branchName,
+        baseBranch: effectiveBaseBranch,
+        worktreePath,
+        mode: backend ? "pane" : "terminal",
+        backend: backend?.name ?? null,
+        paneId: null,
+        workspaceId: null,
+        claudeCommand: claudeCmd,
+      } satisfies LaunchResult);
+    }
+
     return;
   }
 
@@ -897,12 +935,14 @@ export async function runCreate(args: CreateArgs, deps: CreateDeps = defaultDeps
         worktreePath,
         repoRoot: git.repoRoot,
         branchName,
+        baseBranch: effectiveBaseBranch,
         config,
         claudeOptions,
         backend,
         slot,
         verbose: !!args.verbose,
         quiet: !!args.quiet,
+        json: !!args.json,
       },
       deps,
     );

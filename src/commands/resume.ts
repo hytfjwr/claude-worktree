@@ -12,10 +12,18 @@ import { listHerdrPanes } from "../external/herdr.ts";
 import { ensurePaneBackendAvailable } from "../external/terminal-backend.ts";
 import { getSessionForPane, isRunningInsideTmux, listTmuxPanes } from "../external/tmux.ts";
 import { listWeztermPanes } from "../external/wezterm.ts";
-import type { CreatedPane, ResumeArgs, ResumeDeps, TerminalBackend, WorktreeInfo } from "../types/index.ts";
+import type {
+  CreatedPane,
+  LaunchResult,
+  ResumeArgs,
+  ResumeDeps,
+  TerminalBackend,
+  WorktreeInfo,
+} from "../types/index.ts";
 import { icons } from "../ui/icons.ts";
+import { printJsonLine } from "../ui/json.ts";
 import { logDebug, logInfo, logWarn } from "../ui/logger.ts";
-import { confirm, selectWorktree } from "../ui/prompt.ts";
+import { confirm, rejectConfirmNonInteractive, selectWorktree } from "../ui/prompt.ts";
 
 // =============================================================================
 // Default dependencies (DI)
@@ -57,12 +65,17 @@ export function buildPaneResumeCommand(worktreePath: string, claudeCommand: stri
  * Launch Claude Code --continue in a new pane (WezTerm or tmux).
  */
 async function launchResumeInPane(
-  worktree: WorktreeInfo,
-  claudeCommand: string,
-  backend: TerminalBackend,
-  label: string,
+  options: {
+    worktree: WorktreeInfo;
+    claudeCommand: string;
+    backend: TerminalBackend;
+    label: string;
+    repoRoot: string;
+    json: boolean;
+  },
   deps: ResumeDeps,
 ): Promise<void> {
+  const { worktree, claudeCommand, backend, label, repoRoot, json } = options;
   let paneIdStr: string | undefined;
   let createdPane: CreatedPane | undefined;
   try {
@@ -82,6 +95,21 @@ async function launchResumeInPane(
       startedAt: new Date().toISOString(),
       ...(createdPane.workspaceId !== undefined && { workspaceId: createdPane.workspaceId }),
     });
+
+    if (json) {
+      printJsonLine({
+        dryRun: false,
+        repoRoot,
+        branch: worktree.branch ?? null,
+        baseBranch: null,
+        worktreePath: worktree.path,
+        mode: "pane",
+        backend: backend.name,
+        paneId,
+        workspaceId: createdPane.workspaceId ?? null,
+        claudeCommand,
+      } satisfies LaunchResult);
+    }
 
     logInfo(`${icons.done()} Claude resumed in new pane`);
 
@@ -184,7 +212,10 @@ async function resolveTargetWorktree(
 // Main orchestration
 // =============================================================================
 
-export async function runResume(args: ResumeArgs, deps: ResumeDeps = defaultDeps): Promise<void> {
+export async function runResume(args: ResumeArgs, baseDeps: ResumeDeps = defaultDeps): Promise<void> {
+  // -json is non-interactive: a confirmation prompt would block automation, so fail instead of asking.
+  const deps: ResumeDeps = args.json ? { ...baseDeps, confirm: rejectConfirmNonInteractive } : baseDeps;
+
   const { branchName, prompt, pane, verbose } = args;
 
   let backend: TerminalBackend | undefined;
@@ -309,7 +340,10 @@ export async function runResume(args: ResumeArgs, deps: ResumeDeps = defaultDeps
     const git = ctxResult.value;
     const config = await deps.loadProjectConfig(git.repoRoot);
     const label = buildHerdrLabel(config, { repo: git.repoName, branch: target.branch || basename(target.path) });
-    await launchResumeInPane(target, claudeCommand, backend, label, deps);
+    await launchResumeInPane(
+      { worktree: target, claudeCommand, backend, label, repoRoot: git.repoRoot, json: !!args.json },
+      deps,
+    );
   } else {
     await launchResumeInTerminal(target, claudeCommand, deps);
   }

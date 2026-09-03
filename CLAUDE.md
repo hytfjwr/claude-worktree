@@ -67,6 +67,7 @@ claude-worktree feature/auth 'Implement authentication feature' -pr -base main
 claude-worktree feature/auth 'Implement authentication feature' -pull
 claude-worktree feature/auth 'Implement authentication feature' -pull -base main
 claude-worktree feature/auth 'Implement authentication feature' -dry-run
+claude-worktree feature/auth 'Implement authentication feature' -pane -json
 claude-worktree resume feature/auth
 claude-worktree resume feature/auth 'Continue implementation'
 claude-worktree resume
@@ -92,6 +93,7 @@ claude-worktree clean -dry-run
 - `-pr` - Auto-create PR after task completion (cannot be used with -merge or -draft)
 - `-pull` - Fetch latest base branch from remote before creating worktree
 - `-n, -dry-run` - Preview what would be created without executing
+- `-j, -json` - Print the result as one line of JSON (requires `-pane` or `-dry-run`)
 - `-v, -verbose` - Show hook execution logs
 - `-h, -help` - Show help
 
@@ -99,6 +101,7 @@ claude-worktree clean -dry-run
 
 - `-p, -pane` - Open in a new pane (requires WezTerm, tmux or herdr; default: run in current terminal)
 - `-d, -danger` - Run Claude without permission prompts (uses --dangerously-skip-permissions)
+- `-j, -json` - Print the result as one line of JSON (requires `-pane` and a branch name)
 - `-v, -verbose` - Show verbose output
 
 ### List Options
