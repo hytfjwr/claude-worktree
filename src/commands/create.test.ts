@@ -1327,6 +1327,106 @@ describe("runCreate", () => {
   });
 
   // ---------------------------------------------------------------------------
+  // -json output
+  // ---------------------------------------------------------------------------
+
+  describe("json output", () => {
+    test("pane mode prints a single JSON line with the launch result", async () => {
+      const deps = makeDeps();
+      const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+      await runCreate({ ...defaultPaneArgs, json: true }, deps);
+
+      expect(writeSpy).toHaveBeenCalledOnce();
+      const written = writeSpy.mock.calls[0][0] as string;
+      expect(JSON.parse(written)).toEqual({
+        dryRun: false,
+        repoRoot: "/repo",
+        branch: "feat/x",
+        baseBranch: "main",
+        worktreePath: "/repo/.worktrees/feat-x",
+        mode: "pane",
+        backend: "wezterm",
+        paneId: 42,
+        workspaceId: null,
+        claudeCommand: "claude --prompt 'test'",
+      });
+    });
+
+    test("pane mode reports the herdr backend's string paneId and workspaceId", async () => {
+      const herdrBackend = {
+        name: "herdr" as const,
+        createPane: vi.fn(async () => ({ paneId: "w1B:p1", workspaceId: "w1B" })),
+        sendCommand: vi.fn(async () => {}),
+        closePane: vi.fn(async () => {}),
+      };
+      const deps = makeDeps({ ensurePaneBackend: vi.fn(async () => herdrBackend) });
+      const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+      await runCreate({ ...defaultPaneArgs, json: true }, deps);
+
+      const written = writeSpy.mock.calls[0][0] as string;
+      const parsed = JSON.parse(written);
+      expect(parsed.backend).toBe("herdr");
+      expect(parsed.paneId).toBe("w1B:p1");
+      expect(parsed.workspaceId).toBe("w1B");
+    });
+
+    test("dry-run + pane mode reports dryRun with a null paneId and does not create a pane", async () => {
+      const deps = makeDeps();
+      const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+      await runCreate({ ...defaultPaneArgs, dryRun: true, json: true }, deps);
+
+      const backend = await (deps.ensurePaneBackend as ReturnType<typeof vi.fn>).mock.results[0].value;
+      expect(backend.createPane).not.toHaveBeenCalled();
+
+      const written = writeSpy.mock.calls[0][0] as string;
+      const parsed = JSON.parse(written);
+      expect(parsed.dryRun).toBe(true);
+      expect(parsed.mode).toBe("pane");
+      expect(parsed.backend).toBe("wezterm");
+      expect(parsed.paneId).toBeNull();
+      expect(parsed.workspaceId).toBeNull();
+    });
+
+    test("dry-run without pane reports terminal mode with a null backend", async () => {
+      const deps = makeDeps();
+      const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+      await runCreate({ ...defaultTerminalArgs, dryRun: true, json: true }, deps);
+
+      const written = writeSpy.mock.calls[0][0] as string;
+      const parsed = JSON.parse(written);
+      expect(parsed.mode).toBe("terminal");
+      expect(parsed.backend).toBeNull();
+    });
+
+    test("does not print JSON when json is not set", async () => {
+      const deps = makeDeps();
+      const writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+      await runCreate(defaultPaneArgs, deps);
+
+      const jsonWrites = writeSpy.mock.calls.filter((call) => String(call[0]).startsWith("{"));
+      expect(jsonWrites).toHaveLength(0);
+    });
+
+    test("fails instead of prompting when a confirmation would be required", async () => {
+      const existingWorktree = makeWorktree({ path: "/repo/.worktrees/feat-x", branch: "feat/x" });
+      const deps = makeDeps({
+        listWorktrees: vi.fn(async () => ({
+          worktrees: [makeWorktree({ path: "/repo", branch: "main", isMain: true }), existingWorktree],
+          mainBranch: "main",
+        })),
+      });
+
+      await expect(runCreate({ ...defaultPaneArgs, json: true }, deps)).rejects.toThrow("Confirmation required");
+      expect(deps.confirm).not.toHaveBeenCalled();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // Plan file
   // ---------------------------------------------------------------------------
 

@@ -105,6 +105,7 @@ Did you mean "feature/auth"?
 - `-pr` - Auto-create PR after task completion (cannot be used with -merge or -draft)
 - `-pull` - Fetch latest base branch from remote before creating worktree
 - `-n, -dry-run` - Preview what would be created without executing
+- `-j, -json` - Print the result as one line of JSON (requires `-pane` or `-dry-run`)
 - `-v, -verbose` - Show hook execution logs
 - `-h, -help` - Show help
 - `-version, --version` - Show version number
@@ -140,6 +141,7 @@ When stdin is not a TTY (e.g., piped input), the selector falls back to a number
 
 - `-p, -pane` - Open in a new pane (requires WezTerm, tmux or herdr; default: run in current terminal)
 - `-d, -danger` - Skip workspace warning (uses --dangerously-skip-permissions)
+- `-j, -json` - Print the result as one line of JSON (requires `-pane` and a branch name)
 - `-v, -verbose` - Show verbose output
 
 ### Clean Options
@@ -175,6 +177,9 @@ claude-worktree feature/auth 'Implement authentication feature'
 
 # Open in a new pane (WezTerm, tmux or herdr)
 claude-worktree feature/auth 'Implement authentication feature' -pane
+
+# Open in a new pane and print the result as JSON (for scripts and agents)
+claude-worktree feature/auth 'Implement authentication feature' -pane -json
 
 # Short form
 claude-worktree fix/bug-123 'Fix login bug' -p
@@ -293,6 +298,38 @@ When using `claude-worktree list -json`, the output follows this schema:
 | `session.mode` | `string` | `"pane"` or `"terminal"` |
 | `session.paneId` | `number \| string \| undefined` | Pane ID — WezTerm (number), tmux (string, e.g. `%0`) or herdr (string, e.g. `w1:p1`). Pane mode only. |
 | `session.agentStatus` | `string \| undefined` | herdr only — agent state reported by herdr: `"idle"`, `"working"`, `"blocked"`, `"done"` or `"unknown"` |
+
+### Create / Resume JSON Output
+
+With `-pane -json` (or `-dry-run -json`), `claude-worktree <branch> <prompt>` and `claude-worktree resume <branch>` suppress their human-readable output and print a single JSON line on stdout. Confirmation prompts are not shown in this mode; if one would be required, the command fails instead.
+
+```json
+{
+  "dryRun": false,
+  "repoRoot": "/absolute/path/to/repo",
+  "branch": "feature/auth",
+  "baseBranch": "main",
+  "worktreePath": "/absolute/path/to/repo-worktrees/feature-auth",
+  "mode": "pane",
+  "backend": "herdr",
+  "paneId": "w1B:p1",
+  "workspaceId": "w1B",
+  "claudeCommand": "claude --dangerously-skip-permissions ..."
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `dryRun` | `boolean` | `true` when produced by `-dry-run` (nothing was created) |
+| `repoRoot` | `string` | Absolute path to the main repository |
+| `branch` | `string \| null` | Branch name (`null` only for a detached worktree on `resume`) |
+| `baseBranch` | `string \| null` | Base branch used for the worktree (`null` on `resume`) |
+| `worktreePath` | `string` | Absolute path to the worktree |
+| `mode` | `string` | `"pane"` or `"terminal"` (`"terminal"` only with `-dry-run` and no `-pane`) |
+| `backend` | `string \| null` | `"wezterm"`, `"tmux"` or `"herdr"`; `null` in terminal mode |
+| `paneId` | `number \| string \| null` | Same value as `session.paneId` in `list -json`; `null` on dry run |
+| `workspaceId` | `string \| null` | herdr workspace id; `null` for other backends |
+| `claudeCommand` | `string` | The Claude Code command that was (or would be) sent to the pane |
 
 ## Hook Configuration
 

@@ -1,5 +1,6 @@
 import * as readline from "node:readline";
 
+import { UsageError } from "../core/errors.ts";
 import type { ConfirmOptions, WorktreeInfo, WorktreeStatus } from "../types/index.ts";
 import { dim, yellow } from "./color.ts";
 import { icons } from "./icons.ts";
@@ -142,4 +143,12 @@ export async function selectMultiple(statuses: WorktreeStatus[]): Promise<Worktr
     hint: s.reason,
   }));
   return selectManyUI({ message: "Select worktrees to clean:", items });
+}
+
+/**
+ * Replacement for `confirm` in non-interactive (-json) mode: instead of prompting,
+ * fail so that automation never blocks on a question it cannot answer.
+ */
+export async function rejectConfirmNonInteractive(message: string, _options?: ConfirmOptions): Promise<boolean> {
+  throw new UsageError(`Confirmation required: ${message}\n\nRe-run without -json to answer interactively.`);
 }
