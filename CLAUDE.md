@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A CLI tool for parallel development using git worktree + Claude Code. It creates a git worktree and launches Claude Code. With the `-pane` option, it opens in a new WezTerm or tmux pane for parallel development.
+A CLI tool for parallel development using git worktree + Claude Code. It creates a git worktree and launches Claude Code. With the `-pane` option, it opens in a new WezTerm or tmux pane, or a new herdr workspace, for parallel development.
 
 ## Commands
 
@@ -83,7 +83,7 @@ claude-worktree clean -dry-run
 
 ### Options
 
-- `-p, -pane` - Open in a new pane (requires WezTerm or tmux; default: run in current terminal)
+- `-p, -pane` - Open in a new pane (requires WezTerm, tmux or herdr; default: run in current terminal)
 - `-plan <file>` - Read prompt from a file (cannot be used with inline prompt)
 - `-b, -base <branch>` - Specify base branch (default: current branch)
 - `-d, -danger` - Run Claude without permission prompts (uses --dangerously-skip-permissions)
@@ -97,7 +97,7 @@ claude-worktree clean -dry-run
 
 ### Resume Options
 
-- `-p, -pane` - Open in a new pane (requires WezTerm or tmux; default: run in current terminal)
+- `-p, -pane` - Open in a new pane (requires WezTerm, tmux or herdr; default: run in current terminal)
 - `-d, -danger` - Run Claude without permission prompts (uses --dangerously-skip-permissions)
 - `-v, -verbose` - Show verbose output
 
@@ -165,7 +165,9 @@ src/
   external/            # External tool integrations
     claude.ts          # Claude Code command generation
     claude.test.ts
-    terminal-backend.ts # Backend abstraction (auto-detect WezTerm/tmux)
+    herdr.ts           # herdr workspace/pane operations (workspace create, pane run, pane list)
+    herdr.test.ts
+    terminal-backend.ts # Backend abstraction (auto-detect herdr/WezTerm/tmux, CLAUDE_WORKTREE_BACKEND override)
     terminal-backend.test.ts
     tmux.ts            # tmux pane operations (split, send-keys)
     tmux.test.ts
@@ -201,7 +203,7 @@ src/
 3. Load project config from `.claude-worktree.json` (if exists)
 4. Create worktree directly via `git worktree add`
 5. Run `postCreate` hook (if configured) — rollback worktree on failure
-6. If `-pane`: Auto-detect backend (WezTerm or tmux) → split a new pane → cd into worktree → launch Claude Code → save session metadata
+6. If `-pane`: Detect backend (herdr → WezTerm → tmux; `CLAUDE_WORKTREE_BACKEND` overrides) → open a new pane (herdr: a new workspace with the worktree as cwd) → cd into worktree → launch Claude Code → save session metadata
 7. Otherwise: cd into worktree → launch Claude Code in current terminal → mark session as completed on exit
 
 **Hook Configuration (`.claude-worktree.json`):**
@@ -214,17 +216,19 @@ src/
   "preClean": "cd {path} && docker-compose down",
   "preCleanTimeout": 120,
   "postClean": "docker volume rm app-{path}-data || true",
-  "postCleanTimeout": 60
+  "postCleanTimeout": 60,
+  "herdr": { "label": "{repo}/{branch}" }
 }
 ```
 - `maxWorktrees` — maximum number of concurrent worktrees (excludes main). If set, blocks creation when the limit is reached.
 - `{path}` — worktree path
 - `{slot}` — auto-assigned slot (1-9) based on port availability (8881-8889), persisted to `~/.cache/claude-worktree/slots.json`
+- `herdr.label` — label template for the herdr workspace created by `-pane` (default: `{repo}/{branch}`; placeholders `{repo}`, `{branch}`)
 
 **Session Tracking (`~/.cache/claude-worktree/sessions.json`):**
-- Worktree 作成時にセッションメタデータ (pane ID, mode, backendType, startedAt) を保存
+- Worktree 作成時にセッションメタデータ (pane ID, mode, backendType, startedAt, herdr の場合は workspaceId) を保存
 - `list` で各 worktree の Claude セッション状態 (Running/Done) をデフォルト表示 (`-no-status` で無効化)
-- pane モード: WezTerm/tmux pane の存在で Running/Done を判定（backendType に応じて対応する pane リストを参照）
+- pane モード: WezTerm/tmux/herdr pane の存在で Running/Done を判定（backendType に応じて対応する pane リストを参照）。herdr は `herdr pane list` の agent_status (idle/working/blocked/done) も `list` に併記し、`list -json` では `session.agentStatus` として出力
 - terminal モード: プロセス終了時に `completedAt` を設定して Done 判定
 - `clean` 実行時にセッションデータも自動削除
 - `hookTimeout` — global default timeout in seconds (default: 600)
@@ -233,10 +237,11 @@ src/
 
 **Environment Variables:**
 - `CLAUDE_WORKTREE_CACHE_DIR` — override the slot cache directory (default: `~/.cache/claude-worktree`)
+- `CLAUDE_WORKTREE_BACKEND` — force the pane backend (`wezterm` / `tmux` / `herdr`; default: auto-detect)
 - `CLAUDE_WORKTREE_NO_MOUSE` — disable mouse support in the interactive selectors (any non-empty value). Mouse tracking takes over the terminal's own text selection while a selector is open.
 - `CLAUDE_WORKTREE_NO_OSC7` — disable reporting the worktree directory to the terminal emulator via OSC 7 (any non-empty value). Keeps emulator-spawned panes/tabs (e.g. WezTerm splits) anchored to the worktree while Claude Code is running.
 
-**External Tool Dependencies:** node, git, wezterm CLI or tmux (for -pane), claude CLI, gh CLI (optional)
+**External Tool Dependencies:** node, git, wezterm CLI, tmux or herdr CLI (for -pane), claude CLI, gh CLI (optional)
 
 ## Testing
 

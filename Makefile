@@ -81,5 +81,6 @@ check:
 	@echo "--- Optional (required for --pane) ---"
 	@printf "wezterm: " && (which wezterm >/dev/null && wezterm --version | cut -d' ' -f2) || echo "not found"
 	@printf "tmux:    " && (which tmux >/dev/null && tmux -V | cut -d' ' -f2) || echo "not found"
+	@printf "herdr:   " && (which herdr >/dev/null && herdr --version | cut -d' ' -f2) || echo "not found"
 	@echo ""
 	@echo "✅ Check complete"

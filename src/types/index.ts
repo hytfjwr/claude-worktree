@@ -45,4 +45,13 @@ export type { ClickTarget, FilterMatch, FrameLayout, SelectItem, Viewport } from
 export type { AllPanes, SessionInfo, SessionMode, SessionState } from "./session.ts";
 export type { SpawnInteractiveOptions } from "./spawn.ts";
 export type { ColorTheme, Spinner } from "./spinner.ts";
-export type { BackendType, PaneOptions, TerminalBackend, TmuxPane, WeztermPane } from "./wezterm.ts";
+export type {
+  BackendType,
+  CreatedPane,
+  HerdrAgentStatus,
+  HerdrPane,
+  PaneOptions,
+  TerminalBackend,
+  TmuxPane,
+  WeztermPane,
+} from "./wezterm.ts";

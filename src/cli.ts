@@ -48,7 +48,7 @@ const GLOBAL_HELP: HelpSpec = {
       entries: [
         {
           flags: "-p, -pane",
-          description: "Open in a new pane (requires WezTerm or tmux; default: run in current terminal)",
+          description: "Open in a new pane (requires WezTerm, tmux or herdr; default: run in current terminal)",
         },
         { flags: "-plan <file>", description: "Read prompt from a plan file (cannot be used with inline prompt)" },
         { flags: "-b, -base <branch>", description: "Specify base branch (default: current branch)" },
@@ -79,7 +79,7 @@ const GLOBAL_HELP: HelpSpec = {
       title: "Resume options",
       kind: "options",
       entries: [
-        { flags: "-p, -pane", description: "Open in a new pane (requires WezTerm or tmux)" },
+        { flags: "-p, -pane", description: "Open in a new pane (requires WezTerm, tmux or herdr)" },
         {
           flags: "-d, -danger",
           description: "Run Claude without permission prompts (uses --dangerously-skip-permissions)",
@@ -168,7 +168,7 @@ const CREATE_HELP: HelpSpec = {
   name: "claude-worktree <branch-name>",
   tagline: "Create a new worktree and launch Claude Code",
   description:
-    "Creates a git worktree for a new branch, then starts a Claude Code session. Optionally opens in a new pane (WezTerm or tmux) for parallel development.",
+    "Creates a git worktree for a new branch, then starts a Claude Code session. Optionally opens in a new pane (WezTerm, tmux or herdr) for parallel development.",
   usage: ["claude-worktree <branch-name> <prompt>", "claude-worktree <branch-name> -plan <file-path>"],
   sections: [
     {
@@ -185,7 +185,7 @@ const CREATE_HELP: HelpSpec = {
       entries: [
         {
           flags: "-p, -pane",
-          description: "Open in a new pane (requires WezTerm or tmux; default: run in current terminal)",
+          description: "Open in a new pane (requires WezTerm, tmux or herdr; default: run in current terminal)",
         },
         { flags: "-plan <file>", description: "Read prompt from a plan file (cannot be used with inline prompt)" },
         { flags: "-b, -base <branch>", description: "Specify base branch (default: current branch)" },
@@ -353,7 +353,7 @@ const RESUME_HELP: HelpSpec = {
       entries: [
         {
           flags: "-p, -pane",
-          description: "Open in a new pane (requires WezTerm or tmux; default: run in current terminal)",
+          description: "Open in a new pane (requires WezTerm, tmux or herdr; default: run in current terminal)",
         },
         {
           flags: "-d, -danger",

@@ -41,8 +41,9 @@ describe("fetchAllPanes", () => {
     const result = await fetchAllPanes({
       listWeztermPanes: async () => weztermPanes,
       listTmuxPanes: async () => tmuxPanes,
+      listHerdrPanes: async () => null,
     });
-    expect(result).toEqual({ wezterm: weztermPanes, tmux: tmuxPanes });
+    expect(result).toEqual({ wezterm: weztermPanes, tmux: tmuxPanes, herdr: null });
   });
 
   test("returns null for backends that fail", async () => {
@@ -53,8 +54,9 @@ describe("fetchAllPanes", () => {
       listTmuxPanes: async () => {
         throw new Error("tmux not found");
       },
+      listHerdrPanes: async () => null,
     });
-    expect(result).toEqual({ wezterm: null, tmux: null });
+    expect(result).toEqual({ wezterm: null, tmux: null, herdr: null });
   });
 
   test("returns null only for the failing backend", async () => {
@@ -64,15 +66,43 @@ describe("fetchAllPanes", () => {
       listTmuxPanes: async () => {
         throw new Error("tmux not found");
       },
+      listHerdrPanes: async () => null,
     });
-    expect(result).toEqual({ wezterm: weztermPanes, tmux: null });
+    expect(result).toEqual({ wezterm: weztermPanes, tmux: null, herdr: null });
+  });
+
+  test("returns panes from all three backends", async () => {
+    const weztermPanes = [{ paneId: 1, title: "test", cwd: "/tmp" }];
+    const tmuxPanes = [{ paneId: "%0", title: "test", cwd: "/tmp" }];
+    const herdrPanes = [
+      { paneId: "w1B:p1", workspaceId: "w1B", title: "test", cwd: "/tmp", agentStatus: "working" as const },
+    ];
+    const result = await fetchAllPanes({
+      listWeztermPanes: async () => weztermPanes,
+      listTmuxPanes: async () => tmuxPanes,
+      listHerdrPanes: async () => herdrPanes,
+    });
+    expect(result).toEqual({ wezterm: weztermPanes, tmux: tmuxPanes, herdr: herdrPanes });
+  });
+
+  test("returns null when listHerdrPanes rejects", async () => {
+    const weztermPanes = [{ paneId: 1, title: "test", cwd: "/tmp" }];
+    const tmuxPanes = [{ paneId: "%0", title: "test", cwd: "/tmp" }];
+    const result = await fetchAllPanes({
+      listWeztermPanes: async () => weztermPanes,
+      listTmuxPanes: async () => tmuxPanes,
+      listHerdrPanes: async () => {
+        throw new Error("herdr not found");
+      },
+    });
+    expect(result).toEqual({ wezterm: weztermPanes, tmux: tmuxPanes, herdr: null });
   });
 });
 
 describe("determineSessionStatus", () => {
   const now = new Date("2025-01-15T12:00:00Z");
-  const noPanes: AllPanes = { wezterm: null, tmux: null };
-  const emptyPanes: AllPanes = { wezterm: [], tmux: null };
+  const noPanes: AllPanes = { wezterm: null, tmux: null, herdr: null };
+  const emptyPanes: AllPanes = { wezterm: [], tmux: null, herdr: null };
 
   test("completedAt set → done", () => {
     const session: SessionInfo = {
@@ -93,9 +123,10 @@ describe("determineSessionStatus", () => {
       startedAt: "2025-01-15T11:45:00Z",
     };
     const panes: WeztermPane[] = [{ paneId: 42, title: "claude", cwd: "/tmp" }];
-    const result = determineSessionStatus(session, { wezterm: panes, tmux: null }, now);
+    const result = determineSessionStatus(session, { wezterm: panes, tmux: null, herdr: null }, now);
     expect(result.status).toBe("running");
     expect(result.paneId).toBe(42);
+    expect(result.agentStatus).toBeUndefined();
   });
 
   test("pane mode with missing pane → done", () => {
@@ -105,7 +136,7 @@ describe("determineSessionStatus", () => {
       startedAt: "2025-01-15T11:45:00Z",
     };
     const panes: WeztermPane[] = [{ paneId: 99, title: "other", cwd: "/tmp" }];
-    const result = determineSessionStatus(session, { wezterm: panes, tmux: null }, now);
+    const result = determineSessionStatus(session, { wezterm: panes, tmux: null, herdr: null }, now);
     expect(result.status).toBe("done");
   });
 
@@ -137,7 +168,7 @@ describe("determineSessionStatus", () => {
       completedAt: "2025-01-15T11:50:00Z",
     };
     const panes: WeztermPane[] = [{ paneId: 42, title: "claude", cwd: "/tmp" }];
-    const result = determineSessionStatus(session, { wezterm: panes, tmux: null }, now);
+    const result = determineSessionStatus(session, { wezterm: panes, tmux: null, herdr: null }, now);
     expect(result.status).toBe("done");
   });
 
@@ -159,7 +190,7 @@ describe("determineSessionStatus", () => {
       backendType: "tmux",
       startedAt: "2025-01-15T11:45:00Z",
     };
-    const allPanes: AllPanes = { wezterm: [{ paneId: 99, title: "other", cwd: "/tmp" }], tmux: null };
+    const allPanes: AllPanes = { wezterm: [{ paneId: 99, title: "other", cwd: "/tmp" }], tmux: null, herdr: null };
     const result = determineSessionStatus(session, allPanes, now);
     expect(result.status).toBe("unknown");
     expect(result.paneId).toBe("%42");
@@ -181,7 +212,7 @@ describe("determineSessionStatus", () => {
       backendType: "tmux",
       startedAt: "2025-01-15T11:45:00Z",
     };
-    const allPanes: AllPanes = { wezterm: null, tmux: [{ paneId: "%42", title: "claude", cwd: "/tmp" }] };
+    const allPanes: AllPanes = { wezterm: null, tmux: [{ paneId: "%42", title: "claude", cwd: "/tmp" }], herdr: null };
     const result = determineSessionStatus(session, allPanes, now);
     expect(result.status).toBe("running");
     expect(result.paneId).toBe("%42");
@@ -194,7 +225,7 @@ describe("determineSessionStatus", () => {
       backendType: "tmux",
       startedAt: "2025-01-15T11:45:00Z",
     };
-    const allPanes: AllPanes = { wezterm: null, tmux: [{ paneId: "%99", title: "other", cwd: "/tmp" }] };
+    const allPanes: AllPanes = { wezterm: null, tmux: [{ paneId: "%99", title: "other", cwd: "/tmp" }], herdr: null };
     const result = determineSessionStatus(session, allPanes, now);
     expect(result.status).toBe("done");
   });
@@ -205,9 +236,59 @@ describe("determineSessionStatus", () => {
       paneId: 42,
       startedAt: "2025-01-15T11:45:00Z",
     };
-    const allPanes: AllPanes = { wezterm: [{ paneId: 42, title: "claude", cwd: "/tmp" }], tmux: null };
+    const allPanes: AllPanes = { wezterm: [{ paneId: 42, title: "claude", cwd: "/tmp" }], tmux: null, herdr: null };
     const result = determineSessionStatus(session, allPanes, now);
     expect(result.status).toBe("running");
+  });
+
+  test("herdr pane mode with existing pane → running with agentStatus", () => {
+    const session: SessionInfo = {
+      mode: "pane",
+      paneId: "w1B:p1",
+      backendType: "herdr",
+      workspaceId: "w1B",
+      startedAt: "2025-01-15T11:45:00Z",
+    };
+    const allPanes: AllPanes = {
+      wezterm: null,
+      tmux: null,
+      herdr: [{ paneId: "w1B:p1", workspaceId: "w1B", title: "claude", cwd: "/tmp", agentStatus: "working" }],
+    };
+    const result = determineSessionStatus(session, allPanes, now);
+    expect(result.status).toBe("running");
+    expect(result.agentStatus).toBe("working");
+    expect(result.paneId).toBe("w1B:p1");
+  });
+
+  test("herdr pane mode with missing pane → done", () => {
+    const session: SessionInfo = {
+      mode: "pane",
+      paneId: "w1B:p1",
+      backendType: "herdr",
+      workspaceId: "w1B",
+      startedAt: "2025-01-15T11:45:00Z",
+    };
+    const allPanes: AllPanes = {
+      wezterm: null,
+      tmux: null,
+      herdr: [{ paneId: "w9Z:p1", workspaceId: "w9Z", title: "other", cwd: "/tmp", agentStatus: "idle" }],
+    };
+    const result = determineSessionStatus(session, allPanes, now);
+    expect(result.status).toBe("done");
+    expect(result.agentStatus).toBeUndefined();
+  });
+
+  test("herdr pane mode with null herdr panes → unknown", () => {
+    const session: SessionInfo = {
+      mode: "pane",
+      paneId: "w1B:p1",
+      backendType: "herdr",
+      workspaceId: "w1B",
+      startedAt: "2025-01-15T11:45:00Z",
+    };
+    const result = determineSessionStatus(session, noPanes, now);
+    expect(result.status).toBe("unknown");
+    expect(result.paneId).toBe("w1B:p1");
   });
 });
 
@@ -273,6 +354,19 @@ describe("session file I/O", () => {
     };
     await saveSession("/tmp/wt-1", session);
     const result = await readSession("/tmp/wt-1");
+    expect(result).toEqual(session);
+  });
+
+  test("saveSession and readSession round-trip for herdr backend with workspaceId", async () => {
+    const session: SessionInfo = {
+      mode: "pane",
+      paneId: "w1B:p1",
+      backendType: "herdr",
+      workspaceId: "w1B",
+      startedAt: "2025-01-15T11:00:00Z",
+    };
+    await saveSession("/tmp/wt-herdr", session);
+    const result = await readSession("/tmp/wt-herdr");
     expect(result).toEqual(session);
   });
 
@@ -493,6 +587,24 @@ describe("corrupt session cache", () => {
     const session: SessionInfo = { mode: "terminal", startedAt: "2025-01-15T11:00:00Z" };
     await expect(saveSession("/tmp/wt-2", session)).resolves.toBeUndefined();
     expect(await readSession("/tmp/wt-2")).toEqual(session);
+  });
+
+  test("workspaceId of the wrong type degrades to an empty cache", async () => {
+    await writeFile(
+      join(tempDir, "sessions.json"),
+      JSON.stringify({
+        "/tmp/wt": {
+          mode: "pane",
+          paneId: "w1B:p1",
+          backendType: "herdr",
+          workspaceId: 5,
+          startedAt: "2025-01-15T11:00:00Z",
+        },
+      }),
+      "utf-8",
+    );
+
+    await expect(readAllSessions()).resolves.toEqual({});
   });
 });
 

@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 
-import { buildHookCommand, loadProjectConfig, resolveHookTimeout } from "../core/config.ts";
+import { buildHerdrLabel, buildHookCommand, loadProjectConfig, resolveHookTimeout } from "../core/config.ts";
 import { GitError, getErrorMessage, isNodeError, UsageError } from "../core/errors.ts";
 import {
   branchExists,
@@ -29,6 +29,7 @@ import type {
   ClaudeOptions,
   CreateArgs,
   CreateDeps,
+  CreatedPane,
   GitContext,
   ProjectConfig,
   RollbackOptions,
@@ -469,13 +470,18 @@ async function launchClaudeInPane(
   await writeFile(payloadPath, JSON.stringify(runInPaneArgs), { encoding: "utf-8", flag: "wx", mode: 0o600 });
 
   let paneIdStr: string | undefined;
+  let createdPane: CreatedPane | undefined;
   // Tracks whether this process wrote the session entry. Rollback may only delete
   // a session entry this process created — a worktree path can be reused, and
   // deleting an entry written by another process would drop a live session.
   let sessionSaved = false;
   try {
-    paneIdStr = await backend.createPane({ keepFocus: true });
-    logInfo(`${icons.window()} Created pane: ${paneIdStr}`);
+    const label = buildHerdrLabel(config, { repo: basename(repoRoot), branch: branchName });
+    createdPane = await backend.createPane({ keepFocus: true, cwd: worktreePath, label });
+    paneIdStr = createdPane.paneId;
+    logInfo(
+      `${icons.window()} Created pane: ${paneIdStr}${createdPane.workspaceId ? ` (workspace ${createdPane.workspaceId})` : ""}`,
+    );
 
     await backend.sendCommand(paneIdStr, `${getSelfCommand()} _run-in-pane "${payloadPath}"`);
 
@@ -486,6 +492,7 @@ async function launchClaudeInPane(
       backendType: backend.name,
       mode: "pane",
       startedAt: new Date().toISOString(),
+      ...(createdPane.workspaceId !== undefined && { workspaceId: createdPane.workspaceId }),
     });
     sessionSaved = true;
 
@@ -498,8 +505,8 @@ async function launchClaudeInPane(
     }
   } catch (error) {
     // Close orphaned pane if it was created before the failure
-    if (paneIdStr) {
-      await backend.closePane(paneIdStr).catch(() => {});
+    if (createdPane) {
+      await backend.closePane(createdPane).catch(() => {});
     }
     // Clean up temp file on failure (the pane side handles its own cleanup on success)
     await unlink(payloadPath).catch(() => {});

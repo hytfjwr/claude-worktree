@@ -56,5 +56,6 @@ export type CleanDeps = {
   readAllSessions: () => Promise<Record<string, SessionInfo>>;
   listWeztermPanes: () => Promise<AllPanes["wezterm"]>;
   listTmuxPanes: () => Promise<AllPanes["tmux"]>;
+  listHerdrPanes: () => Promise<AllPanes["herdr"]>;
   determineSessionStatus: (session: SessionInfo, allPanes: AllPanes, now?: Date) => SessionState;
 };

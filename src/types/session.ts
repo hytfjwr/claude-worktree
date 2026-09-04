@@ -1,9 +1,10 @@
-import type { BackendType } from "./wezterm.ts";
+import type { BackendType, HerdrAgentStatus, HerdrPane } from "./wezterm.ts";
 
 export type SessionMode = "pane" | "terminal";
 
 export type SessionInfo = {
-  paneId?: number | string; // WezTerm: number, tmux: string (e.g. "%42")
+  paneId?: number | string; // WezTerm: number, tmux: string (e.g. "%42"), herdr: string (e.g. "w1B:p1")
+  workspaceId?: string; // herdr only: the workspace that hosts the pane (e.g. "w1B")
   backendType?: BackendType; // undefined treated as "wezterm" for backward compat
   mode: SessionMode;
   startedAt: string; // ISO 8601
@@ -15,9 +16,11 @@ export type SessionState = {
   elapsedMs: number;
   mode: SessionMode;
   paneId?: number | string;
+  agentStatus?: HerdrAgentStatus; // herdr only: agent state reported by herdr for a running pane
 };
 
 export type AllPanes = {
   wezterm: { paneId: number; title: string; cwd: string }[] | null;
   tmux: { paneId: string; title: string; cwd: string }[] | null;
+  herdr: HerdrPane[] | null;
 };

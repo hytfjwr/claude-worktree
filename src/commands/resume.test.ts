@@ -34,7 +34,7 @@ function makeDeps(overrides: Partial<ResumeDeps> = {}): ResumeDeps {
   return {
     ensurePaneBackend: vi.fn(async () => ({
       name: "wezterm" as const,
-      createPane: vi.fn(async () => "42"),
+      createPane: vi.fn(async () => ({ paneId: "42" })),
       sendCommand: vi.fn(async () => {}),
       closePane: vi.fn(async () => {}),
     })),
@@ -43,6 +43,7 @@ function makeDeps(overrides: Partial<ResumeDeps> = {}): ResumeDeps {
       repoName: "repo",
       currentBranch: "main",
     }),
+    loadProjectConfig: vi.fn(async () => null),
     listWorktrees: async () => ({
       worktrees: [makeWorktree({ path: "/repo", branch: "main", isMain: true }), makeWorktree({ path: tempDir })],
       mainBranch: "main",
@@ -53,6 +54,7 @@ function makeDeps(overrides: Partial<ResumeDeps> = {}): ResumeDeps {
     determineSessionStatus,
     listWeztermPanes: vi.fn(async () => null),
     listTmuxPanes: vi.fn(async () => null),
+    listHerdrPanes: vi.fn(async () => null),
     confirm: vi.fn(async () => true),
     buildResumeCommand: vi.fn(() => "claude --continue"),
     selectWorktree: vi.fn(async () => null),
@@ -410,6 +412,30 @@ describe("runResume", () => {
       expect(deps.listWeztermPanes).not.toHaveBeenCalled();
     });
 
+    test("only queries herdr backend for herdr pane-mode sessions", async () => {
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      const herdrSession: SessionInfo = {
+        mode: "pane",
+        paneId: "w1B:p1",
+        backendType: "herdr",
+        workspaceId: "w1B",
+        startedAt: new Date().toISOString(),
+      };
+      const deps = makeDeps({
+        readSession: vi.fn(async () => herdrSession),
+        listHerdrPanes: vi.fn(async () => [
+          { paneId: "w1B:p1", workspaceId: "w1B", title: "claude", cwd: "/tmp", agentStatus: "working" as const },
+        ]),
+        confirm: vi.fn(async () => true),
+      });
+
+      await runResume({ branchName: "feature/test", pane: true }, deps);
+
+      expect(deps.listHerdrPanes).toHaveBeenCalled();
+      expect(deps.listWeztermPanes).not.toHaveBeenCalled();
+      expect(deps.listTmuxPanes).not.toHaveBeenCalled();
+    });
+
     test("confirms before resuming when the pane list is unavailable", async () => {
       const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
       const deps = makeDeps({
@@ -465,7 +491,11 @@ describe("runResume", () => {
       await runResume({ branchName: "feature/test", pane: true }, deps);
 
       const backend = await (deps.ensurePaneBackend as ReturnType<typeof vi.fn>).mock.results[0].value;
-      expect(backend.createPane).toHaveBeenCalledWith({ keepFocus: true });
+      expect(backend.createPane).toHaveBeenCalledWith({
+        keepFocus: true,
+        cwd: expect.any(String),
+        label: expect.any(String),
+      });
       const sendCommandCall = (backend.sendCommand as ReturnType<typeof vi.fn>).mock.calls[0];
       expect(sendCommandCall[0]).toBe("42");
       expect(sendCommandCall[1]).toContain(tempDir);
@@ -476,6 +506,39 @@ describe("runResume", () => {
         mode: "pane",
         startedAt: expect.any(String),
       });
+    });
+
+    test("uses the configured herdr label template when launching in a pane", async () => {
+      const deps = makeDeps({
+        loadProjectConfig: vi.fn(async () => ({ herdr: { label: "{branch}@{repo}" } })),
+      });
+
+      await runResume({ branchName: "feature/test", pane: true }, deps);
+
+      const backend = await (deps.ensurePaneBackend as ReturnType<typeof vi.fn>).mock.results[0].value;
+      expect(backend.createPane).toHaveBeenCalledWith({
+        keepFocus: true,
+        cwd: expect.any(String),
+        label: "feature/test@repo",
+      });
+    });
+
+    test("saves workspaceId in the session when the herdr backend returns one", async () => {
+      const deps = makeDeps({
+        ensurePaneBackend: vi.fn(async () => ({
+          name: "herdr" as const,
+          createPane: vi.fn(async () => ({ paneId: "w1B:p1", workspaceId: "w1B" })),
+          sendCommand: vi.fn(async () => {}),
+          closePane: vi.fn(async () => {}),
+        })),
+      });
+
+      await runResume({ branchName: "feature/test", pane: true }, deps);
+
+      expect(deps.saveSession).toHaveBeenCalledWith(
+        tempDir,
+        expect.objectContaining({ backendType: "herdr", paneId: "w1B:p1", workspaceId: "w1B", mode: "pane" }),
+      );
     });
 
     test("throws when no pane backend available", async () => {
@@ -504,7 +567,7 @@ describe("runResume", () => {
       const deps = makeDeps({
         ensurePaneBackend: vi.fn(async () => ({
           name: "wezterm" as const,
-          createPane: vi.fn(async () => "42"),
+          createPane: vi.fn(async () => ({ paneId: "42" })),
           sendCommand,
           closePane: vi.fn(async () => {}),
         })),

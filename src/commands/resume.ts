@@ -1,15 +1,18 @@
 import { access } from "node:fs/promises";
+import { basename } from "node:path";
 
+import { buildHerdrLabel, loadProjectConfig } from "../core/config.ts";
 import { GitError, getErrorMessage } from "../core/errors.ts";
 import { getGitContext, listWorktrees } from "../core/git.ts";
 import { completeSession, determineSessionStatus, readSession, saveSession } from "../core/session.ts";
 import { spawnInteractive } from "../core/spawn.ts";
 import { findClosestMatch } from "../core/suggest.ts";
 import { buildResumeCommand, shellEscape } from "../external/claude.ts";
+import { listHerdrPanes } from "../external/herdr.ts";
 import { ensurePaneBackendAvailable } from "../external/terminal-backend.ts";
 import { getSessionForPane, isRunningInsideTmux, listTmuxPanes } from "../external/tmux.ts";
 import { listWeztermPanes } from "../external/wezterm.ts";
-import type { ResumeArgs, ResumeDeps, TerminalBackend, WorktreeInfo } from "../types/index.ts";
+import type { CreatedPane, ResumeArgs, ResumeDeps, TerminalBackend, WorktreeInfo } from "../types/index.ts";
 import { icons } from "../ui/icons.ts";
 import { logDebug, logInfo, logWarn } from "../ui/logger.ts";
 import { confirm, selectWorktree } from "../ui/prompt.ts";
@@ -20,6 +23,7 @@ import { confirm, selectWorktree } from "../ui/prompt.ts";
 
 const defaultDeps: ResumeDeps = {
   getGitContext,
+  loadProjectConfig,
   listWorktrees,
   saveSession,
   completeSession,
@@ -27,6 +31,7 @@ const defaultDeps: ResumeDeps = {
   determineSessionStatus,
   listWeztermPanes,
   listTmuxPanes,
+  listHerdrPanes,
   confirm,
   buildResumeCommand,
   ensurePaneBackend: ensurePaneBackendAvailable,
@@ -55,12 +60,17 @@ async function launchResumeInPane(
   worktree: WorktreeInfo,
   claudeCommand: string,
   backend: TerminalBackend,
+  label: string,
   deps: ResumeDeps,
 ): Promise<void> {
   let paneIdStr: string | undefined;
+  let createdPane: CreatedPane | undefined;
   try {
-    paneIdStr = await backend.createPane({ keepFocus: true });
-    logInfo(`${icons.window()} Created pane: ${paneIdStr}`);
+    createdPane = await backend.createPane({ keepFocus: true, cwd: worktree.path, label });
+    paneIdStr = createdPane.paneId;
+    logInfo(
+      `${icons.window()} Created pane: ${paneIdStr}${createdPane.workspaceId ? ` (workspace ${createdPane.workspaceId})` : ""}`,
+    );
 
     await backend.sendCommand(paneIdStr, buildPaneResumeCommand(worktree.path, claudeCommand));
 
@@ -70,6 +80,7 @@ async function launchResumeInPane(
       backendType: backend.name,
       mode: "pane",
       startedAt: new Date().toISOString(),
+      ...(createdPane.workspaceId !== undefined && { workspaceId: createdPane.workspaceId }),
     });
 
     logInfo(`${icons.done()} Claude resumed in new pane`);
@@ -81,8 +92,8 @@ async function launchResumeInPane(
     }
   } catch (error) {
     // Close orphaned pane if it was created before the failure
-    if (paneIdStr) {
-      await backend.closePane(paneIdStr).catch(() => {});
+    if (createdPane) {
+      await backend.closePane(createdPane).catch(() => {});
     }
     throw error;
   }
@@ -219,6 +230,7 @@ export async function runResume(args: ResumeArgs, deps: ResumeDeps = defaultDeps
     // Only query the backend(s) needed for this session's mode
     let weztermPanes: Awaited<ReturnType<typeof deps.listWeztermPanes>> = null;
     let tmuxPanes: Awaited<ReturnType<typeof deps.listTmuxPanes>> = null;
+    let herdrPanes: Awaited<ReturnType<typeof deps.listHerdrPanes>> = null;
 
     // Pane listing failures must not silently disable the duplicate-session
     // guard, so the reason is kept and reported instead of being dropped.
@@ -238,16 +250,19 @@ export async function runResume(args: ResumeArgs, deps: ResumeDeps = defaultDeps
         weztermPanes = await listPanes("wezterm", deps.listWeztermPanes);
       } else if (bt === "tmux") {
         tmuxPanes = await listPanes("tmux", deps.listTmuxPanes);
+      } else if (bt === "herdr") {
+        herdrPanes = await listPanes("herdr", deps.listHerdrPanes);
       } else {
-        // Backward compat: backendType missing, query both
-        [weztermPanes, tmuxPanes] = await Promise.all([
+        // Backward compat: backendType missing, query all
+        [weztermPanes, tmuxPanes, herdrPanes] = await Promise.all([
           listPanes("wezterm", deps.listWeztermPanes),
           listPanes("tmux", deps.listTmuxPanes),
+          listPanes("herdr", deps.listHerdrPanes),
         ]);
       }
     }
 
-    const allPanes = { wezterm: weztermPanes, tmux: tmuxPanes };
+    const allPanes = { wezterm: weztermPanes, tmux: tmuxPanes, herdr: herdrPanes };
     const state = deps.determineSessionStatus(existingSession, allPanes);
 
     if (state.status === "running" || state.status === "unknown") {
@@ -291,7 +306,10 @@ export async function runResume(args: ResumeArgs, deps: ResumeDeps = defaultDeps
 
   // Launch
   if (pane && backend) {
-    await launchResumeInPane(target, claudeCommand, backend, deps);
+    const git = ctxResult.value;
+    const config = await deps.loadProjectConfig(git.repoRoot);
+    const label = buildHerdrLabel(config, { repo: git.repoName, branch: target.branch || basename(target.path) });
+    await launchResumeInPane(target, claudeCommand, backend, label, deps);
   } else {
     await launchResumeInTerminal(target, claudeCommand, deps);
   }

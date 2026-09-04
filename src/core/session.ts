@@ -16,7 +16,14 @@ function isSessionInfo(value: unknown): value is SessionInfo {
   if (typeof info.startedAt !== "string") return false;
   if (info.completedAt !== undefined && typeof info.completedAt !== "string") return false;
   if (info.paneId !== undefined && typeof info.paneId !== "number" && typeof info.paneId !== "string") return false;
-  if (info.backendType !== undefined && info.backendType !== "wezterm" && info.backendType !== "tmux") return false;
+  if (
+    info.backendType !== undefined &&
+    info.backendType !== "wezterm" &&
+    info.backendType !== "tmux" &&
+    info.backendType !== "herdr"
+  )
+    return false;
+  if (info.workspaceId !== undefined && typeof info.workspaceId !== "string") return false;
   return true;
 }
 
@@ -125,12 +132,14 @@ export async function deleteSession(worktreePath: string): Promise<void> {
 export async function fetchAllPanes(deps: {
   listWeztermPanes: () => Promise<AllPanes["wezterm"]>;
   listTmuxPanes: () => Promise<AllPanes["tmux"]>;
+  listHerdrPanes: () => Promise<AllPanes["herdr"]>;
 }): Promise<AllPanes> {
-  const [wezterm, tmux] = await Promise.all([
+  const [wezterm, tmux, herdr] = await Promise.all([
     deps.listWeztermPanes().catch(() => null),
     deps.listTmuxPanes().catch(() => null),
+    deps.listHerdrPanes().catch(() => null),
   ]);
-  return { wezterm, tmux };
+  return { wezterm, tmux, herdr };
 }
 
 export function determineSessionStatus(session: SessionInfo, allPanes: AllPanes, now: Date = new Date()): SessionState {
@@ -163,6 +172,17 @@ export function determineSessionStatus(session: SessionInfo, allPanes: AllPanes,
         elapsedMs,
         mode: session.mode,
         paneId: session.paneId,
+      };
+    }
+
+    if (backendType === "herdr" && allPanes.herdr != null) {
+      const pane = allPanes.herdr.find((p) => p.paneId === session.paneId);
+      return {
+        status: pane ? "running" : "done",
+        elapsedMs,
+        mode: session.mode,
+        paneId: session.paneId,
+        ...(pane && { agentStatus: pane.agentStatus }),
       };
     }
   }
